@@ -1,5 +1,8 @@
 # Target Scheduler
 
+## 5.8.3.1 - 2025-12-28
+* Fixed issue with flats mishandling ROI.
+
 ## 5.8.3.0 - 2025-12-01
 * Fixed issue where targets could have no selectable exposure plan (related to exposure plan disable).
 
