@@ -75,7 +75,7 @@ namespace NINA.Plugin.TargetScheduler.Sequencer {
         }
 
         public override bool Check(ISequenceItem previousItem, ISequenceItem nextItem) {
-            TSLogger.Info($"TargetSchedulerCondition Check: CheckIsActive={CheckIsActive}, ConditionWasCompleted={ConditionWasCompleted}");
+            TSLogger.Trace($"TargetSchedulerCondition Check: CheckIsActive={CheckIsActive}, ConditionWasCompleted={ConditionWasCompleted}");
 
             if (ConditionWasCompleted) {
                 TSLogger.Info($"TargetSchedulerCondition already completed");
