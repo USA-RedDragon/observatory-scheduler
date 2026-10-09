@@ -326,6 +326,44 @@ namespace NINA.Plugin.TargetScheduler.Test.Planning {
             target.SelectedExposure.FilterName.Should().Be("Lum");
         }
 
+        [Test]
+        public void testPreviewIgnoresAndPreservesLiveEditGuard() {
+            ObserverInfo observerInfo = TestData.Pittsboro_NC;
+            Mock<IProfileService> profileMock = PlanMocks.GetMockProfileService(observerInfo);
+            IWeatherDataMediator weatherData = PlanMocks.GetWeatherDataMediator(false, 0);
+            IProfile profile = profileMock.Object.ActiveProfile;
+            DateTime atTime = new DateTime(2023, 12, 17, 20, 0, 0);
+
+            Mock<IProject> pp = PlanMocks.GetMockPlanProject("pp1", ProjectState.Active);
+            pp.SetupProperty(p => p.EnableGrader, true);
+            Mock<ITarget> pt = PlanMocks.GetMockPlanTarget("M42", TestData.M42);
+            pt.SetupProperty(t => t.DatabaseId, 42);
+            pt.SetupProperty(m => m.EndTime, atTime.AddHours(12));
+            var exposureSelector = new RepeatUntilDoneExposureSelector(pp.Object, pt.Object, new Target());
+            pt.SetupProperty(p => p.IsPreview, true);
+            pt.SetupProperty(p => p.MinimumTimeSpanEnd, atTime.AddHours(1));
+            pt.SetupProperty(p => p.BonusTimeSpanEnd, atTime.AddHours(1));
+            pt.SetupProperty(p => p.ExposureSelector, exposureSelector);
+
+            IExposure exposure = new PlanningExposure();
+            exposure.PlanTarget = pt.Object;
+            exposure.ExposureLength = 30;
+            exposure.Desired = 10;
+            exposure.Accepted = 0;
+            exposure.Acquired = 0;
+
+            pt.Object.AllExposurePlans.Add(exposure);
+            PlanMocks.AddMockPlanTarget(pp, pt);
+
+            TargetEditGuard.Instance.MarkEdited(42);
+
+            new PreviousTargetExpert(profile, GetPrefs(), true, observerInfo).CanContinue(atTime, weatherData, pt.Object).Should().BeTrue();
+            TargetEditGuard.Instance.IsEdited(42).Should().BeTrue();
+
+            new PreviousTargetExpert(profile, GetPrefs(), false, observerInfo).CanContinue(atTime, weatherData, pt.Object).Should().BeFalse();
+            TargetEditGuard.Instance.IsEdited(42).Should().BeTrue();
+        }
+
         private ProfilePreference GetPrefs(string profileId = "abcd-1234") {
             return new ProfilePreference(profileId);
         }
