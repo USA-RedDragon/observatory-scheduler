@@ -46,7 +46,7 @@ namespace NINA.Plugin.TargetScheduler.Planning {
             if (previousTarget == null) { return false; }
 
             // If we detect that the active target has been edited since it started, we have to abort
-            if (TargetEditGuard.Instance.IsEdited(previousTarget.DatabaseId)) {
+            if (!isPreview && TargetEditGuard.Instance.IsEdited(previousTarget.DatabaseId)) {
                 TSLogger.Info($"not continuing previous target at {atTime}, {previousTarget.Name}: detected impacting edit to target");
                 return false;
             }

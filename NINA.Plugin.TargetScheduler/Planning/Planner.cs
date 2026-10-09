@@ -87,7 +87,7 @@ namespace NINA.Plugin.TargetScheduler.Planning {
                         List<IInstruction> instructions = new InstructionGenerator().Generate(selectedTarget, previousTarget);
 
                         HandleTargetSwitch(previousTarget, selectedTarget);
-                        TargetEditGuard.Instance.Clear();
+                        if (!isPreview) { TargetEditGuard.Instance.Clear(); }
 
                         // Target ready now
                         return new SchedulerPlan(atTime, projects, selectedTarget, instructions, !checkCondition);
