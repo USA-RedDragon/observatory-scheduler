@@ -1,5 +1,11 @@
 # Observatory Scheduler
 
+## 5.8.2.204 - 2026-10-10
+* Goal-driven exposure plans (a `ts_goal` row for the target and filter) no longer stop on their desired count. The goal decides: done when the goal is met, or at the plateau when `plateau_stop` is on. The desired count stays in the database untouched and still feeds delayed grading.
+* Before the stacker has a usable measurement, a goal-driven plan stays open until the stacker has the minimum stack it needs to measure. `ts_goal_progress` gains `state` (`measured`, `collecting` or `unmeasurable`), `reason`, `stack_subs`, `min_subs` and `sub_limit`, all written by the stacker. `collecting` plans close at `stack_subs >= min_subs` and wait for the measurement. `unmeasurable` plans (for example a depth goal with no plate solution or too few Gaia stars) close at `stack_subs >= sub_limit`.
+* A goal row with no progress row yet is pending. It closes when the plan's acquired count reaches the stacker's published `min_subs`. While the stacker publishes no readiness at all, such plans keep the count behaviour of 5.8.2.203.
+* Plans without a goal row keep Target Scheduler's count behaviour exactly.
+
 ## 5.8.2.203 - 2026-10-10
 * New `GET /os/v1/grader?target_id=N` (current target when omitted): for each exposure plan, the HFR limit the grader would apply to the next sub. It uses the grader's own population rule (subs of that exposure plan in any grading status with the same profile, exposure, gain, offset, binning and ROI; the newest `MaxGradingSampleSize` including the new sub, or all of them with delayed grading), the sample standard deviation, the sigma factor, Accept Improvement and the HFR auto-accept level. Each plan reports `mean`, `sd`, `samples`, `matching`, `upper`, `reject_above`, `reject_below`, `population_rule` and a `state` (`limit`, `too_few_samples`, `no_images`, `invalid_samples`, `hfr_grading_off` or `project_grading_off`).
 * Web preview `left_out`: each target's reason now comes from the planner passes during the night, not from the pass after dawn. A target that was ever eligible reports its closest score loss with the winner and both totals; otherwise the reason that held longest, with `at` and `until`. `reasons` lists every reason with its time span. A reason seen only at the last pass is flagged `after_night`.
