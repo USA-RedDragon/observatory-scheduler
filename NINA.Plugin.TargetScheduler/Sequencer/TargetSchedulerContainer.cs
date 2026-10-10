@@ -366,7 +366,7 @@ namespace NINA.Plugin.TargetScheduler.Sequencer {
 
                         // Create a container for this exposure, add the instructions, and execute
                         PlanContainer planContainer = GetPlanContainer(previousPlanTarget, plan, SchedulerProgress);
-                        Remote.Plugin.RemoteHost.Instance?.PlanStarting(target, previousPlanTarget);
+                        Remote.Plugin.RemoteHost.Instance?.PlanStarting(target, previousPlanTarget, planContainer);
                         TargetScheduler.EventMediator.InvokeExposureStarting(plan.PlanTarget, plan.PlanTarget.SelectedExposure, !target.Equals(previousPlanTarget));
                         try {
                             planContainer.Execute(progress, token).Wait();

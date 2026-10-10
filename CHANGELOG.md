@@ -1,5 +1,11 @@
 # Observatory Scheduler
 
+## 5.8.2.201 - 2026-10-09
+* The web status `exposure` block now comes from the real camera exposure: `started_at` is when the TakeExposure instruction opens the shutter and `ends_at` is that plus the exposure time. Before, both came from the plan pick, so a slew, autofocus or guiding settle made them minutes early.
+* Between exposures `exposure` is absent and the new `activity` field says what the rig is doing (`slewing`, `centering`, `focusing`, `guiding`, `meridian_flip`, `switching_filter`, `starting_exposure`, `exposing`, `downloading`, `saving`, `dithering`, `waiting`, `preparing` or `busy`), with `activity_detail` naming the NINA instruction or trigger and `activity_since` when it began.
+* Pending commands report `applies_at` only while an exposure is open, as its real end. Otherwise `applies_at` is null and the message says when they apply ("after the next exposure ends", "once the current exposure is downloaded and saved" or "before the next exposure starts"). Pending results are re-sent when the shutter opens and when the capture ends.
+* `exposure.number` counts real exposures on the current target.
+
 ## 5.8.2.200 - 2026-10-09
 * Web control: optional HTTP API on port 8189 with a bearer token, plus a durable command queue (`ts_command`, `ts_command_result`). Commands apply when the current exposure ends, in the order they were made.
 * Web editing switch that makes NINA's Target Management editor read-only while the web UI edits.

@@ -148,6 +148,15 @@ namespace NINA.Plugin.TargetScheduler.Remote.Api {
         [JsonPropertyName("wait")]
         public StatusWait Wait { get; set; }
 
+        [JsonPropertyName("activity")]
+        public string Activity { get; set; }
+
+        [JsonPropertyName("activity_detail")]
+        public string ActivityDetail { get; set; }
+
+        [JsonPropertyName("activity_since")]
+        public DateTime? ActivitySince { get; set; }
+
         [JsonPropertyName("scores")]
         public List<RuleScore> Scores { get; set; }
 

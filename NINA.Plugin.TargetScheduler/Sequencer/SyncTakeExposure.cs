@@ -76,7 +76,13 @@ namespace NINA.Plugin.TargetScheduler.Sequencer {
                 capture.SubSambleRectangle = rect;
             }
 
-            var exposureData = await imagingMediator.CaptureImage(capture, token, progress);
+            Remote.Plugin.RemoteHost.Instance?.ShutterOpening(exposure);
+            IExposureData exposureData;
+            try {
+                exposureData = await imagingMediator.CaptureImage(capture, token, progress);
+            } finally {
+                Remote.Plugin.RemoteHost.Instance?.CaptureEnded();
+            }
 
             if (IsLightSequence()) {
                 imageHistoryVM.Add(exposureData.MetaData.Image.Id, ImageType);

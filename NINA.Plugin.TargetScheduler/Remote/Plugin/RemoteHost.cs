@@ -9,6 +9,7 @@ using NINA.Plugin.TargetScheduler.Remote.Data;
 using NINA.Plugin.TargetScheduler.Sequencer;
 using NINA.Plugin.TargetScheduler.Shared.Utility;
 using NINA.Profile.Interfaces;
+using NINA.Sequencer.Container;
 using System;
 using System.Collections.Generic;
 using System.Data.Common;
@@ -35,12 +36,13 @@ namespace NINA.Plugin.TargetScheduler.Remote.Plugin {
         private volatile bool containerRunning;
         private volatile bool containerPaused;
         private StatusTarget target;
-        private StatusExposure exposure;
+        private readonly ExposureTracker tracker = new ExposureTracker();
+        private ISequenceContainer currentPlan;
+        private string lastActivity;
         private StatusWait wait;
         private List<RuleScore> scores;
         private double? scoreTotal;
         private DateTime? lastPlanAt;
-        private int exposureNumber;
         private ITarget pickedTarget;
         private TargetSnapshot pickedSnapshot;
         private TargetSchedulerContainer container;
@@ -92,7 +94,7 @@ namespace NINA.Plugin.TargetScheduler.Remote.Plugin {
             };
             Control.Skips.Load(Settings.Snapshot().Skips, DateTime.UtcNow);
             Control.Changed = OnControlChanged;
-            Processor = new CommandProcessor(CommandRegistry.Builtin(), store, this, () => Settings.Snapshot().WebEditing, () => inPlan, () => exposure?.EndsAt) {
+            Processor = new CommandProcessor(CommandRegistry.Builtin(), store, this, () => Settings.Snapshot().WebEditing, () => inPlan, () => tracker.Pending(DateTime.UtcNow)) {
                 Log = m => TSLogger.Info($"remote: {m}"),
             };
             Processor.ResultChanged += r => {
@@ -120,7 +122,7 @@ namespace NINA.Plugin.TargetScheduler.Remote.Plugin {
             ev.WaitStarting += (s, e) => OnWaitStarting(e);
             ev.WaitStopping += (s, e) => { lock (sync) { wait = null; } Push("status", null); };
             ev.ExposureStarting += (s, e) => OnExposureStarting(e);
-            ev.ExposureStopping += (s, e) => { lock (sync) { exposure = null; } Push("status", null); };
+            ev.ExposureStopping += (s, e) => { EndPlan(); Push("status", null); };
             TSLogger.Info("remote control started");
         }
 
@@ -168,6 +170,11 @@ namespace NINA.Plugin.TargetScheduler.Remote.Plugin {
                 Processor.Poll();
                 if (!inPlan) {
                     Processor.ApplyPending();
+                }
+                var activity = CurrentView().Activity;
+                if (activity != lastActivity) {
+                    lastActivity = activity;
+                    Push("status", null);
                 }
                 if (Control.ShouldResume(DateTime.UtcNow)) {
                     TSLogger.Info("remote: pause time is up, resuming");
@@ -235,15 +242,54 @@ namespace NINA.Plugin.TargetScheduler.Remote.Plugin {
             }
         }
 
-        public void PlanStarting(ITarget planTarget, ITarget previous) {
+        public void PlanStarting(ITarget planTarget, ITarget previous, ISequenceContainer plan) {
             if (!ReferenceEquals(planTarget, previous)) {
                 RememberPick(planTarget);
             }
+            lock (sync) {
+                currentPlan = plan;
+            }
+            tracker.PlanStarted(planTarget.DatabaseId, !ReferenceEquals(planTarget, previous));
             inPlan = true;
         }
 
         public void PlanEnded() {
             inPlan = false;
+            EndPlan();
+        }
+
+        private void EndPlan() {
+            lock (sync) {
+                currentPlan = null;
+            }
+            tracker.PlanEnded();
+        }
+
+        public void ShutterOpening(IExposure x) {
+            if (x == null) {
+                return;
+            }
+            tracker.ShutterOpened(x.DatabaseId, x.FilterName, x.ExposureLength, DateTime.UtcNow);
+            Processor.RefreshPending();
+            Push("status", null);
+        }
+
+        public void CaptureEnded() {
+            tracker.CaptureEnded();
+            Processor.RefreshPending();
+            Push("status", null);
+        }
+
+        private ExposureView CurrentView() {
+            ISequenceContainer plan;
+            List<ISequenceContainer> extra;
+            lock (sync) {
+                plan = currentPlan;
+                var c = container;
+                extra = c == null ? null : new List<ISequenceContainer> { c.AfterEachExposureContainer, c.AfterTargetCompleteContainer };
+            }
+            var steps = tracker.InPlan ? ActivityProbe.Running(plan, extra) : null;
+            return tracker.View(DateTime.UtcNow, steps);
         }
 
         public void PlanComputed() {
@@ -264,7 +310,6 @@ namespace NINA.Plugin.TargetScheduler.Remote.Plugin {
                     TargetActive = true,
                     EnabledPlanIds = new HashSet<int>(t.AllExposurePlans.Where(e => e.IsEnabled).Select(e => e.DatabaseId)),
                 };
-                exposureNumber = 0;
                 scores = t.ScoringResults?.Results?.Select(r => new RuleScore { Rule = r.ScoringRule.Name, Weight = r.Weight, Score = r.Score }).ToList();
                 scoreTotal = t.ScoringResults?.TotalScore;
             }
@@ -344,19 +389,15 @@ namespace NINA.Plugin.TargetScheduler.Remote.Plugin {
             lock (sync) {
                 wait = new StatusWait { Until = e.WaitUntil.ToUniversalTime(), TargetName = e.Target?.Name };
                 target = null;
-                exposure = null;
             }
+            tracker.PlanEnded();
             Push("status", null);
         }
 
         private void OnExposureStarting(ExposureStartingEventArgs e) {
             var t = e.Target;
-            var x = e.Exposure;
+            tracker.PlanStarted(t.DatabaseId, e.IsNewTarget);
             lock (sync) {
-                if (e.IsNewTarget || target == null || target.TargetId != t.DatabaseId) {
-                    exposureNumber = 0;
-                }
-                exposureNumber++;
                 wait = null;
                 target = new StatusTarget {
                     ProjectId = t.Project.DatabaseId,
@@ -374,15 +415,6 @@ namespace NINA.Plugin.TargetScheduler.Remote.Plugin {
                     MinimumTimeEnd = t.MinimumTimeSpanEnd == default ? null : t.MinimumTimeSpanEnd.ToUniversalTime(),
                     HardStop = t.EndTime == default ? null : t.EndTime.ToUniversalTime(),
                 };
-                var now = DateTime.UtcNow;
-                exposure = x == null ? null : new StatusExposure {
-                    PlanId = x.DatabaseId,
-                    Filter = x.FilterName,
-                    Seconds = x.ExposureLength,
-                    StartedAt = now,
-                    EndsAt = now.AddSeconds(x.ExposureLength),
-                    Number = exposureNumber,
-                };
             }
             Push("status", null);
         }
@@ -390,9 +422,9 @@ namespace NINA.Plugin.TargetScheduler.Remote.Plugin {
         private void ClearActivity() {
             lock (sync) {
                 target = null;
-                exposure = null;
                 wait = null;
             }
+            tracker.PlanEnded();
         }
 
         public Status Status() {
@@ -400,13 +432,15 @@ namespace NINA.Plugin.TargetScheduler.Remote.Plugin {
             var p = Control.Paused;
             var pending = Processor.Pending.Select(x => new StatusPending { Id = x.Command.Id, Kind = x.Command.Kind, ReceivedAt = x.ReceivedAt }).ToList();
             var skips = Control.Skips.Active(DateTime.UtcNow);
+            var view = CurrentView();
+            var planning = tracker.InPlan;
             lock (sync) {
                 string state;
                 if (!containerRunning) {
                     state = "stopped";
                 } else if (containerPaused) {
                     state = "paused";
-                } else if (exposure != null) {
+                } else if (planning || view.Exposure != null) {
                     state = "imaging";
                 } else if (wait != null) {
                     state = "waiting";
@@ -422,7 +456,10 @@ namespace NINA.Plugin.TargetScheduler.Remote.Plugin {
                     PauseRequested = container?.PauseRequested ?? false,
                     Pause = p == null ? null : new StatusPause { Mount = p.Mount, ResumeAt = p.ResumeAt },
                     Target = target,
-                    Exposure = exposure,
+                    Exposure = view.Exposure,
+                    Activity = view.Activity,
+                    ActivityDetail = view.ActivityDetail,
+                    ActivitySince = view.ActivitySince,
                     Wait = wait,
                     Scores = target != null ? scores : null,
                     ScoreTotal = target != null ? scoreTotal : null,

@@ -29,7 +29,7 @@ namespace NINA.Plugin.TargetScheduler.Remote.Test {
             webEditing = true;
             inPlan = true;
             events = new List<CommandResult>();
-            proc = new CommandProcessor(CommandRegistry.Builtin(), store, ctx, () => webEditing, () => inPlan, () => ctx.Now.AddMinutes(4));
+            proc = new CommandProcessor(CommandRegistry.Builtin(), store, ctx, () => webEditing, () => inPlan, () => PendingTiming.At(ctx.Now.AddMinutes(4), PendingTiming.WhenExposureEnds));
             proc.ResultChanged += r => events.Add(r);
         }
 

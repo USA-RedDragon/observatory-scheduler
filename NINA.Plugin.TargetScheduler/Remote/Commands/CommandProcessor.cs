@@ -17,7 +17,7 @@ namespace NINA.Plugin.TargetScheduler.Remote.Commands {
         private readonly ICommandContext context;
         private readonly Func<bool> webEditingEnabled;
         private readonly Func<bool> inPlan;
-        private readonly Func<DateTime?> exposureEnd;
+        private readonly Func<PendingTiming> timing;
         private readonly List<PendingCommand> pending = new List<PendingCommand>();
 
         public event Action<CommandResult> ResultChanged;
@@ -25,13 +25,13 @@ namespace NINA.Plugin.TargetScheduler.Remote.Commands {
         public Action<string> Log { get; set; }
 
         public CommandProcessor(CommandRegistry registry, ICommandStore store, ICommandContext context,
-                Func<bool> webEditingEnabled, Func<bool> inPlan, Func<DateTime?> exposureEnd) {
+                Func<bool> webEditingEnabled, Func<bool> inPlan, Func<PendingTiming> timing) {
             this.registry = registry;
             this.store = store;
             this.context = context;
             this.webEditingEnabled = webEditingEnabled;
             this.inPlan = inPlan;
-            this.exposureEnd = exposureEnd;
+            this.timing = timing;
         }
 
         public IReadOnlyList<PendingCommand> Pending {
@@ -132,6 +132,21 @@ namespace NINA.Plugin.TargetScheduler.Remote.Commands {
             return results.Count;
         }
 
+        public int RefreshPending() {
+            List<CommandResult> results = new List<CommandResult>();
+            lock (sync) {
+                foreach (var p in pending) {
+                    var r = PendingResult(p.Command.Id);
+                    store.SaveResult(r);
+                    results.Add(r);
+                }
+            }
+            foreach (var r in results) {
+                ResultChanged?.Invoke(r);
+            }
+            return results.Count;
+        }
+
         public int Poll() {
             IList<StoredCommand> rows;
             lock (sync) {
@@ -168,8 +183,9 @@ namespace NINA.Plugin.TargetScheduler.Remote.Commands {
         }
 
         private CommandResult PendingResult(string id) {
-            var r = CommandResult.Of(id, CommandStatus.Pending, "Applies when the current exposure ends.");
-            r.AppliesAt = exposureEnd();
+            var t = timing?.Invoke() ?? PendingTiming.At(null, PendingTiming.AfterNextExposure);
+            var r = CommandResult.Of(id, CommandStatus.Pending, t.Message ?? PendingTiming.AfterNextExposure);
+            r.AppliesAt = t.AppliesAt;
             r.UpdatedAt = context.Now;
             return r;
         }
