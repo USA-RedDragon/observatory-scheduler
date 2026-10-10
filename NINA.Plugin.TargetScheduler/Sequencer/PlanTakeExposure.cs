@@ -136,6 +136,8 @@ namespace NINA.Plugin.TargetScheduler.Sequencer {
 
                 imageSaveWatcher.WaitForExposure(imageData.MetaData.Image.Id, new ExposureWaitData(target, exposure, imageData.MetaData.Image.Id, token));
 
+                AddSchedulerKeywords(imageData, target, exposure);
+
                 await imageSaveMediator.Enqueue(imageData, prepareTask, progress, token);
             } catch (Exception ex) {
                 TSLogger.Error($"exception during exposure image processing: {ex.Message}\n{ex.StackTrace}");

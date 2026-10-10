@@ -112,6 +112,8 @@ namespace NINA.Plugin.TargetScheduler.Sequencer {
 
                 syncImageSaveWatcher.WaitForExposure(imageData.MetaData.Image.Id, new ExposureWaitData(target, exposure, imageData.MetaData.Image.Id, syncedExposure.ExposureId, token));
 
+                AddSchedulerKeywords(imageData, target, exposure);
+
                 await imageSaveMediator.Enqueue(imageData, prepareTask, progress, token);
             } catch (Exception ex) {
                 TSLogger.Error($"SYNC client: exception during exposure image processing: {ex.Message}\n{ex.StackTrace}");

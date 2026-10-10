@@ -1,12 +1,17 @@
 ﻿using NINA.Core.Utility;
 using NINA.Equipment.Interfaces.Mediator;
 using NINA.Equipment.Model;
+using NINA.Image.ImageData;
+using NINA.Image.Interfaces;
+using NINA.Plugin.TargetScheduler.Planning.Interfaces;
 using NINA.Plugin.TargetScheduler.Shared.Utility;
 using NINA.Plugin.TargetScheduler.Util;
 using NINA.Profile.Interfaces;
 using NINA.Sequencer.SequenceItem.Imaging;
 using NINA.WPF.Base.Interfaces.Mediator;
 using NINA.WPF.Base.Interfaces.ViewModel;
+using System;
+using System.Collections.Generic;
 
 namespace NINA.Plugin.TargetScheduler.Sequencer {
 
@@ -66,6 +71,22 @@ namespace NINA.Plugin.TargetScheduler.Sequencer {
 
         protected bool IsLightSequence() {
             return ImageType == CaptureSequence.ImageTypes.SNAPSHOT || ImageType == CaptureSequence.ImageTypes.LIGHT;
+        }
+
+        protected void AddSchedulerKeywords(IImageData imageData, ITarget planTarget, IExposure planExposure) {
+            if (ImageType != CaptureSequence.ImageTypes.LIGHT || imageData?.MetaData?.GenericHeaders == null) {
+                return;
+            }
+
+            try {
+                List<IGenericMetaDataHeader> headers = imageData.MetaData.GenericHeaders;
+                foreach (var (key, value, comment) in TsImageKeywords.Build(planTarget?.Project?.Guid, planTarget?.Guid, planExposure?.Guid, planTarget?.Name)) {
+                    headers.RemoveAll(h => h.Key == key);
+                    headers.Add(value is int number ? new IntMetaDataHeader(key, number, comment) : new StringMetaDataHeader(key, value.ToString(), comment));
+                }
+            } catch (Exception ex) {
+                TSLogger.Warning($"failed to add scheduler FITS keywords: {ex.Message}");
+            }
         }
     }
 }
