@@ -394,6 +394,142 @@ namespace NINA.Plugin.TargetScheduler.Remote.Api {
         public List<PreviewAssumption> Assumptions { get; set; } = new List<PreviewAssumption>();
     }
 
+    public class GraderHfrSettings {
+
+        [JsonPropertyName("project_grading")]
+        public bool ProjectGrading { get; set; }
+
+        [JsonPropertyName("enabled")]
+        public bool Enabled { get; set; }
+
+        [JsonPropertyName("sigma_factor")]
+        public double SigmaFactor { get; set; }
+
+        [JsonPropertyName("auto_accept_level")]
+        public double? AutoAcceptLevel { get; set; }
+
+        [JsonPropertyName("accept_improvement")]
+        public bool AcceptImprovement { get; set; }
+
+        [JsonPropertyName("max_sample_size")]
+        public int MaxSampleSize { get; set; }
+
+        [JsonPropertyName("delay_threshold_percent")]
+        public double DelayThresholdPercent { get; set; }
+
+        [JsonPropertyName("mode")]
+        public string Mode { get; set; }
+    }
+
+    public class GraderPlanInput {
+        public int PlanId { get; set; }
+        public string Filter { get; set; }
+        public double ExposureSeconds { get; set; }
+        public int Acquired { get; set; }
+        public int? ReferenceImageId { get; set; }
+        public DateTime? ReferenceAt { get; set; }
+        public double? ReferenceExposure { get; set; }
+        public int? Gain { get; set; }
+        public int? Offset { get; set; }
+        public string Binning { get; set; }
+        public double? Roi { get; set; }
+        public int Matching { get; set; }
+        public IList<double> Samples { get; set; } = new List<double>();
+    }
+
+    public class GraderHfrLimit {
+
+        [JsonPropertyName("plan_id")]
+        public int PlanId { get; set; }
+
+        [JsonPropertyName("filter")]
+        public string Filter { get; set; }
+
+        [JsonPropertyName("exposure_seconds")]
+        public double ExposureSeconds { get; set; }
+
+        [JsonPropertyName("state")]
+        public string State { get; set; }
+
+        [JsonPropertyName("acquired")]
+        public int Acquired { get; set; }
+
+        [JsonPropertyName("matching")]
+        public int Matching { get; set; }
+
+        [JsonPropertyName("samples")]
+        public int Samples { get; set; }
+
+        [JsonPropertyName("reference_image_id")]
+        public int? ReferenceImageId { get; set; }
+
+        [JsonPropertyName("reference_at")]
+        public DateTime? ReferenceAt { get; set; }
+
+        [JsonPropertyName("reference_exposure")]
+        public double? ReferenceExposure { get; set; }
+
+        [JsonPropertyName("gain")]
+        public int? Gain { get; set; }
+
+        [JsonPropertyName("offset")]
+        public int? Offset { get; set; }
+
+        [JsonPropertyName("binning")]
+        public string Binning { get; set; }
+
+        [JsonPropertyName("roi")]
+        public double? Roi { get; set; }
+
+        [JsonPropertyName("mean")]
+        public double? Mean { get; set; }
+
+        [JsonPropertyName("sd")]
+        public double? Sd { get; set; }
+
+        [JsonPropertyName("lower")]
+        public double? Lower { get; set; }
+
+        [JsonPropertyName("upper")]
+        public double? Upper { get; set; }
+
+        [JsonPropertyName("reject_above")]
+        public double? RejectAbove { get; set; }
+
+        [JsonPropertyName("reject_below")]
+        public double? RejectBelow { get; set; }
+
+        [JsonPropertyName("zero_rejected")]
+        public bool ZeroRejected { get; set; }
+
+        [JsonPropertyName("invalid_samples")]
+        public int InvalidSamples { get; set; }
+
+        [JsonPropertyName("population_rule")]
+        public string PopulationRule { get; set; }
+    }
+
+    public class GraderReport {
+
+        [JsonPropertyName("generated_at")]
+        public DateTime GeneratedAt { get; set; }
+
+        [JsonPropertyName("project_id")]
+        public int ProjectId { get; set; }
+
+        [JsonPropertyName("target_id")]
+        public int TargetId { get; set; }
+
+        [JsonPropertyName("target_name")]
+        public string TargetName { get; set; }
+
+        [JsonPropertyName("hfr")]
+        public GraderHfrSettings Hfr { get; set; }
+
+        [JsonPropertyName("plans")]
+        public List<GraderHfrLimit> Plans { get; set; } = new List<GraderHfrLimit>();
+    }
+
     public class PlannedExposure {
         public DateTime Start { get; set; }
         public DateTime End { get; set; }
@@ -424,6 +560,8 @@ namespace NINA.Plugin.TargetScheduler.Remote.Api {
         CommandResult Cancel(string id);
 
         Preview Preview(PreviewRequest request);
+
+        GraderReport Grader(int? targetId);
 
         event Action<string, object> Pushed;
     }

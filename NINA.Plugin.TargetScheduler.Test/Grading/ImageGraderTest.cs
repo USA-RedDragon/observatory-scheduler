@@ -203,6 +203,45 @@ namespace NINA.Plugin.TargetScheduler.Test.Grading {
             ImageGrader.GradingResultToReason(GradingResult.Rejected_Eccentricity).Should().Be(ImageGrader.REJECT_ECCENTRICITY);
         }
 
+        [Test]
+        public void testNextImagePopulationMatchesGradingRules() {
+            IProfile profile = GraderExpertTest.GetMockProfile(3.8, 700);
+            List<AcquiredImage> matching = GraderExpertTest.GetTestImages(10, 101, "L", 60, 10, 20, "1x1", 100, 0, GradingStatus.Rejected);
+            List<AcquiredImage> otherGain = GraderExpertTest.GetTestImages(3, 101, "L", 60, 99, 20, "1x1", 100, 0, GradingStatus.Accepted);
+            otherGain.ForEach(a => a.Id += 100);
+            List<AcquiredImage> all = matching.Concat(otherGain).OrderByDescending(a => a.AcquiredDate).ToList();
+            AcquiredImage reference = matching[0];
+            Target target = GetTarget(101, "T1", 100);
+            ImageGrader sut = new ImageGrader();
+
+            ImageGraderPreferences immediate = GraderExpertTest.GetPreferences(profile, 0, 5, false, false, 0, false, 0, true, 2, false, 0, false, 0);
+            string profileId = reference.ProfileId;
+            (List<AcquiredImage> pop, int count) = sut.NextImagePopulation(immediate, target, profileId, reference.Metadata, all);
+            count.Should().Be(10);
+            pop.Select(a => a.Id).Should().Equal(matching.Take(4).Select(a => a.Id));
+
+            ImageGraderPreferences delayed = GraderExpertTest.GetPreferences(profile, 50, 5, false, false, 0, false, 0, true, 2, false, 0, false, 0);
+            sut.NextImagePopulation(delayed, target, profileId, reference.Metadata, all).Item1.Should().HaveCount(10);
+
+            sut.NextImagePopulation(immediate, GetTarget(101, "T1", 50), profileId, reference.Metadata, all).Item1.Should().BeEmpty();
+            sut.NextImagePopulation(immediate, target, "other-profile", reference.Metadata, all).Item1.Should().BeEmpty();
+            ImageMetadata longer = reference.Metadata;
+            longer.ExposureDuration = 120;
+            sut.NextImagePopulation(immediate, target, profileId, longer, all).Item2.Should().Be(0);
+        }
+
+        [Test]
+        public void testHfrBandIsTheGraderBoundary() {
+            IProfile profile = GraderExpertTest.GetMockProfile(3.8, 700);
+            ImageGraderPreferences prefs = GraderExpertTest.GetPreferences(profile, 0, 10, false, false, 0, false, 0, true, 2, false, 0, false, 0);
+            List<AcquiredImage> pop = GraderExpertTest.GetTestImages(8, 101, "L");
+            List<double> samples = new GraderExpert(prefs, pop[0].Metadata).HFRSamples(pop);
+            (double mean, double sd) = GraderMath.MeanAndSampleStandardDeviation(samples);
+            double upper = mean + 2 * sd;
+            new GraderExpert(prefs, GraderExpertTest.GetMockImageData(0, 0, "L", 500, upper - 1e-9)).GradeHFR(pop).Should().BeTrue();
+            new GraderExpert(prefs, GraderExpertTest.GetMockImageData(0, 0, "L", 500, upper + 1e-9)).GradeHFR(pop).Should().BeFalse();
+        }
+
         private ExposurePlan GetExposurePlan(int id, string filterName, int desired, int accepted) {
             ExposureTemplate template = new ExposureTemplate { FilterName = filterName };
             return new ExposurePlan { Id = id, Desired = desired, Accepted = accepted, ExposureTemplate = template };

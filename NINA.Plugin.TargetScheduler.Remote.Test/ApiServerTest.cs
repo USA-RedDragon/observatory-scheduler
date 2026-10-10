@@ -44,6 +44,13 @@ namespace NINA.Plugin.TargetScheduler.Remote.Test {
                 return new Preview { Start = request.Start ?? DateTime.UtcNow };
             }
 
+            public int? LastGraderTarget { get; private set; }
+
+            public GraderReport Grader(int? targetId) {
+                LastGraderTarget = targetId;
+                return targetId == 404 ? null : new GraderReport { TargetId = targetId ?? 7, Hfr = new GraderHfrSettings { Enabled = true, SigmaFactor = 4 } };
+            }
+
             public void Push(string type, object data) => Pushed?.Invoke(type, data);
         }
 
@@ -119,6 +126,17 @@ namespace NINA.Plugin.TargetScheduler.Remote.Test {
             backend.LastPreview.Start.Should().Be(new DateTime(2026, 10, 10, 1, 0, 0, DateTimeKind.Utc));
             (await http.GetAsync("/os/v1/preview?start=2026-10-10T02:00:00Z")).StatusCode.Should().Be(HttpStatusCode.OK);
             backend.LastPreview.Start.Should().Be(new DateTime(2026, 10, 10, 2, 0, 0, DateTimeKind.Utc));
+        }
+
+        [Test]
+        public async Task GraderReportsByTargetOrCurrent() {
+            var body = await http.GetStringAsync("/os/v1/grader?target_id=12");
+            backend.LastGraderTarget.Should().Be(12);
+            body.Should().Contain("\"target_id\":12").And.Contain("\"sigma_factor\":4");
+            await http.GetStringAsync("/os/v1/grader");
+            backend.LastGraderTarget.Should().BeNull();
+            (await http.GetAsync("/os/v1/grader?target_id=404")).StatusCode.Should().Be(HttpStatusCode.NotFound);
+            (await http.GetAsync("/os/v1/grader?target_id=abc")).StatusCode.Should().Be(HttpStatusCode.BadRequest);
         }
 
         [Test]

@@ -77,7 +77,7 @@ namespace NINA.Plugin.TargetScheduler.Grading {
                 return true;
             }
 
-            List<double> samples = GetSamples(population, i => { return i.Metadata.HFR; });
+            List<double> samples = HFRSamples(population);
             TSLogger.Debug("image grading: HFR ->");
             if (NearZero(hfr) || !WithinAcceptableVariance(samples, hfr, preferences.HFRSigmaFactor, false)) {
                 return false;
@@ -150,20 +150,14 @@ namespace NINA.Plugin.TargetScheduler.Grading {
             TSLogger.Debug($"    samples={SamplesToString(samples)}");
             (double mean, double stddev) = SampleStandardDeviation(samples);
 
-            if (preferences.AcceptImprovement) {
-                if (positiveImprovement && newSample > mean) {
-                    TSLogger.Debug($"    mean={mean} sample={newSample} (acceptable: improved)");
-                    return true;
-                }
-                if (!positiveImprovement && newSample < mean) {
-                    TSLogger.Debug($"    mean={mean} sample={newSample} (acceptable: improved)");
-                    return true;
-                }
+            if (GraderMath.ImprovementAccepted(mean, newSample, preferences.AcceptImprovement, positiveImprovement)) {
+                TSLogger.Debug($"    mean={mean} sample={newSample} (acceptable: improved)");
+                return true;
             }
 
             double variance = Math.Abs(mean - newSample);
             TSLogger.Debug($"    mean={mean} stddev={stddev} sample={newSample} variance={variance} sigmaX={sigmaFactor}");
-            return variance <= (stddev * sigmaFactor);
+            return GraderMath.WithinSigma(mean, stddev, newSample, sigmaFactor);
         }
 
         /// <summary>
@@ -173,15 +167,11 @@ namespace NINA.Plugin.TargetScheduler.Grading {
         /// <returns></returns>
         /// <exception cref="Exception"></exception>
         public (double, double) SampleStandardDeviation(List<double> samples) {
-            if (samples == null || samples.Count < 3) {
-                throw new Exception("must have >= 3 samples");
-            }
+            return GraderMath.MeanAndSampleStandardDeviation(samples);
+        }
 
-            double mean = samples.Average();
-            double sum = samples.Sum(d => Math.Pow(d - mean, 2));
-            double stddev = Math.Sqrt((sum) / (samples.Count - 1));
-
-            return (mean, stddev);
+        public List<double> HFRSamples(List<AcquiredImage> population) {
+            return GetSamples(population, i => { return i.Metadata.HFR; });
         }
 
         private bool SamplesHaveData(List<double> samples) {

@@ -19,6 +19,7 @@
     <Compile Include="..\NINA.Plugin.TargetScheduler\Goals\SeasonCounter.cs" Link="Linked\Goals\SeasonCounter.cs" />
     <Compile Include="..\NINA.Plugin.TargetScheduler\Goals\TargetSeason.cs" Link="Linked\Goals\TargetSeason.cs" />
     <Compile Include="..\NINA.Plugin.TargetScheduler\Remote\Api\**\*.cs" LinkBase="Linked\Api" />
+    <Compile Include="..\NINA.Plugin.TargetScheduler\Grading\GraderMath.cs" Link="Linked\Grading\GraderMath.cs" />
     <Compile Include="..\NINA.Plugin.TargetScheduler\Goals\SeasonStore.cs" Link="Linked\Goals\SeasonStore.cs" />
     <Compile Include="..\NINA.Plugin.TargetScheduler\Goals\PlannerSignals.cs" Link="Linked\Goals\PlannerSignals.cs" />
   </ItemGroup>

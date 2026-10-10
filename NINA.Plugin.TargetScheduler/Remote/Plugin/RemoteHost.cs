@@ -489,6 +489,16 @@ namespace NINA.Plugin.TargetScheduler.Remote.Plugin {
 
         public Preview Preview(PreviewRequest request) => new PreviewRunner(profileService, this).Run(request);
 
+        public GraderReport Grader(int? targetId) {
+            int? id = targetId;
+            if (id == null) {
+                lock (sync) {
+                    id = target?.TargetId;
+                }
+            }
+            return id == null ? null : new GraderProbe(profileService.ActiveProfile).Report(id.Value);
+        }
+
         private void Push(string type, object data) {
             try {
                 Pushed?.Invoke(type, data);

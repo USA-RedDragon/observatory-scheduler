@@ -213,5 +213,56 @@ namespace NINA.Plugin.TargetScheduler.Remote.Test {
             a.Select(x => x.Key).Should().Equal("weather", "grading", "overhead", "visibility", "web", "limits");
             a.Single(x => x.Key == "visibility").Text.Should().Contain("30 s").And.Contain("10 s");
         }
+
+        private static GraderHfrSettings Hfr(bool improvement = false, double? auto = null, string mode = "immediate") {
+            return new GraderHfrSettings { ProjectGrading = true, Enabled = true, SigmaFactor = 2, AcceptImprovement = improvement, AutoAcceptLevel = auto, MaxSampleSize = 10, Mode = mode, DelayThresholdPercent = 50 };
+        }
+
+        private static GraderPlanInput Plan(params double[] samples) {
+            return new GraderPlanInput { PlanId = 9, Filter = "OIII", ExposureSeconds = 300, Acquired = 12, ReferenceImageId = 77, Matching = 11, Samples = samples.ToList() };
+        }
+
+        [Test]
+        public void GraderLimitUsesTheSampleStandardDeviation() {
+            var l = GraderLimits.Build(Hfr(), Plan(2, 4, 4, 4, 5, 5, 7, 9));
+            l.State.Should().Be(GraderLimits.StateLimit);
+            l.Samples.Should().Be(8);
+            l.Mean.Should().Be(5);
+            l.Sd.Should().BeApproximately(Math.Sqrt(32.0 / 7), 1e-12);
+            l.Upper.Should().BeApproximately(5 + 2 * Math.Sqrt(32.0 / 7), 1e-12);
+            l.RejectAbove.Should().Be(l.Upper);
+            l.RejectBelow.Should().Be(l.Lower);
+            l.PopulationRule.Should().Contain("the 8 newest of 11 subs").And.Contain("sample size 10");
+        }
+
+        [Test]
+        public void GraderLimitAppliesImprovementAndAutoAccept() {
+            var l = GraderLimits.Build(Hfr(improvement: true, auto: 20), Plan(2, 4, 4, 4, 5, 5, 7, 9));
+            l.RejectBelow.Should().BeNull();
+            l.RejectAbove.Should().Be(20);
+            var low = GraderLimits.Build(Hfr(auto: 0.5), Plan(2, 4, 4, 4, 5, 5, 7, 9));
+            low.RejectAbove.Should().Be(low.Upper);
+            low.RejectBelow.Should().Be(low.Lower);
+            GraderLimits.Build(Hfr(auto: 1), Plan(2, 4, 4, 4, 5, 5, 7, 9)).RejectBelow.Should().BeNull();
+        }
+
+        [Test]
+        public void GraderLimitStates() {
+            GraderLimits.Build(Hfr(), Plan(2, 3)).State.Should().Be(GraderLimits.StateTooFewSamples);
+            GraderLimits.Build(Hfr(), new GraderPlanInput { PlanId = 1 }).State.Should().Be(GraderLimits.StateNoImages);
+            var off = Hfr();
+            off.Enabled = false;
+            GraderLimits.Build(off, Plan(1, 2, 3)).State.Should().Be(GraderLimits.StateHfrGradingOff);
+            var project = Hfr();
+            project.ProjectGrading = false;
+            GraderLimits.Build(project, Plan(1, 2, 3)).State.Should().Be(GraderLimits.StateProjectGradingOff);
+            GraderLimits.Build(Hfr(mode: "delayed"), Plan(1, 2, 3)).PopulationRule.Should().StartWith("all 3 subs").And.Contain("50%");
+            var nan = GraderLimits.Build(Hfr(), Plan(1, double.NaN, 3, 4));
+            nan.State.Should().Be(GraderLimits.StateInvalidSamples);
+            nan.InvalidSamples.Should().Be(1);
+            nan.Mean.Should().BeNull();
+            GraderLimits.Build(Hfr(), Plan(1, 2, 3)).ZeroRejected.Should().BeTrue();
+            GraderLimits.Build(Hfr(auto: 1), Plan(1, 2, 3)).ZeroRejected.Should().BeFalse();
+        }
     }
 }

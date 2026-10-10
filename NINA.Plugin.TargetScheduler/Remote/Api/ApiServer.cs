@@ -173,6 +173,22 @@ namespace NINA.Plugin.TargetScheduler.Remote.Api {
                             req.Start = s;
                         }
                         await Send(context, 200, backend.Preview(req));
+                    } else if (path == "/grader" && method == HttpVerbs.Get) {
+                        int? targetId = null;
+                        var raw = context.Request.QueryString["target_id"];
+                        if (!string.IsNullOrEmpty(raw)) {
+                            if (!int.TryParse(raw, System.Globalization.NumberStyles.Integer, System.Globalization.CultureInfo.InvariantCulture, out var id)) {
+                                await Send(context, 400, new { error = "target_id must be an integer" });
+                                return;
+                            }
+                            targetId = id;
+                        }
+                        var report = backend.Grader(targetId);
+                        if (report == null) {
+                            await Send(context, 404, new { error = targetId == null ? "no current target; pass target_id" : "unknown target" });
+                        } else {
+                            await Send(context, 200, report);
+                        }
                     } else if (path == "/preview" && method == HttpVerbs.Post) {
                         var body = await context.GetRequestBodyAsStringAsync();
                         var req = string.IsNullOrWhiteSpace(body) ? new PreviewRequest() : JsonSerializer.Deserialize<PreviewRequest>(body, CommandJson.Options);

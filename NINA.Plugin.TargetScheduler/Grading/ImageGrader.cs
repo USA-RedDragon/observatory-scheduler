@@ -224,6 +224,16 @@ namespace NINA.Plugin.TargetScheduler.Grading {
             ).ToList();
         }
 
+        public (List<AcquiredImage>, int) NextImagePopulation(IImageGraderPreferences graderPreferences, Target target, string profileId, ImageMetadata nextMetadata, List<AcquiredImage> acquiredImages) {
+            AcquiredImage next = new AcquiredImage(nextMetadata) { Id = int.MinValue, ProfileId = profileId };
+            List<AcquiredImage> withNext = new List<AcquiredImage> { next };
+            withNext.AddRange(acquiredImages ?? new List<AcquiredImage>());
+            List<AcquiredImage> population = GetMatchingAcquired(target, next, withNext);
+            List<AcquiredImage> pool = DelayedGradingEnabled(graderPreferences) ? population : GetImmediatePopulation(graderPreferences.MaxGradingSampleSize, population);
+            List<AcquiredImage> samples = pool == null ? new List<AcquiredImage>() : pool.Where(ai => ai.Id != next.Id).ToList();
+            return (samples, population.Count - 1);
+        }
+
         public virtual List<AcquiredImage> GetAllAcquired(ExposurePlan exposurePlan) {
             using (var context = new SchedulerDatabaseInteraction().GetContext()) {
                 return context.GetAcquiredImagesForGrading(exposurePlan);
