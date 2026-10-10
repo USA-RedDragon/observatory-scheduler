@@ -155,18 +155,33 @@ namespace NINA.Plugin.TargetScheduler.Test.Planning.Scoring.Rules {
         }
 
         [Test]
-        public void testGoalDoneOrPlateauIsPastGoal() {
+        public void testGoalDoneIsPastGoal() {
             Mock<IProject> projectMock = GetProject(true);
             Mock<ITarget> t1 = AddPanel(projectMock, "p1", 1, ("L", 10, 1), ("R", 10, 1));
             AddPanel(projectMock, "p2", 2, ("L", 10, 1));
 
             Mock<IGoalProgressSource> source = new Mock<IGoalProgressSource>();
-            source.Setup(m => m.Get("p1", "L")).Returns(new GoalProgress { Progress = 0.3, Done = true });
-            source.Setup(m => m.Get("p1", "R")).Returns(new GoalProgress { Progress = 0.4, Plateau = true });
+            source.Setup(m => m.Get("p1", "L")).Returns(new GoalProgress { Progress = 0.3, Plateau = true, Done = true });
+            source.Setup(m => m.Get("p1", "R")).Returns(new GoalProgress { Progress = 1.1, Done = true });
             MosaicCompletion.GoalSource = source.Object;
 
             MosaicCompletion.PanelProgress(t1.Object).Should().Be(1);
             new PanelDeficitRule().Score(PlanMocks.GetMockScoringEnging().Object, t1.Object).Should().Be(0);
+        }
+
+        [Test]
+        public void testPlateauWithoutPlateauStopIsNotPastGoal() {
+            Mock<IProject> projectMock = GetProject(true);
+            Mock<ITarget> t1 = AddPanel(projectMock, "p1", 1, ("L", 10, 1));
+            AddPanel(projectMock, "p2", 2, ("L", 10, 5));
+
+            Mock<IGoalProgressSource> source = new Mock<IGoalProgressSource>();
+            source.Setup(m => m.Get("p1", "L")).Returns(new GoalProgress { Progress = 0.4, Plateau = true, Done = false });
+            MosaicCompletion.GoalSource = source.Object;
+
+            MosaicCompletion.PanelProgress(t1.Object).Should().BeApproximately(0.4, 0.00001);
+            MosaicCompletion.IsPanelPastGoalWhileMosaicIncomplete(t1.Object).Should().BeFalse();
+            new PanelDeficitRule().Score(PlanMocks.GetMockScoringEnging().Object, t1.Object).Should().BeGreaterThan(0);
         }
 
         [Test]

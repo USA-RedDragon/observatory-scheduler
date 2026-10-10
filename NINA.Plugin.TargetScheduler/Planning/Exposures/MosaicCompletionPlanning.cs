@@ -20,7 +20,7 @@ namespace NINA.Plugin.TargetScheduler.Planning.Exposures {
                 return null;
             }
 
-            return goal.Done || goal.Plateau ? 1 : goal.Progress;
+            return goal.Done ? 1 : goal.Progress;
         }
 
         public static double PlanProgress(ITarget target, IExposure plan) {
