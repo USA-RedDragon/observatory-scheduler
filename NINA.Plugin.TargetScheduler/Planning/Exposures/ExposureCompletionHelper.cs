@@ -11,17 +11,10 @@ namespace NINA.Plugin.TargetScheduler.Planning.Exposures {
         private double delayGrading;
         private double exposureThrottle;
 
-        public IGoalProgressSource GoalSource { get; set; }
-
         public ExposureCompletionHelper(bool imageGradingEnabled, double delayGrading, double exposureThrottle) {
             this.imageGradingEnabled = imageGradingEnabled;
             this.delayGrading = delayGrading;
             this.exposureThrottle = exposureThrottle / 100;
-        }
-
-        public ExposureCompletionHelper(bool imageGradingEnabled, double delayGrading, double exposureThrottle, IGoalProgressSource goalSource)
-            : this(imageGradingEnabled, delayGrading, exposureThrottle) {
-            GoalSource = goalSource;
         }
 
         public GoalProgress GoalFor(IExposureCounts exposurePlan) {
@@ -29,7 +22,8 @@ namespace NINA.Plugin.TargetScheduler.Planning.Exposures {
         }
 
         private GoalProgress GoalFor(IExposureCounts exposurePlan, string targetGuid) {
-            if (GoalSource == null || exposurePlan == null) { return null; }
+            IGoalProgressSource goalSource = MosaicCompletion.GoalSource;
+            if (goalSource == null || exposurePlan == null) { return null; }
 
             string filterName = null;
             if (exposurePlan is IExposure exposure) {
@@ -41,7 +35,7 @@ namespace NINA.Plugin.TargetScheduler.Planning.Exposures {
             }
 
             if (string.IsNullOrWhiteSpace(targetGuid) || string.IsNullOrWhiteSpace(filterName)) { return null; }
-            return GoalSource.Get(targetGuid, filterName);
+            return goalSource.Get(targetGuid, filterName);
         }
 
         private static double ExposureSeconds(IExposureCounts exposurePlan) {

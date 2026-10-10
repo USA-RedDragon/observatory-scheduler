@@ -1,7 +1,6 @@
 ﻿using NINA.Core.Model.Equipment;
 using NINA.Plugin.TargetScheduler.Database;
 using NINA.Plugin.TargetScheduler.Database.Schema;
-using NINA.Plugin.TargetScheduler.Goals;
 using NINA.Plugin.TargetScheduler.Planning.Exposures;
 using NINA.Plugin.TargetScheduler.Shared.Utility;
 using NINA.Plugin.TargetScheduler.Util;
@@ -240,11 +239,10 @@ namespace NINA.Plugin.TargetScheduler.Flats {
 
             using (var context = GetDatabase().GetContext()) {
                 List<Project> activeProjects = context.GetActiveProjects(profileId);
+                ForkDatabase.RefreshGoalSource(context);
                 List<Target> targets = new List<Target>();
-                IGoalProgressSource goalSource = ForkDatabase.LoadGoalProgress(context);
                 foreach (Project project in activeProjects) {
                     ExposureCompletionHelper helper = GetExposureCompletionHelper(project);
-                    helper.GoalSource = goalSource;
                     if (project.FlatsHandling == Project.FLATS_HANDLING_TARGET_COMPLETION) {
                         targets.AddRange(project.Targets.Where(t => t.Enabled == true && helper.PercentComplete(t) >= 100));
                     }

@@ -80,8 +80,8 @@ namespace NINA.Plugin.TargetScheduler.Planning.Scoring.Rules {
 
             TSLogger.Debug($"rarity season for {project.Name}/{target.Name} on {nightDate:yyyy-MM-dd}: nights left {season.NightsLeft}, out of season {season.OutOfSeason}, scanned {season.NightsScanned} nights, {visibility.Samples} samples in {sw.ElapsedMilliseconds}ms");
 
-            if (!target.IsPreview && !string.IsNullOrWhiteSpace(target.DatabaseGuid)) {
-                Record(TargetSeasonRow.From(target.DatabaseGuid, season, nightDate, DateTime.UtcNow));
+            if (!target.IsPreview && !string.IsNullOrWhiteSpace(target.Guid)) {
+                Record(TargetSeasonRow.From(target.Guid, season, nightDate, DateTime.UtcNow));
             }
 
             return season;

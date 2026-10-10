@@ -6,7 +6,6 @@ using NINA.Equipment.Interfaces.Mediator;
 using NINA.Plugin.TargetScheduler.Astrometry;
 using NINA.Plugin.TargetScheduler.Database;
 using NINA.Plugin.TargetScheduler.Database.Schema;
-using NINA.Plugin.TargetScheduler.Goals;
 using NINA.Plugin.TargetScheduler.Planning.Exposures;
 using NINA.Plugin.TargetScheduler.Planning.Interfaces;
 using NINA.Plugin.TargetScheduler.Planning.Scoring;
@@ -29,7 +28,6 @@ namespace NINA.Plugin.TargetScheduler.Planning {
         private ObserverInfo observerInfo;
         private PreviousTargetExpert previousTargetExpert;
         private List<IProject> projects;
-        private IGoalProgressSource goalSource;
 
         public Planner(DateTime atTime, IProfile profile, ProfilePreference profilePreferences, IWeatherDataMediator weatherDataMediator, bool checkCondition, bool isPreview)
             : this(atTime, profile, profilePreferences, weatherDataMediator, checkCondition, isPreview, null) {
@@ -63,7 +61,6 @@ namespace NINA.Plugin.TargetScheduler.Planning {
                 try {
                     if (projects == null) {
                         projects = GetProjects();
-                        RefreshGoalSource(previousTarget);
                     }
 
                     // If the previous target still has time in it's initial minimum time span and is still acceptable, then stick with it
@@ -442,19 +439,10 @@ namespace NINA.Plugin.TargetScheduler.Planning {
             try {
                 SchedulerDatabaseInteraction database = new SchedulerDatabaseInteraction();
                 SchedulerPlanLoader loader = new SchedulerPlanLoader(activeProfile);
-                List<IProject> loaded = loader.LoadActiveProjects(database.GetContext());
-                goalSource = loader.GoalSource;
-                return loaded;
+                return loader.LoadActiveProjects(database.GetContext());
             } catch (Exception ex) {
                 TSLogger.Error($"exception reading database: {ex.StackTrace}");
                 throw new SequenceEntityFailedException($"Scheduler: exception reading database: {ex.Message}", ex);
-            }
-        }
-
-        private void RefreshGoalSource(ITarget previousTarget) {
-            ExposureCompletionHelper helper = previousTarget?.Project?.ExposureCompletionHelper;
-            if (helper != null && goalSource != null) {
-                helper.GoalSource = goalSource;
             }
         }
 

@@ -355,9 +355,7 @@ namespace NINA.Plugin.TargetScheduler.Sequencer {
             using (var context = new SchedulerDatabaseInteraction().GetContext()) {
                 try {
                     Target t = context.GetTarget(reference.Project.DatabaseId, reference.DatabaseId);
-                    if (reference.Project.ExposureCompletionHelper != null) {
-                        reference.Project.ExposureCompletionHelper.GoalSource = ForkDatabase.LoadGoalProgress(context);
-                    }
+                    ForkDatabase.RefreshGoalSource(context);
                     return new PlanningTarget(reference.Project, t);
                 } catch (Exception ex) {
                     TSLogger.Error($"failed to reload target for completeness check: {ex.Message}\n{ex.StackTrace}");

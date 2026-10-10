@@ -1,4 +1,5 @@
 using NINA.Plugin.TargetScheduler.Goals;
+using NINA.Plugin.TargetScheduler.Planning.Exposures;
 using NINA.Plugin.TargetScheduler.Remote.Commands;
 using NINA.Plugin.TargetScheduler.Remote.Data;
 using NINA.Plugin.TargetScheduler.Shared.Utility;
@@ -20,6 +21,7 @@ namespace NINA.Plugin.TargetScheduler.Database {
                     }
                     ensured = true;
                     TSLogger.Info("fork goal schema ensured");
+                    RefreshGoalSource(context);
                 } catch (Exception ex) {
                     TSLogger.Error($"failed to ensure fork goal schema: {ex.Message}\n{ex.StackTrace}");
                 }
@@ -36,6 +38,12 @@ namespace NINA.Plugin.TargetScheduler.Database {
                 TSLogger.Warning($"failed to load goal progress, falling back to exposure counts: {ex.Message}");
                 return SqliteGoalProgressSource.Empty;
             }
+        }
+
+        public static IGoalProgressSource RefreshGoalSource(SchedulerDatabaseContext context) {
+            IGoalProgressSource source = LoadGoalProgress(context);
+            MosaicCompletion.GoalSource = source;
+            return source;
         }
 
         public static ITargetSeasonWriter TargetSeasonWriter() {
