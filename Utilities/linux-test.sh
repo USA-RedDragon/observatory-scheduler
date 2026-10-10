@@ -6,7 +6,7 @@ usage() {
   exit 2
 }
 
-repo=$(cd "$(dirname "$0")/.." && pwd)
+repo=$(cd "$(dirname "$0")/.." && pwd -P)
 src=${DOTNET_WINDESKTOP_ROOT:-${DOTNET_ROOT:-}}
 if [ -z "$src" ] || [ ! -d "$src/shared/Microsoft.WindowsDesktop.App" ] || [ ! -x "$src/dotnet" ]; then
   usage
