@@ -4,6 +4,7 @@ using NINA.Plugin.TargetScheduler.Goals;
 using NINA.Plugin.TargetScheduler.Planning.Interfaces;
 using NINA.Plugin.TargetScheduler.Shared.Utility;
 using System;
+using System.Collections.Generic;
 using System.Linq;
 
 namespace NINA.Plugin.TargetScheduler.Planning.Scoring.Rules {
@@ -53,8 +54,12 @@ namespace NINA.Plugin.TargetScheduler.Planning.Scoring.Rules {
 
             IProject project = target.Project;
             HorizonDefinition horizon = project.HorizonDefinition ?? new HorizonDefinition(project.MinimumAltitude);
-            TwilightLevel level = SeasonCalculator.LevelFor((target.AllExposurePlans ?? target.ExposurePlans)?.Where(p => p.IsEnabled).Select(p => p.TwilightLevel));
-            return SeasonCalculator.Key(observerInfo, target.Coordinates, horizon, project.MinimumTime, level);
+            List<IExposure> plans = (target.AllExposurePlans ?? target.ExposurePlans)?.Where(p => p.IsEnabled).ToList() ?? new List<IExposure>();
+            TwilightLevel level = SeasonCalculator.LevelFor(plans.Select(p => p.TwilightLevel));
+            SeasonConstraints constraints = SeasonCalculator.Constraints(project.MaximumAltitude, project.MeridianWindow,
+                plans.Select(p => SeasonCalculator.Moon(p.MoonAvoidanceEnabled, p.MoonAvoidanceSeparation, p.MoonAvoidanceWidth,
+                    p.MoonRelaxScale, p.MoonRelaxMaxAltitude, p.MoonRelaxMinAltitude, p.MoonDownEnabled)));
+            return SeasonCalculator.Key(observerInfo, target.Coordinates, horizon, project.MinimumTime, level, constraints);
         }
     }
 }

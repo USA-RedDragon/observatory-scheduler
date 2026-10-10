@@ -15,6 +15,10 @@ namespace NINA.Plugin.TargetScheduler.Astrometry {
         }
 
         public static string Key(ObserverInfo observerInfo, Coordinates coordinates, HorizonDefinition horizon, int minimumTime, TwilightLevel level) {
+            return Key(observerInfo, coordinates, horizon, minimumTime, level, SeasonConstraints.None);
+        }
+
+        public static string Key(ObserverInfo observerInfo, Coordinates coordinates, HorizonDefinition horizon, int minimumTime, TwilightLevel level, SeasonConstraints constraints) {
             return string.Join("|",
                 coordinates.RA.ToString("0.00000", CultureInfo.InvariantCulture),
                 coordinates.Dec.ToString("0.00000", CultureInfo.InvariantCulture),
@@ -22,7 +26,8 @@ namespace NINA.Plugin.TargetScheduler.Astrometry {
                 minimumTime.ToString(CultureInfo.InvariantCulture),
                 level.ToString(),
                 observerInfo.Latitude.ToString("0.0000", CultureInfo.InvariantCulture),
-                observerInfo.Longitude.ToString("0.0000", CultureInfo.InvariantCulture));
+                observerInfo.Longitude.ToString("0.0000", CultureInfo.InvariantCulture),
+                (constraints ?? SeasonConstraints.None).Key());
         }
 
         public static DateTime NightDate(ObserverInfo observerInfo, DateTime atTime) {
@@ -30,8 +35,32 @@ namespace NINA.Plugin.TargetScheduler.Astrometry {
         }
 
         public static SeasonResult Compute(ObserverInfo observerInfo, Coordinates coordinates, HorizonDefinition horizon, TwilightLevel level, int minimumTime, DateTime nightDate) {
-            SeasonVisibility visibility = new SeasonVisibility(observerInfo, coordinates, horizon, level, nightDate);
+            return Compute(observerInfo, coordinates, horizon, level, minimumTime, nightDate, SeasonConstraints.None);
+        }
+
+        public static SeasonResult Compute(ObserverInfo observerInfo, Coordinates coordinates, HorizonDefinition horizon, TwilightLevel level, int minimumTime, DateTime nightDate, SeasonConstraints constraints) {
+            SeasonVisibility visibility = new SeasonVisibility(observerInfo, coordinates, horizon, level, nightDate, constraints);
             return SeasonCounter.Count(visibility, minimumTime);
+        }
+
+        public static SeasonConstraints Constraints(double maximumAltitude, int meridianWindow, IEnumerable<MoonParams> moon) {
+            return new SeasonConstraints {
+                MaximumAltitude = maximumAltitude,
+                MeridianWindowMinutes = meridianWindow,
+                Moon = moon?.Where(m => m != null).ToList() ?? new List<MoonParams>()
+            };
+        }
+
+        public static MoonParams Moon(bool enabled, double separation, int width, double relaxScale, double relaxMax, double relaxMin, bool downEnabled) {
+            return new MoonParams {
+                Enabled = enabled,
+                Separation = separation,
+                Width = width,
+                RelaxScale = relaxScale,
+                RelaxMaxAltitude = relaxMax,
+                RelaxMinAltitude = relaxMin,
+                DownEnabled = downEnabled
+            };
         }
     }
 }

@@ -30,6 +30,9 @@ namespace NINA.Plugin.TargetScheduler.Goals {
         public bool LowConfidence { get; set; }
         public bool Done { get; set; }
         public DateTime MeasuredAt { get; set; }
+        public double? NightQuality { get; set; }
+        public DateTime? NightQualityAt { get; set; }
+        public double? SeasonBoost { get; set; }
     }
 
     public interface IGoalRowProvider {

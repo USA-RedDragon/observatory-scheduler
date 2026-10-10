@@ -34,8 +34,16 @@ namespace NINA.Plugin.TargetScheduler.Remote.Data {
 
         public IList<GoalProgressRow> LoadProgress() {
             List<GoalProgressRow> rows = new List<GoalProgressRow>();
-            Read(GoalSchema.GoalProgressTable, "SELECT target_guid, filter, kind, goal_value, achieved_value, progress, snr, depth, effective_hours, hours_needed, gain_per_hour_pct, plateau, low_confidence, done, measured_at FROM ts_goal_progress", r => {
-                rows.Add(new GoalProgressRow {
+            bool signals = false;
+            WithConnection(() => {
+                if (TableExists(connection, GoalSchema.GoalProgressTable)) {
+                    ISet<string> columns = GoalSchema.Columns(connection, GoalSchema.GoalProgressTable);
+                    signals = columns.Contains("night_quality") && columns.Contains("night_quality_at") && columns.Contains("season_boost");
+                }
+            });
+            string extra = signals ? ", night_quality, night_quality_at, season_boost" : string.Empty;
+            Read(GoalSchema.GoalProgressTable, "SELECT target_guid, filter, kind, goal_value, achieved_value, progress, snr, depth, effective_hours, hours_needed, gain_per_hour_pct, plateau, low_confidence, done, measured_at" + extra + " FROM ts_goal_progress", r => {
+                GoalProgressRow row = new GoalProgressRow {
                     TargetGuid = Text(r, 0),
                     Filter = Text(r, 1),
                     Kind = Int(r, 2),
@@ -51,9 +59,30 @@ namespace NINA.Plugin.TargetScheduler.Remote.Data {
                     LowConfidence = (Int(r, 12) ?? 0) != 0,
                     Done = (Int(r, 13) ?? 0) != 0,
                     MeasuredAt = Time(r, 14)
-                });
+                };
+                if (signals) {
+                    row.NightQuality = Real(r, 15);
+                    DateTime at = Time(r, 16);
+                    row.NightQualityAt = at == DateTime.MinValue ? (DateTime?)null : at;
+                    row.SeasonBoost = Real(r, 17);
+                }
+                rows.Add(row);
             });
             return rows;
+        }
+
+        private void WithConnection(Action action) {
+            bool opened = false;
+            if (connection.State != ConnectionState.Open) {
+                connection.Open();
+                opened = true;
+            }
+
+            try {
+                action();
+            } finally {
+                if (opened) { connection.Close(); }
+            }
         }
 
         private void Read(string table, string sql, Action<DbDataReader> onRow) {

@@ -56,7 +56,7 @@ namespace NINA.Plugin.TargetScheduler.Test.Planning {
             Dictionary<string, double> rw = new Dictionary<string, double>();
             Dictionary<string, IScoringRule> allRules = ScoringRule.GetAllScoringRules();
             foreach (KeyValuePair<string, IScoringRule> item in allRules) {
-                rw[item.Key] = 1;
+                rw[item.Key] = item.Value is IPlannerSwitch ? 0 : 1;
             }
 
             pp.SetupProperty(m => m.RuleWeights, rw);

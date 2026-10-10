@@ -4,6 +4,7 @@ using NINA.Plugin.TargetScheduler.Remote.Commands;
 using NINA.Plugin.TargetScheduler.Remote.Data;
 using NINA.Plugin.TargetScheduler.Shared.Utility;
 using System;
+using System.Collections.Generic;
 using System.Diagnostics;
 
 namespace NINA.Plugin.TargetScheduler.Database {
@@ -19,6 +20,7 @@ namespace NINA.Plugin.TargetScheduler.Database {
                     foreach (string sql in GoalSchema.All) {
                         context.Database.ExecuteSqlCommand(sql);
                     }
+                    GoalSchema.EnsureColumns(context.Database.Connection);
                     ensured = true;
                     TSLogger.Info("fork goal schema ensured");
                     RefreshGoalSource(context);
@@ -29,21 +31,30 @@ namespace NINA.Plugin.TargetScheduler.Database {
         }
 
         public static IGoalProgressSource LoadGoalProgress(SchedulerDatabaseContext context) {
-            try {
-                Stopwatch sw = Stopwatch.StartNew();
-                SqliteGoalProgressSource source = new SqliteGoalProgressSource(new SqlGoalRowProvider(context.Database.Connection));
-                TSLogger.Debug($"loaded goal progress snapshot: {source.Count} goal-driven filters in {sw.ElapsedMilliseconds}ms");
-                return source;
-            } catch (Exception ex) {
-                TSLogger.Warning($"failed to load goal progress, falling back to exposure counts: {ex.Message}");
-                return SqliteGoalProgressSource.Empty;
-            }
+            return Load(context).Item1;
         }
 
         public static IGoalProgressSource RefreshGoalSource(SchedulerDatabaseContext context) {
-            IGoalProgressSource source = LoadGoalProgress(context);
-            MosaicCompletion.GoalSource = source is SqliteGoalProgressSource snapshot && snapshot.Count == 0 ? null : source;
+            (SqliteGoalProgressSource source, PlannerSignals signals) = Load(context);
+            PlannerSignals.Current = signals;
+            MosaicCompletion.GoalSource = source.Count == 0 ? null : source;
             return MosaicCompletion.GoalSource;
+        }
+
+        private static (SqliteGoalProgressSource, PlannerSignals) Load(SchedulerDatabaseContext context) {
+            try {
+                Stopwatch sw = Stopwatch.StartNew();
+                SqlGoalRowProvider provider = new SqlGoalRowProvider(context.Database.Connection);
+                IList<GoalRow> goals = provider.LoadGoals();
+                IList<GoalProgressRow> progress = provider.LoadProgress();
+                SqliteGoalProgressSource source = new SqliteGoalProgressSource(goals, progress);
+                PlannerSignals signals = new PlannerSignals(progress);
+                TSLogger.Debug($"loaded goal progress snapshot: {source.Count} goal-driven filters, {signals.BoostCount} season boosts, night quality {(signals.Quality.HasValue ? signals.Quality.Value.ToString("0.00") + " at " + signals.QualityAt : "none")} in {sw.ElapsedMilliseconds}ms");
+                return (source, signals);
+            } catch (Exception ex) {
+                TSLogger.Warning($"failed to load goal progress, falling back to exposure counts: {ex.Message}");
+                return (SqliteGoalProgressSource.Empty, PlannerSignals.Empty);
+            }
         }
 
         public static ITargetSeasonReader TargetSeasonReader() {

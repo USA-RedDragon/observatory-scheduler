@@ -57,6 +57,7 @@ namespace NINA.Plugin.TargetScheduler.Planning.Scoring {
             List<IScoringRule> activeRules = new List<IScoringRule>();
 
             foreach (KeyValuePair<string, IScoringRule> item in allRules) {
+                if (item.Value is IPlannerSwitch) { continue; }
                 if (GetRuleWeight(ruleWeights, item.Value.Name) > 0) {
                     activeRules.Add(item.Value);
                 }

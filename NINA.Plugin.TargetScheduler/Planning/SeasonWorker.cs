@@ -181,16 +181,20 @@ namespace NINA.Plugin.TargetScheduler.Planning {
                 foreach (Target target in project.Targets.Where(t => t.Enabled && !string.IsNullOrWhiteSpace(t.Guid))) {
                     if (token.IsCancellationRequested) { return; }
 
-                    TwilightLevel level = SeasonCalculator.LevelFor(target.ExposurePlans
+                    List<ExposureTemplate> templates = target.ExposurePlans
                         .Where(ep => ep.IsEnabled && ep.ExposureTemplate != null)
-                        .Select(ep => ep.ExposureTemplate.TwilightLevel));
-                    string key = SeasonCalculator.Key(observer, target.Coordinates, horizon, project.MinimumTime, level);
+                        .Select(ep => ep.ExposureTemplate).ToList();
+                    TwilightLevel level = SeasonCalculator.LevelFor(templates.Select(t => t.TwilightLevel));
+                    SeasonConstraints constraints = SeasonCalculator.Constraints(project.MaximumAltitude, project.MeridianWindow,
+                        templates.Select(t => SeasonCalculator.Moon(t.MoonAvoidanceEnabled, t.MoonAvoidanceSeparation, t.MoonAvoidanceWidth,
+                            t.MoonRelaxScale, t.MoonRelaxMaxAltitude, t.MoonRelaxMinAltitude, t.MoonDownEnabled)));
+                    string key = SeasonCalculator.Key(observer, target.Coordinates, horizon, project.MinimumTime, level, constraints);
                     if (!full && Store.IsCurrent(target.Guid, key, night)) {
                         skipped++;
                         continue;
                     }
 
-                    SeasonResult season = SeasonCalculator.Compute(observer, target.Coordinates, horizon, level, project.MinimumTime, night);
+                    SeasonResult season = SeasonCalculator.Compute(observer, target.Coordinates, horizon, level, project.MinimumTime, night, constraints);
                     Store.Put(new SeasonEntry { TargetGuid = target.Guid, Key = key, Season = season, ComputedFor = night });
                     computed++;
 

@@ -1,5 +1,6 @@
 ﻿using NINA.Plugin.TargetScheduler.Database.Schema;
 using NINA.Plugin.TargetScheduler.Planning.Interfaces;
+using NINA.Plugin.TargetScheduler.Planning.Scoring.Rules;
 using System;
 
 namespace NINA.Plugin.TargetScheduler.Planning.Exposures {
@@ -13,6 +14,11 @@ namespace NINA.Plugin.TargetScheduler.Planning.Exposures {
         }
 
         public IExposureSelector GetExposureSelector(IProject project, ITarget target, Target databaseTarget) {
+            IExposureSelector selector = GetDefaultExposureSelector(project, target, databaseTarget);
+            return FilterSteeringRule.IsOn(project) ? new SteeringExposureSelector(project, target, selector) : selector;
+        }
+
+        public IExposureSelector GetDefaultExposureSelector(IProject project, ITarget target, Target databaseTarget) {
             if (project.SmartExposureOrder) {
                 return new SmartExposureSelector(project, target, databaseTarget);
             }

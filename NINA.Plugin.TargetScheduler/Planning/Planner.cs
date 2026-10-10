@@ -47,6 +47,7 @@ namespace NINA.Plugin.TargetScheduler.Planning {
                 Elevation = activeProfile.AstrometrySettings.Elevation,
             };
 
+            SkyConditions.CurrentObserver = observerInfo;
             previousTargetExpert = new PreviousTargetExpert(activeProfile, profilePreferences, isPreview, observerInfo);
         }
 

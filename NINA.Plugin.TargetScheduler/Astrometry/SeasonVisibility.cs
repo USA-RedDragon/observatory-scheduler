@@ -15,16 +15,25 @@ namespace NINA.Plugin.TargetScheduler.Astrometry {
         private readonly TwilightLevel twilightLevel;
         private readonly DateTime firstNight;
         private readonly int sampleMinutes;
+        private readonly SeasonConstraints constraints;
+        private readonly double raDegrees;
 
         public int Samples { get; private set; }
+        public int MoonSamples { get; private set; }
 
-        public SeasonVisibility(ObserverInfo observerInfo, Coordinates coordinates, HorizonDefinition horizon, TwilightLevel twilightLevel, DateTime firstNight, int sampleMinutes = DEFAULT_SAMPLE_MINUTES) {
+        public SeasonVisibility(ObserverInfo observerInfo, Coordinates coordinates, HorizonDefinition horizon, TwilightLevel twilightLevel, DateTime firstNight, int sampleMinutes = DEFAULT_SAMPLE_MINUTES)
+            : this(observerInfo, coordinates, horizon, twilightLevel, firstNight, SeasonConstraints.None, sampleMinutes) {
+        }
+
+        public SeasonVisibility(ObserverInfo observerInfo, Coordinates coordinates, HorizonDefinition horizon, TwilightLevel twilightLevel, DateTime firstNight, SeasonConstraints constraints, int sampleMinutes = DEFAULT_SAMPLE_MINUTES) {
             this.observerInfo = observerInfo;
             this.coordinates = coordinates;
             this.horizon = horizon;
             this.twilightLevel = twilightLevel;
             this.firstNight = firstNight.Date;
             this.sampleMinutes = sampleMinutes;
+            this.constraints = constraints ?? SeasonConstraints.None;
+            this.raDegrees = AstroUtil.HoursToDegrees(coordinates.RA);
         }
 
         public double UsableMinutes(int night) {
@@ -38,8 +47,7 @@ namespace NINA.Plugin.TargetScheduler.Astrometry {
                 bool last = t >= span.EndTime;
                 DateTime at = last ? span.EndTime : t;
                 Samples++;
-                HorizontalCoordinate hc = AstrometryUtils.GetHorizontalCoordinates(observerInfo, coordinates, at);
-                bool visible = hc.Altitude - horizon.GetTargetAltitude(hc.Azimuth) > 0;
+                bool visible = Usable(at);
 
                 if (visible && runStart == null) {
                     runStart = at;
@@ -57,6 +65,20 @@ namespace NINA.Plugin.TargetScheduler.Astrometry {
             }
 
             return longest;
+        }
+
+        private bool Usable(DateTime at) {
+            double siderealTime = AstroUtil.GetLocalSiderealTime(at, observerInfo.Longitude);
+            double hourAngle = AstroUtil.GetHourAngle(siderealTime, coordinates.RA);
+            double altitude = AstroUtil.GetAltitude(AstroUtil.HoursToDegrees(hourAngle), observerInfo.Latitude, coordinates.Dec);
+            double azimuth = AstroUtil.GetAzimuth(AstroUtil.HoursToDegrees(hourAngle), altitude, observerInfo.Latitude, coordinates.Dec);
+
+            if (altitude - horizon.GetTargetAltitude(azimuth) <= 0) { return false; }
+            if (!constraints.PositionUsable(altitude, hourAngle)) { return false; }
+            if (!constraints.NeedsMoon) { return true; }
+
+            MoonSamples++;
+            return constraints.MoonAllows(MoonEphemeris.At(observerInfo, at), raDegrees, coordinates.Dec);
         }
 
         private TimeInterval DarkSpan(int night) {

@@ -1,4 +1,7 @@
+using System;
 using System.Collections.Generic;
+using System.Globalization;
+using System.Linq;
 using System.Data;
 using System.Data.Common;
 
@@ -51,6 +54,46 @@ namespace NINA.Plugin.TargetScheduler.Remote.Commands {
 
         public static readonly IReadOnlyList<string> All = new[] { CreateGoalTable, CreateGoalProgressTable, CreateTargetSeasonTable };
 
+        public static readonly IReadOnlyList<(string Table, string Column, string Type)> AddedColumns = new[] {
+            (GoalProgressTable, "night_quality", "REAL"),
+            (GoalProgressTable, "night_quality_at", "TEXT"),
+            (GoalProgressTable, "season_boost", "REAL")
+        };
+
+        public static ISet<string> Columns(DbConnection connection, string table) {
+            HashSet<string> columns = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            using var cmd = connection.CreateCommand();
+            cmd.CommandText = $"PRAGMA table_info({table})";
+            using var reader = cmd.ExecuteReader();
+            while (reader.Read()) {
+                columns.Add(Convert.ToString(reader["name"], CultureInfo.InvariantCulture));
+            }
+            return columns;
+        }
+
+        public static void EnsureColumns(DbConnection connection) {
+            bool opened = false;
+            if (connection.State != ConnectionState.Open) {
+                connection.Open();
+                opened = true;
+            }
+
+            try {
+                foreach (var group in AddedColumns.GroupBy(c => c.Table)) {
+                    ISet<string> have = Columns(connection, group.Key);
+                    if (have.Count == 0) { continue; }
+                    foreach (var c in group) {
+                        if (have.Contains(c.Column)) { continue; }
+                        using var cmd = connection.CreateCommand();
+                        cmd.CommandText = $"ALTER TABLE {c.Table} ADD COLUMN {c.Column} {c.Type}";
+                        cmd.ExecuteNonQuery();
+                    }
+                }
+            } finally {
+                if (opened) { connection.Close(); }
+            }
+        }
+
         public static void Ensure(DbConnection connection) {
             bool opened = false;
             if (connection.State != ConnectionState.Open) {
@@ -64,6 +107,7 @@ namespace NINA.Plugin.TargetScheduler.Remote.Commands {
                     cmd.CommandText = sql;
                     cmd.ExecuteNonQuery();
                 }
+                EnsureColumns(connection);
             } finally {
                 if (opened) { connection.Close(); }
             }
