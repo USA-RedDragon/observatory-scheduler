@@ -1,7 +1,7 @@
-Observatory Scheduler 5.8.2.207: Target Scheduler Darks never takes darks in daylight.
+Observatory Scheduler 5.8.2.208: no imaging planned past the sequence's end of imaging, and no dark started on an unmeasured setpoint move near a deadline.
 
-- **Sun limit**: in every placement, the instruction starts a dark only if it ends (setpoint move, exposure and download included) with the sun below -8°, and it stops when the sun reaches -8°. It uses NINA's sun altitude at the profile's observer location; with no location set it takes no darks. Placed at the end of the sequence after the dawn flats, it now ends at once.
-- **Basis**: darks on 2026-09-29 leaked from the one that started at sun -0.67° (0.71 to 4.14 ADU against a limit of about 0.6), and darks on 2025-02-05 leaked at dusk down to -5.66° and were at the limit to -7.73°. -8° is below all of them. The TS log states the limit and its basis.
-- The other yield rules, the temperature gate and the camera-only rule are unchanged.
+- **End of imaging**: the planner reads the Sun Altitude loop conditions on the Target Scheduler container and its parents (for example "loop until the sun is above -14°") and does not plan, continue or start an exposure that cannot end before that loop ends. A NINA meridian flip that is due before the exposure counts with its wait to pass the meridian and its measured slew, recenter and settle time; until a flip has been measured, no flip is started within an hour of the end of imaging. Without such a condition, planning is unchanged.
+- **Darks**: Target Scheduler Darks never treats an unmeasured setpoint move as instant. It skips the combo when the wait end or the sun limit (-8°) is near, and still measures the rate when no deadline is near. Each move stops at the latest start that keeps the dark before the sun limit.
+- The TS log states the end of imaging, its basis and the flip time it uses.
 
-No database changes. Requires NINA 3.1.2.9001 or later. Install like 5.8.2.206: with NINA closed, replace the "Observatory Scheduler" folder in %LOCALAPPDATA%\NINA\Plugins\3.0.0\ with the one in this zip.
+No database changes. Requires NINA 3.1.2.9001 or later. Install like 5.8.2.207: with NINA closed, replace the "Observatory Scheduler" folder in %LOCALAPPDATA%\NINA\Plugins\3.0.0\ with the one in this zip.
