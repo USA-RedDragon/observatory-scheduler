@@ -1051,6 +1051,7 @@ namespace NINA.Plugin.TargetScheduler.Database {
 
                 // Other repairs/updates
                 RepairAndUpdate(version, newVersion, context);
+                ForkDatabase.EnsureSchema(context);
 
                 if (newVersion != version) {
                     TSLogger.Info($"database updated: {version} -> {newVersion}");
