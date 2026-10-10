@@ -29,6 +29,7 @@
     <Compile Include="..\NINA.Plugin.TargetScheduler\Darks\DarkPlanner.cs" Link="Linked\Darks\DarkPlanner.cs" />
     <Compile Include="..\NINA.Plugin.TargetScheduler\Darks\DarkState.cs" Link="Linked\Darks\DarkState.cs" />
     <Compile Include="..\NINA.Plugin.TargetScheduler\Planning\ImagingLimit.cs" Link="Linked\Planning\ImagingLimit.cs" />
+    <Compile Include="..\NINA.Plugin.TargetScheduler\Darks\DarkReadiness.cs" Link="Linked\Darks\DarkReadiness.cs" />
   </ItemGroup>
 
   <ItemGroup>

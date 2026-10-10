@@ -360,10 +360,21 @@ namespace NINA.Plugin.TargetScheduler.Sequencer {
 
         private CoolerLimit Limit(double setTemp, double imagingSetpoint, double? imagingPower, string reason) {
             var l = new CoolerLimit { At = DateTime.UtcNow, SetTemp = setTemp, Ambient = Ambient(), ImagingPower = imagingPower, ImagingSetpoint = imagingSetpoint, Reason = reason };
+            if (l.Ambient.HasValue) {
+                UseLearning(l.Ambient.Value);
+            }
             TSLogger.Info(l.Ambient.HasValue
                 ? $"TS Darks: recorded a cooler failure at {setTemp} °C and {l.Ambient.Value:0.#} °C ambient: {reason}"
                 : $"TS Darks: cooler failure at {setTemp} °C kept for this run only, the ambient temperature is not known: {reason}");
             return l;
+        }
+
+        private static void UseLearning(double ambient) {
+            DateTime now = DateTime.UtcNow;
+            string night = DarkReadiness.NightOf(now.ToLocalTime());
+            if (DarkRuntime.State.LearningUsed(night) == null) {
+                DarkRuntime.State.RecordLearning(night, now, ambient);
+            }
         }
 
         private void RecordHold(DarkNeed need, double? peakPower) {
@@ -373,6 +384,7 @@ namespace NINA.Plugin.TargetScheduler.Sequencer {
                 return;
             }
             DarkRuntime.State.RecordHold(new CoolerHold { At = DateTime.UtcNow, Ambient = ambient.Value, SetTemp = need.SetTemp, PeakPower = peakPower });
+            UseLearning(ambient.Value);
             TSLogger.Info($"TS Darks: recorded a hold at {need.SetTemp} °C and {ambient.Value:0.#} °C ambient, peak cooler power {(peakPower.HasValue ? $"{peakPower.Value:0}%" : "not reported")}");
         }
 
