@@ -310,6 +310,7 @@ namespace NINA.Plugin.TargetScheduler.Remote.Plugin {
             if (targetId.HasValue) {
                 SmartExposureRotateCache.Remove(targetId.Value.ToString());
             }
+            SeasonWorker.Instance?.RequestPass("web edit");
             ITarget current;
             lock (sync) {
                 current = pickedTarget;
