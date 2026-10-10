@@ -66,8 +66,13 @@
 	  </None>
 	</ItemGroup>
 
-	<Target Name="PostBuild" AfterTargets="PostBuildEvent">
-	  <Exec Command="   if exist &quot;$(ProjectDir)External\JPLEPH&quot; (&#xD;&#xA;   echo &quot;Copy External\JPLEPH&quot;&#xD;&#xA;   xcopy &quot;$(ProjectDir)External\JPLEPH&quot; &quot;$(TargetDir)\External\JPLEPH*&quot; /k/y&#xD;&#xA;   )&#xD;&#xA;   if exist &quot;$(ProjectDir)Database&quot; (&#xD;&#xA;   echo &quot;Copy Database&quot;&#xD;&#xA;   xcopy &quot;$(ProjectDir)Database&quot; &quot;$(TargetDir)\Database&quot; /h/i/c/k/e/r/y&#xD;&#xA;   )" />
+	<Target Name="CopyTestData" AfterTargets="Build">
+	  <ItemGroup>
+	    <TestEphemeris Include="$(ProjectDir)External/JPLEPH" Condition="Exists('$(ProjectDir)External/JPLEPH')" />
+	    <TestDatabaseFiles Include="$(ProjectDir)Database/**/*" />
+	  </ItemGroup>
+	  <Copy SourceFiles="@(TestEphemeris)" DestinationFolder="$(TargetDir)External" SkipUnchangedFiles="true" />
+	  <Copy SourceFiles="@(TestDatabaseFiles)" DestinationFolder="$(TargetDir)Database/%(RecursiveDir)" SkipUnchangedFiles="true" />
 	</Target>
 
 </Project>

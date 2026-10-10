@@ -1,0 +1,63 @@
+name: CI
+
+on:
+  push:
+    branches:
+      - main
+    tags:
+      - "v*"
+  pull_request:
+
+concurrency:
+  group: "${{ github.workflow }} @ ${{ github.ref }}"
+  cancel-in-progress: ${{ !startsWith(github.ref, 'refs/tags/') }}
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      checks: write
+    env:
+      DOTNET_CLI_TELEMETRY_OPTOUT: "1"
+      DOTNET_NOLOGO: "1"
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          global-json-file: global.json
+
+      - name: Build
+        run: dotnet build NINA.Plugin.TargetScheduler.sln -c Release -p:EnableWindowsTargeting=true
+
+      - name: Test
+        run: dotnet test NINA.Plugin.TargetScheduler.Remote.Test/NINA.Plugin.TargetScheduler.Remote.Test.csproj -c Release --no-build --logger "trx;LogFileName=remote.trx" --results-directory test-results
+
+      - name: Package
+        id: package
+        run: echo "zip=$(Utilities/package.sh)" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: observatory-scheduler
+          path: ${{ steps.package.outputs.zip }}
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: test-results
+          path: test-results
+
+      - name: Release
+        if: startsWith(github.ref, 'refs/tags/v')
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          if gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1; then
+            gh release upload "$GITHUB_REF_NAME" "${{ steps.package.outputs.zip }}" --clobber
+          else
+            notes=RELEASE.md
+            [ -f "$notes" ] || { notes=$(mktemp); echo "Observatory Scheduler ${GITHUB_REF_NAME#v}" > "$notes"; }
+            gh release create "$GITHUB_REF_NAME" "${{ steps.package.outputs.zip }}" --title "Observatory Scheduler ${GITHUB_REF_NAME#v}" --notes-file "$notes"
+          fi

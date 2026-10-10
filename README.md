@@ -12,6 +12,15 @@ Build with the .NET 8 SDK:
 dotnet build NINA.Plugin.TargetScheduler/NINA.Plugin.TargetScheduler.csproj -c Release -p:EnableWindowsTargeting=true
 ```
 
+It builds and tests on Linux; no Windows tools are needed. The remote-control code under `NINA.Plugin.TargetScheduler/Remote` is free of NINA and WPF types, so its tests run on Linux:
+
+```
+dotnet test NINA.Plugin.TargetScheduler.Remote.Test/NINA.Plugin.TargetScheduler.Remote.Test.csproj
+Utilities/package.sh
+```
+
+`package.sh` writes the plugin zip to `dist/`. CI (`.github/workflows/ci.yaml`, ubuntu-latest) builds, tests and packages every push, and publishes the zip as a GitHub release for a `v*` tag.
+
 Licensed under the [Mozilla Public License 2.0](LICENSE.txt), as is the upstream project.
 
 ## Upstream: Target Scheduler NINA Plugin

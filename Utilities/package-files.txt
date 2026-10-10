@@ -1,0 +1,7 @@
+NINA.Plugin.TargetScheduler.dll
+NINA.Plugin.TargetScheduler.Shared.dll
+NINA.Plugin.TargetScheduler.SyncService.dll
+LinqKit.dll
+LinqKit.Core.dll
+Microsoft.WindowsAPICodePack.dll
+Microsoft.WindowsAPICodePack.Shell.dll
