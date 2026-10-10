@@ -432,6 +432,15 @@ namespace NINA.Plugin.TargetScheduler.Remote.Plugin {
             }
         }
 
+        public string ApiProblem {
+            get {
+                var port = Settings.Snapshot().ApiPort;
+                lock (sync) {
+                    return servers.TryGetValue(port, out var a) ? a.Failed : null;
+                }
+            }
+        }
+
         public bool MountShouldPark => Control.Paused?.Mount == "park";
 
         public CommandResult Submit(CommandEnvelope command) => Processor.Submit(command, "api");

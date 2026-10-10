@@ -130,6 +130,25 @@ namespace NINA.Plugin.TargetScheduler.Remote.Test {
         }
 
         [Test]
+        public void PortInUseIsReported() {
+            var messages = new List<string>();
+            var blocker = new TcpListener(IPAddress.Loopback, 0);
+            blocker.Start();
+            var taken = ((IPEndPoint)blocker.LocalEndpoint).Port;
+            var clash = new ApiServer(new FakeBackend(), $"http://127.0.0.1:{taken}/", () => "x", m => { lock (messages) { messages.Add(m); } });
+            clash.Start();
+            for (int i = 0; i < 100 && clash.Running; i++) {
+                Thread.Sleep(50);
+            }
+            clash.Running.Should().BeFalse();
+            clash.Failed.Should().NotBeNullOrEmpty();
+            lock (messages) {
+                messages.Should().Contain(m => m.Contains("stopped"));
+            }
+            blocker.Stop();
+        }
+
+        [Test]
         public async Task UnknownPathIs404() {
             (await http.GetAsync("/os/v1/nope")).StatusCode.Should().Be(HttpStatusCode.NotFound);
         }

@@ -54,7 +54,8 @@ namespace NINA.Plugin.TargetScheduler.Remote.Plugin {
                     return "Web control failed to start; see the Target Scheduler log.";
                 }
                 var d = Data;
-                var api = d.ApiEnabled ? $"The API listens on port {d.ApiPort} (http://<this PC>:{d.ApiPort}/os/v1)." : "The API is off.";
+                var problem = RemoteHost.Instance?.ApiProblem;
+                var api = !d.ApiEnabled ? "The API is off." : problem != null ? $"The API could not listen on port {d.ApiPort}: {problem}" : $"The API listens on port {d.ApiPort} (http://<this PC>:{d.ApiPort}/os/v1).";
                 var edit = d.WebEditing ? "Web editing is on: the web UI edits projects, targets and plans, and the Target Management editor here is read-only." : "Web editing is off: the web UI can skip, pause and re-plan, but edits are refused and the editor here works as usual.";
                 return api + " " + edit;
             }

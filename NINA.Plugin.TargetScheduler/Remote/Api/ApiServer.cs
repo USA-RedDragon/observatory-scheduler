@@ -31,6 +31,8 @@ namespace NINA.Plugin.TargetScheduler.Remote.Api {
 
         public bool Running => server != null && enabled;
 
+        public string Failed { get; private set; }
+
         public void Start() {
             enabled = true;
             if (server != null) {
@@ -42,7 +44,11 @@ namespace NINA.Plugin.TargetScheduler.Remote.Api {
                 .WithModule(socket)
                 .WithModule(new ApiModule(BaseRoute, backend, log));
             backend.Pushed += OnPushed;
-            _ = server.RunAsync(CancellationToken.None);
+            server.RunAsync(CancellationToken.None).ContinueWith(t => {
+                Failed = t.Exception?.GetBaseException().Message ?? "stopped";
+                enabled = false;
+                log?.Invoke($"remote API on {urlPrefix} stopped: {Failed}");
+            }, TaskContinuationOptions.NotOnRanToCompletion);
             heartbeat = new Timer(_ => OnPushed("status", null), null, TimeSpan.FromSeconds(10), TimeSpan.FromSeconds(10));
         }
 
