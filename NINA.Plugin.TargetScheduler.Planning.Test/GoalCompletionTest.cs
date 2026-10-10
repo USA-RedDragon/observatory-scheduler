@@ -37,5 +37,60 @@ namespace NINA.Plugin.TargetScheduler.Planning.Test {
         public void RemainingExposuresNeverZeroUntilDone(double progress, bool done, double hoursNeeded, double exposureSeconds, int expected) {
             GoalCompletion.RemainingExposures(Goal(progress, done, hoursNeeded), exposureSeconds).Should().Be(expected);
         }
+
+        private static GoalProgress Waiting(GoalState state, int? stackSubs, int? minSubs = 8, int? subLimit = 32) {
+            return new GoalProgress { TargetGuid = "t", Filter = "L", State = state, StackSubs = stackSubs, MinSubs = minSubs, SubLimit = subLimit };
+        }
+
+        [TestCase(0, false, 8)]
+        [TestCase(7, false, 1)]
+        [TestCase(8, true, 0)]
+        [TestCase(30, true, 0)]
+        public void CollectingStaysOpenUntilTheStackersMinimum(int stackSubs, bool complete, int remaining) {
+            GoalProgress goal = Waiting(GoalState.Collecting, stackSubs);
+            GoalCompletion.IsComplete(goal, 500).Should().Be(complete);
+            GoalCompletion.RemainingExposures(goal, 300, 500).Should().Be(remaining);
+            GoalCompletion.PercentComplete(goal).Should().Be(0);
+        }
+
+        [Test]
+        public void CollectingWithoutAPublishedMinimumStaysOpen() {
+            GoalProgress goal = Waiting(GoalState.Collecting, 50, null);
+            GoalCompletion.IsComplete(goal, 500).Should().BeFalse();
+            GoalCompletion.RemainingExposures(goal, 300, 500).Should().Be(1);
+        }
+
+        [TestCase(31, false, 1)]
+        [TestCase(32, true, 0)]
+        [TestCase(12, false, 20)]
+        public void UnmeasurableStopsAtThePublishedBound(int stackSubs, bool complete, int remaining) {
+            GoalProgress goal = Waiting(GoalState.Unmeasurable, stackSubs);
+            GoalCompletion.IsComplete(goal, 0).Should().Be(complete);
+            GoalCompletion.RemainingExposures(goal, 300, 0).Should().Be(remaining);
+        }
+
+        [TestCase(3, false, 5)]
+        [TestCase(8, true, 0)]
+        public void PendingCountsLocalSubsAgainstTheMinimum(int acquired, bool complete, int remaining) {
+            GoalProgress goal = Waiting(GoalState.Pending, null);
+            GoalCompletion.IsComplete(goal, acquired).Should().Be(complete);
+            GoalCompletion.RemainingExposures(goal, 300, acquired).Should().Be(remaining);
+        }
+
+        [Test]
+        public void PendingWithoutAnyPublishedMinimumStaysOpen() {
+            GoalProgress goal = Waiting(GoalState.Pending, null, null);
+            GoalCompletion.IsComplete(goal, 10000).Should().BeFalse();
+            GoalCompletion.RemainingExposures(goal, 300, 10000).Should().Be(1);
+        }
+
+        [Test]
+        public void MeasuredIgnoresSubCounts() {
+            GoalProgress goal = new GoalProgress { Progress = 0.5, HoursNeeded = 1, StackSubs = 500, MinSubs = 8, SubLimit = 32 };
+            GoalCompletion.IsComplete(goal, 10000).Should().BeFalse();
+            GoalCompletion.RemainingExposures(goal, 300, 10000).Should().Be(12);
+            goal.Done = true;
+            GoalCompletion.IsComplete(goal, 0).Should().BeTrue();
+        }
     }
 }

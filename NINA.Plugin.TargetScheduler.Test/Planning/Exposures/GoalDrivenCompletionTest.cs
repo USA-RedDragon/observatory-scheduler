@@ -71,6 +71,37 @@ namespace NINA.Plugin.TargetScheduler.Test.Planning.Exposures {
         }
 
         [Test]
+        public void CollectingIgnoresTheDesiredCountUntilTheStackersMinimum() {
+            var (target, exposure) = Plan("t1", "Ha", 10, 25);
+            exposure.SetupProperty(m => m.Acquired, 25);
+            GoalProgress goal = new GoalProgress { State = GoalState.Collecting, StackSubs = 5, MinSubs = 8, SubLimit = 32 };
+            source.Setup(m => m.Get("t1", "Ha")).Returns(goal);
+            ExposureCompletionHelper sut = new ExposureCompletionHelper(true, 0, 100);
+
+            sut.IsIncomplete(exposure.Object).Should().BeTrue();
+            sut.RemainingExposures(exposure.Object).Should().Be(3);
+            sut.IsIncomplete(target.Object).Should().BeTrue();
+
+            goal.StackSubs = 8;
+            sut.IsIncomplete(exposure.Object).Should().BeFalse();
+            sut.RemainingExposures(exposure.Object).Should().Be(0);
+            sut.IsIncomplete(target.Object).Should().BeFalse();
+        }
+
+        [Test]
+        public void UnmeasurableStopsAtTheBound() {
+            var (target, exposure) = Plan("t1", "Ha", 1000, 0);
+            GoalProgress goal = new GoalProgress { State = GoalState.Unmeasurable, StackSubs = 31, MinSubs = 8, SubLimit = 32 };
+            source.Setup(m => m.Get("t1", "Ha")).Returns(goal);
+            ExposureCompletionHelper sut = new ExposureCompletionHelper(true, 0, 100);
+
+            sut.IsIncomplete(exposure.Object).Should().BeTrue();
+            goal.StackSubs = 32;
+            sut.IsIncomplete(exposure.Object).Should().BeFalse();
+            sut.IsIncomplete(target.Object).Should().BeFalse();
+        }
+
+        [Test]
         public void NoProgressRowFallsBackToCounts() {
             var (target, exposure) = Plan("t1", "Ha", 10, 4);
             ExposureCompletionHelper sut = new ExposureCompletionHelper(true, 0, 100);

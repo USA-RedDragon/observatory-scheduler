@@ -94,7 +94,12 @@ namespace NINA.Plugin.TargetScheduler.Planning.Exposures {
         }
 
         public bool IsIncomplete(ITarget target) {
-            return PercentComplete(target) < 100;
+            List<IExposure> list = new List<IExposure>();
+            list.AddRange(target.ExposurePlans);
+            list.AddRange(target.CompletedExposurePlans);
+
+            if (list.Count == 0) { return true; }
+            return list.Any(IsIncomplete);
         }
 
         public bool IsProvisionalPercentComplete(IExposureCounts exposurePlan) {
@@ -105,7 +110,7 @@ namespace NINA.Plugin.TargetScheduler.Planning.Exposures {
         public int RemainingExposures(IExposureCounts exposurePlan) {
             GoalProgress goal = GoalFor(exposurePlan);
             if (goal != null) {
-                return GoalCompletion.RemainingExposures(goal, ExposureSeconds(exposurePlan));
+                return GoalCompletion.RemainingExposures(goal, ExposureSeconds(exposurePlan), exposurePlan.Acquired);
             }
 
             if (imageGradingEnabled) {
@@ -117,6 +122,11 @@ namespace NINA.Plugin.TargetScheduler.Planning.Exposures {
         }
 
         public bool IsIncomplete(IExposureCounts exposurePlan) {
+            GoalProgress goal = GoalFor(exposurePlan);
+            if (goal != null) {
+                return !GoalCompletion.IsComplete(goal, exposurePlan.Acquired);
+            }
+
             return PercentComplete(exposurePlan) < 100;
         }
 

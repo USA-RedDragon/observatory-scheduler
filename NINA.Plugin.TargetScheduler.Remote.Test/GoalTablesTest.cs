@@ -99,6 +99,40 @@ VALUES ('t1', 'ha ', 1, 24.5, 23.9, 0.82, NULL, 23.9, 6.5, 1.25, 3.5, 1, 0, 0, '
         }
 
         [Test]
+        public void ReadsReadinessColumns() {
+            using (var conn = db.Connect()) { GoalSchema.Ensure(conn); }
+            db.Exec(@"INSERT INTO ts_goal (target_guid, filter) VALUES ('T1', 'Ha'), ('T1', 'L'), ('T1', 'OIII');
+INSERT INTO ts_goal_progress (target_guid, filter, kind, progress, done, state, reason, stack_subs, min_subs, sub_limit)
+VALUES ('T1', 'Ha', 0, NULL, 0, 'collecting', 'insufficient data', 6, 8, 32),
+       ('T1', 'L', 1, 0, 0, 'unmeasurable', 'no depth: 3 Gaia stars matched, 10 needed', 40, 8, 32);");
+
+            using var c = db.Connect();
+            var source = new SqliteGoalProgressSource(new SqlGoalRowProvider(c));
+            GoalProgress ha = source.Get("T1", "Ha");
+            ha.State.Should().Be(GoalState.Collecting);
+            ha.Reason.Should().Be("insufficient data");
+            ha.StackSubs.Should().Be(6);
+            ha.MinSubs.Should().Be(8);
+            GoalCompletion.IsComplete(ha, 100).Should().BeFalse();
+            GoalProgress l = source.Get("T1", "L");
+            l.State.Should().Be(GoalState.Unmeasurable);
+            l.SubLimit.Should().Be(32);
+            GoalCompletion.IsComplete(l, 0).Should().BeTrue();
+            GoalProgress oiii = source.Get("T1", "OIII");
+            oiii.State.Should().Be(GoalState.Pending);
+            oiii.MinSubs.Should().Be(8);
+        }
+
+        [Test]
+        public void EnsureAddsTheReadinessColumnsToAnOldTable() {
+            db.Exec(@"CREATE TABLE ts_goal_progress (target_guid TEXT NOT NULL, filter TEXT NOT NULL, kind INTEGER, goal_value REAL, achieved_value REAL, progress REAL, snr REAL, depth REAL, effective_hours REAL, hours_needed REAL, gain_per_hour_pct REAL, plateau INTEGER, low_confidence INTEGER, done INTEGER, measured_at TEXT, PRIMARY KEY (target_guid, filter))");
+            using var conn = db.Connect();
+            GoalSchema.Ensure(conn);
+            GoalSchema.Ensure(conn);
+            GoalSchema.Columns(conn, "ts_goal_progress").Should().Contain(new[] { "state", "reason", "stack_subs", "min_subs", "sub_limit", "night_quality" });
+        }
+
+        [Test]
         public void SeasonUpsertKeepsOneRowPerTarget() {
             using (var conn = db.Connect()) { GoalSchema.Ensure(conn); }
             var writer = new SqlTargetSeasonWriter(db.Connect);

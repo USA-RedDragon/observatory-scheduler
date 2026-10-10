@@ -11,11 +11,43 @@ namespace NINA.Plugin.TargetScheduler.Goals {
         }
 
         public static bool IsComplete(GoalProgress goal) {
-            return goal.Done;
+            return IsComplete(goal, 0);
+        }
+
+        public static int Subs(GoalProgress goal, int localSubs) {
+            return goal.StackSubs ?? Math.Max(0, localSubs);
+        }
+
+        public static bool IsComplete(GoalProgress goal, int localSubs) {
+            if (goal.Done) { return true; }
+            switch (goal.State) {
+                case GoalState.Collecting:
+                case GoalState.Pending:
+                    return goal.MinSubs.HasValue && Subs(goal, localSubs) >= goal.MinSubs.Value;
+
+                case GoalState.Unmeasurable:
+                    return goal.SubLimit.HasValue && Subs(goal, localSubs) >= goal.SubLimit.Value;
+
+                default:
+                    return false;
+            }
         }
 
         public static int RemainingExposures(GoalProgress goal, double exposureSeconds) {
-            if (goal.Done) { return 0; }
+            return RemainingExposures(goal, exposureSeconds, 0);
+        }
+
+        public static int RemainingExposures(GoalProgress goal, double exposureSeconds, int localSubs) {
+            if (IsComplete(goal, localSubs)) { return 0; }
+            switch (goal.State) {
+                case GoalState.Collecting:
+                case GoalState.Pending:
+                    return goal.MinSubs.HasValue ? Math.Max(1, goal.MinSubs.Value - Subs(goal, localSubs)) : 1;
+
+                case GoalState.Unmeasurable:
+                    return goal.SubLimit.HasValue ? Math.Max(1, goal.SubLimit.Value - Subs(goal, localSubs)) : 1;
+            }
+
             if (exposureSeconds > 0 && IsFinite(goal.HoursNeeded) && goal.HoursNeeded > 0) {
                 double n = Math.Ceiling(goal.HoursNeeded * 3600 / exposureSeconds);
                 if (n >= 100000) { return 100000; }

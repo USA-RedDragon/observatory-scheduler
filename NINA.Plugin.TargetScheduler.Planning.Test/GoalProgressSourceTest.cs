@@ -31,14 +31,60 @@ namespace NINA.Plugin.TargetScheduler.Planning.Test {
         }
 
         [Test]
-        public void GetNeedsBothAGoalAndAProgressRow() {
+        public void WithoutStackerReadinessAGoalWithoutProgressKeepsTheCounts() {
             var sut = new SqliteGoalProgressSource(Sample());
-            sut.Get(T1, "Ha").Should().NotBeNull();
+            sut.Get(T1, "Ha").State.Should().Be(GoalState.Measured);
             sut.Get(T1, "OIII").Should().BeNull();
-            sut.Get(T1, "SII").Should().BeNull();
             sut.Get(T2, "L").Should().BeNull();
+            sut.Get(T1, "SII").Should().BeNull();
             sut.Get("other", "L").Should().BeNull();
             sut.Count.Should().Be(1);
+        }
+
+        [Test]
+        public void WithStackerReadinessAGoalWithoutProgressIsPending() {
+            var rows = Sample();
+            rows.Progress.Add(new GoalProgressRow { TargetGuid = "other", Filter = "Ha", State = "collecting", MinSubs = 8 });
+            var sut = new SqliteGoalProgressSource(rows);
+            GoalProgress oiii = sut.Get(T1, "OIII");
+            oiii.State.Should().Be(GoalState.Pending);
+            oiii.Done.Should().BeFalse();
+            oiii.MinSubs.Should().Be(8);
+            oiii.StackSubs.Should().BeNull();
+            oiii.GoalValue.Should().Be(25.5);
+            sut.Get(T2, "L").State.Should().Be(GoalState.Pending);
+            sut.Get(T1, "SII").Should().BeNull();
+            sut.Get("other", "L").Should().BeNull();
+            sut.Count.Should().Be(3);
+            sut.ForTarget(T1).Should().HaveCount(2);
+            sut.ForTarget(T2).Should().ContainSingle().Which.State.Should().Be(GoalState.Pending);
+        }
+
+        [Test]
+        public void ReadinessComesFromTheProgressRow() {
+            var rows = Sample();
+            rows.Progress.Add(new GoalProgressRow { TargetGuid = T2, Filter = "L", State = "collecting", Reason = "insufficient data", StackSubs = 5, MinSubs = 8, SubLimit = 32 });
+            rows.Progress.Add(new GoalProgressRow { TargetGuid = T1, Filter = "OIII", State = "unmeasurable", Reason = "no depth", StackSubs = 40, MinSubs = 8, SubLimit = 32 });
+            var sut = new SqliteGoalProgressSource(rows);
+            GoalProgress l = sut.Get(T2, "L");
+            l.State.Should().Be(GoalState.Collecting);
+            l.Reason.Should().Be("insufficient data");
+            l.StackSubs.Should().Be(5);
+            l.MinSubs.Should().Be(8);
+            GoalProgress oiii = sut.Get(T1, "OIII");
+            oiii.State.Should().Be(GoalState.Unmeasurable);
+            oiii.SubLimit.Should().Be(32);
+            sut.Get(T1, "Ha").State.Should().Be(GoalState.Measured);
+        }
+
+        [TestCase(null, GoalState.Measured)]
+        [TestCase("", GoalState.Measured)]
+        [TestCase("Measured", GoalState.Measured)]
+        [TestCase("collecting", GoalState.Collecting)]
+        [TestCase(" UNMEASURABLE ", GoalState.Unmeasurable)]
+        [TestCase("something new", GoalState.Collecting)]
+        public void ParsesStates(string text, GoalState expected) {
+            SqliteGoalProgressSource.ParseState(text).Should().Be(expected);
         }
 
         [Test]

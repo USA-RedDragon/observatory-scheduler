@@ -57,7 +57,12 @@ namespace NINA.Plugin.TargetScheduler.Remote.Commands {
         public static readonly IReadOnlyList<(string Table, string Column, string Type)> AddedColumns = new[] {
             (GoalProgressTable, "night_quality", "REAL"),
             (GoalProgressTable, "night_quality_at", "TEXT"),
-            (GoalProgressTable, "season_boost", "REAL")
+            (GoalProgressTable, "season_boost", "REAL"),
+            (GoalProgressTable, "state", "TEXT"),
+            (GoalProgressTable, "reason", "TEXT"),
+            (GoalProgressTable, "stack_subs", "INTEGER"),
+            (GoalProgressTable, "min_subs", "INTEGER"),
+            (GoalProgressTable, "sub_limit", "INTEGER")
         };
 
         public static ISet<string> Columns(DbConnection connection, string table) {

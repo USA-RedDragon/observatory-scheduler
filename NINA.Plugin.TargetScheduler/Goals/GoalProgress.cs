@@ -8,6 +8,13 @@ namespace NINA.Plugin.TargetScheduler.Goals {
         Depth = 1
     }
 
+    public enum GoalState {
+        Measured = 0,
+        Collecting = 1,
+        Unmeasurable = 2,
+        Pending = 3
+    }
+
     public class GoalProgress {
         public string TargetGuid { get; set; }
         public string Filter { get; set; }
@@ -22,6 +29,11 @@ namespace NINA.Plugin.TargetScheduler.Goals {
         public bool LowConfidence { get; set; }
         public bool Done { get; set; }
         public DateTime MeasuredAt { get; set; }
+        public GoalState State { get; set; }
+        public string Reason { get; set; }
+        public int? StackSubs { get; set; }
+        public int? MinSubs { get; set; }
+        public int? SubLimit { get; set; }
     }
 
     public interface IGoalProgressSource {

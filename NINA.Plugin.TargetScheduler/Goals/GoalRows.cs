@@ -33,6 +33,11 @@ namespace NINA.Plugin.TargetScheduler.Goals {
         public double? NightQuality { get; set; }
         public DateTime? NightQualityAt { get; set; }
         public double? SeasonBoost { get; set; }
+        public string State { get; set; }
+        public string Reason { get; set; }
+        public int? StackSubs { get; set; }
+        public int? MinSubs { get; set; }
+        public int? SubLimit { get; set; }
     }
 
     public interface IGoalRowProvider {

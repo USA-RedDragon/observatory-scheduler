@@ -35,13 +35,16 @@ namespace NINA.Plugin.TargetScheduler.Remote.Data {
         public IList<GoalProgressRow> LoadProgress() {
             List<GoalProgressRow> rows = new List<GoalProgressRow>();
             bool signals = false;
+            bool readiness = false;
             WithConnection(() => {
                 if (TableExists(connection, GoalSchema.GoalProgressTable)) {
                     ISet<string> columns = GoalSchema.Columns(connection, GoalSchema.GoalProgressTable);
                     signals = columns.Contains("night_quality") && columns.Contains("night_quality_at") && columns.Contains("season_boost");
+                    readiness = columns.Contains("state") && columns.Contains("reason") && columns.Contains("stack_subs") && columns.Contains("min_subs") && columns.Contains("sub_limit");
                 }
             });
-            string extra = signals ? ", night_quality, night_quality_at, season_boost" : string.Empty;
+            string extra = (signals ? ", night_quality, night_quality_at, season_boost" : ", NULL, NULL, NULL")
+                + (readiness ? ", state, reason, stack_subs, min_subs, sub_limit" : string.Empty);
             Read(GoalSchema.GoalProgressTable, "SELECT target_guid, filter, kind, goal_value, achieved_value, progress, snr, depth, effective_hours, hours_needed, gain_per_hour_pct, plateau, low_confidence, done, measured_at" + extra + " FROM ts_goal_progress", r => {
                 GoalProgressRow row = new GoalProgressRow {
                     TargetGuid = Text(r, 0),
@@ -65,6 +68,13 @@ namespace NINA.Plugin.TargetScheduler.Remote.Data {
                     DateTime at = Time(r, 16);
                     row.NightQualityAt = at == DateTime.MinValue ? (DateTime?)null : at;
                     row.SeasonBoost = Real(r, 17);
+                }
+                if (readiness) {
+                    row.State = Text(r, 18);
+                    row.Reason = Text(r, 19);
+                    row.StackSubs = Int(r, 20);
+                    row.MinSubs = Int(r, 21);
+                    row.SubLimit = Int(r, 22);
                 }
                 rows.Add(row);
             });

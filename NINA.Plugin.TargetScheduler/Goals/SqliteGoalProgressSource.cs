@@ -24,20 +24,57 @@ namespace NINA.Plugin.TargetScheduler.Goals {
                 goalTargets.Add(NormalizeGuid(goal.TargetGuid));
             }
 
-            foreach (GoalProgressRow row in progress ?? Enumerable.Empty<GoalProgressRow>()) {
+            List<GoalProgressRow> rows = (progress ?? Enumerable.Empty<GoalProgressRow>()).Where(r => r != null).ToList();
+            int? minSubs = rows.Where(r => r.MinSubs.HasValue && r.MinSubs.Value > 0).Select(r => r.MinSubs).DefaultIfEmpty(null).Max();
+
+            foreach (GoalProgressRow row in rows) {
                 string key = Key(row.TargetGuid, row.Filter);
                 if (key == null || !goalsByKey.TryGetValue(key, out GoalRow goal)) { continue; }
-
-                GoalProgress gp = Build(goal, row);
-                byKey[key] = gp;
-
-                string guid = NormalizeGuid(row.TargetGuid);
-                if (!byTarget.TryGetValue(guid, out List<GoalProgress> list)) {
-                    list = new List<GoalProgress>();
-                    byTarget[guid] = list;
-                }
-                list.Add(gp);
+                Add(key, Build(goal, row));
             }
+
+            if (!minSubs.HasValue) { return; }
+            foreach (KeyValuePair<string, GoalRow> entry in goalsByKey) {
+                if (byKey.ContainsKey(entry.Key)) { continue; }
+                Add(entry.Key, Pending(entry.Value, minSubs));
+            }
+        }
+
+        private void Add(string key, GoalProgress gp) {
+            byKey[key] = gp;
+            string guid = NormalizeGuid(gp.TargetGuid);
+            if (!byTarget.TryGetValue(guid, out List<GoalProgress> list)) {
+                list = new List<GoalProgress>();
+                byTarget[guid] = list;
+            }
+            list.Add(gp);
+        }
+
+        public static GoalState ParseState(string state) {
+            switch (state?.Trim().ToLowerInvariant()) {
+                case null:
+                case "":
+                case "measured":
+                    return GoalState.Measured;
+
+                case "unmeasurable":
+                    return GoalState.Unmeasurable;
+
+                default:
+                    return GoalState.Collecting;
+            }
+        }
+
+        private static GoalProgress Pending(GoalRow goal, int? minSubs) {
+            return new GoalProgress {
+                TargetGuid = goal.TargetGuid.Trim(),
+                Filter = goal.Filter.Trim(),
+                Kind = goal.Kind,
+                GoalValue = goal.Kind == GoalKind.Depth ? goal.DepthGoal ?? 0 : goal.SnrGoal,
+                State = GoalState.Pending,
+                Reason = "no goal progress from the stacker yet",
+                MinSubs = minSubs
+            };
         }
 
         public int Count => byKey.Count;
@@ -96,7 +133,12 @@ namespace NINA.Plugin.TargetScheduler.Goals {
                 Plateau = row.Plateau,
                 LowConfidence = row.LowConfidence,
                 Done = row.Done,
-                MeasuredAt = row.MeasuredAt
+                MeasuredAt = row.MeasuredAt,
+                State = ParseState(row.State),
+                Reason = row.Reason,
+                StackSubs = row.StackSubs,
+                MinSubs = row.MinSubs,
+                SubLimit = row.SubLimit
             };
         }
 
