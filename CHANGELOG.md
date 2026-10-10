@@ -1,5 +1,10 @@
 # Observatory Scheduler
 
+## 5.8.2.205 - 2026-10-10
+* Seasonal Runway no longer scores a goal-driven filter as needing no time when the stacker has not measured it. When `hours_needed` is missing or negative (the stacker writes -1 when it cannot compute it), the filter needs its remaining desired subs times the exposure length, the count Target Scheduler uses without goals. It is never less than what the 5.8.2.204 completion rules still need: the subs left to `min_subs` for a `collecting` or pending goal, or at least one sub for any goal that is not complete. An `unmeasurable` goal needs the subs left to its `sub_limit`, where 5.8.2.204 stops it. Measured `hours_needed` and done goals score as before.
+* A missing or negative `hours_needed` now stays unknown in the plugin instead of reading as a number.
+* The TS log records each goal-driven exposure plan's completion decision when it changes: the target, the filter, the old and new state (`measured`, `collecting`, `unmeasurable` or `pending`, and `open` or `closed`), `stack_subs`, `min_subs`, `sub_limit`, `done`, `plateau`, `hours_needed` (measured value or unknown), the subs the rules still need and the stacker's reason. Changes are logged at Info. The first decision for each plan after NINA starts is logged at Debug. The web preview's simulated passes are not logged.
+
 ## 5.8.2.204 - 2026-10-10
 * Goal-driven exposure plans (a `ts_goal` row for the target and filter) no longer stop on their desired count. The goal decides: done when the goal is met, or at the plateau when `plateau_stop` is on. The desired count stays in the database untouched and still feeds delayed grading.
 * Before the stacker has a usable measurement, a goal-driven plan stays open until the stacker has the minimum stack it needs to measure. `ts_goal_progress` gains `state` (`measured`, `collecting` or `unmeasurable`), `reason`, `stack_subs`, `min_subs` and `sub_limit`, all written by the stacker. `collecting` plans close at `stack_subs >= min_subs` and wait for the measurement. `unmeasurable` plans (for example a depth goal with no plate solution or too few Gaia stars) close at `stack_subs >= sub_limit`.

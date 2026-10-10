@@ -1,8 +1,6 @@
-Observatory Scheduler 5.8.2.204: goal-driven plans finish on the goal, not on the desired count.
+Observatory Scheduler 5.8.2.205: Seasonal Runway counts goals that the stacker has not measured yet, and the TS log shows each goal-driven completion decision.
 
-- **Goal-driven plans** (a filter with a goal row) ignore their desired count. They are done when the goal is met, or at the plateau when the plateau stop is on.
-- **First measurement**: until the stacker has measured a goal, the plan keeps imaging until the stacker has the minimum stack it needs (`min_subs`, published by the stacker, 8 today). Then it waits for the measurement.
-- **Goals that cannot be measured** (no plate solution, too few Gaia stars for a depth goal) stop at the stacker's published bound (`sub_limit`), and the stacker's reason shows in the web UI.
-- **Plans without a goal** keep Target Scheduler's count behaviour exactly.
+- **Seasonal Runway**: a goal-driven filter without a measured `hours_needed` no longer counts as needing no time. It needs its remaining desired subs times the exposure length (the Target Scheduler count), and never less than the subs the 5.8.2.204 rules still need (the subs left to `min_subs`, or at least one sub). An `unmeasurable` goal needs the subs left to its `sub_limit`. Measured goals, done goals and plans without a goal score as in 5.8.2.204.
+- **Goal completion log**: when a goal-driven plan opens or closes, or its state changes, the TS log has one Info line with the target, filter, old and new state, `stack_subs`/`min_subs`, `sub_limit`, `done`, `plateau`, `hours_needed` and the stacker's reason.
 
-On start-up the plugin adds `state`, `reason`, `stack_subs`, `min_subs` and `sub_limit` to `ts_goal_progress`. The home database needs the same columns before the stacker writes them. Requires NINA 3.1.2.9001 or later. Install like 5.8.2.203: with NINA closed, replace the "Observatory Scheduler" folder in %LOCALAPPDATA%\NINA\Plugins\3.0.0\ with the one in this zip.
+No database changes. Requires NINA 3.1.2.9001 or later. Install like 5.8.2.204: with NINA closed, replace the "Observatory Scheduler" folder in %LOCALAPPDATA%\NINA\Plugins\3.0.0\ with the one in this zip.
