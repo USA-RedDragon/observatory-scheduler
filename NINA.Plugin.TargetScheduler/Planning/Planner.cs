@@ -113,6 +113,9 @@ namespace NINA.Plugin.TargetScheduler.Planning {
                         if (nextTarget != null) {
                             // Wait for next possible target
                             return new SchedulerPlan(atTime, projects, nextTarget, !checkCondition);
+                        } else if (SkippedTargetToWaitFor(projects) is (ITarget skipped, int waitSeconds)) {
+                            TSLogger.Info($"only skipped targets remain, waiting {waitSeconds}s for {skipped.Name}'s skip to end");
+                            return new SchedulerPlan(atTime, projects, skipped, waitSeconds, !checkCondition);
                         } else {
                             // Otherwise done for the night
                             TSLogger.Info("Scheduler Planner: no target selected");
@@ -130,6 +133,26 @@ namespace NINA.Plugin.TargetScheduler.Planning {
                     TSLogger.Info($"-- END {title} -----------------------------------------------------");
                 }
             }
+        }
+
+        private (ITarget, int)? SkippedTargetToWaitFor(List<IProject> projects) {
+            var host = Remote.Plugin.RemoteHost.Instance;
+            if (host == null || projects == null) { return null; }
+            var nightEnd = host.Control.NightEnd(atTime.ToUniversalTime());
+            ITarget best = null;
+            DateTime bestUntil = DateTime.MaxValue;
+            foreach (IProject project in projects) {
+                foreach (ITarget target in project.Targets) {
+                    var skip = host.Control.Skips.Match(project.DatabaseId, target.DatabaseId, atTime.ToUniversalTime());
+                    if (skip == null || skip.Until >= bestUntil) { continue; }
+                    if (nightEnd.HasValue && skip.Until >= nightEnd.Value) { continue; }
+                    best = target;
+                    bestUntil = skip.Until;
+                }
+            }
+            if (best == null) { return null; }
+            int seconds = (int)Math.Ceiling((bestUntil - atTime.ToUniversalTime()).TotalSeconds) + 5;
+            return (best, Math.Max(60, seconds));
         }
 
         public List<IProject> FilterForSkips(List<IProject> projects) {
