@@ -1,5 +1,14 @@
 # Observatory Scheduler
 
+## 5.8.2.206 - 2026-10-10
+* New sequence instruction **Target Scheduler Darks**. It reads `ts_dark_need`, which the stacker publishes home to the observatory over SymmetricDS: one row per dark combo (exposure, gain, camera offset, binning, readout mode, set temperature) with `priority` (by lights blocked, then lights on a scaled dark), `frames_needed` (the master-dark builder's minimum), `frames_have`, `frames_rejected` and `newest_dark_at`. It takes the remaining darks combo by combo. Darks taken but not yet ingested by the stacker are kept in a local `ts_dark_taken` ledger, so they are not taken twice.
+* The instruction only uses the camera: never the flat device, its light or a switch.
+* Placement *Before Wait* gets the wait's end from the Target Scheduler container. It starts a dark only when the setpoint move there and back (at the cooler rates it measured itself), the exposure, NINA's last download time and the last measured AfterWait time all fit before the wait ends. It stops on a web re-plan or pause, and a re-plan or pause requested during Before Wait now also ends the planned wait at once.
+* Placement *While Unsafe* stops when the safety monitor reports safe: a dark already exposing finishes, a setpoint move in progress is stopped.
+* Placement *End Of Sequence* runs until the backlog is done; Stop after (min) sets an optional limit for any placement.
+* Temperature gate: setpoint moves use NINA's CoolCamera (which reports a cooler that cannot reach the target), the sensor must be within NINA's at-target tolerance (2 °C) of the setpoint, and a combo whose temperature the cooler cannot reach or hold is skipped until it is cooler outside (weather station) or the cooler needs less power at the imaging setpoint. The sequence's setpoint and readout mode are restored before the instruction returns.
+* The AfterWait instructions are now timed, for the Before Wait budget.
+
 ## 5.8.2.205 - 2026-10-10
 * Seasonal Runway no longer scores a goal-driven filter as needing no time when the stacker has not measured it. When `hours_needed` is missing or negative (the stacker writes -1 when it cannot compute it), the filter needs its remaining desired subs times the exposure length, the count Target Scheduler uses without goals. It is never less than what the 5.8.2.204 completion rules still need: the subs left to `min_subs` for a `collecting` or pending goal, or at least one sub for any goal that is not complete. An `unmeasurable` goal needs the subs left to its `sub_limit`, where 5.8.2.204 stops it. Measured `hours_needed` and done goals score as before.
 * A missing or negative `hours_needed` now stays unknown in the plugin instead of reading as a number.
