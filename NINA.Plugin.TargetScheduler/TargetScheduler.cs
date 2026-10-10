@@ -8,6 +8,7 @@ using NINA.Plugin.TargetScheduler.Controls.DatabaseManager;
 using NINA.Plugin.TargetScheduler.Controls.PlanPreview;
 using NINA.Plugin.TargetScheduler.Controls.Reporting;
 using NINA.Plugin.TargetScheduler.Database;
+using NINA.Plugin.TargetScheduler.Planning;
 using NINA.Plugin.TargetScheduler.Database.Schema;
 using NINA.Plugin.TargetScheduler.Grading;
 using NINA.Plugin.TargetScheduler.Sequencer;
@@ -83,6 +84,7 @@ namespace NINA.Plugin.TargetScheduler {
             //new ExportProfile(profileService.ActiveProfile, false).Export();
             //new ImportProfile(profileService.ActiveProfile, "C:\\Users\\Tom\\AppData\\Local\\NINA\\SchedulerPlugin\\exported-all.zip", true).Import();
 
+            SeasonWorker.Start(profileService);
             TSLogger.Info("plugin initialized");
             return Task.CompletedTask;
         }
@@ -215,6 +217,7 @@ namespace NINA.Plugin.TargetScheduler {
                 SyncManager.Instance.Shutdown();
             }
 
+            SeasonWorker.Stop();
             profileService.ProfileChanged -= ProfileService_ProfileChanged;
             TSLogger.Info("closing log");
             TSLogger.CloseAndFlush();

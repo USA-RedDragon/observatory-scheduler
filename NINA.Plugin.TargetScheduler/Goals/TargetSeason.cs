@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 
 namespace NINA.Plugin.TargetScheduler.Goals {
 
@@ -25,5 +26,10 @@ namespace NINA.Plugin.TargetScheduler.Goals {
     public interface ITargetSeasonWriter {
 
         void Upsert(TargetSeasonRow row);
+    }
+
+    public interface ITargetSeasonReader {
+
+        IList<TargetSeasonRow> LoadAll();
     }
 }

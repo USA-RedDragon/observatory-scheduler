@@ -46,6 +46,10 @@ namespace NINA.Plugin.TargetScheduler.Database {
             return MosaicCompletion.GoalSource;
         }
 
+        public static ITargetSeasonReader TargetSeasonReader() {
+            return new SqlTargetSeasonReader(() => new SchedulerDatabaseInteraction().GetContext().Database.Connection);
+        }
+
         public static ITargetSeasonWriter TargetSeasonWriter() {
             return new SqlTargetSeasonWriter(() => new SchedulerDatabaseInteraction().GetContext().Database.Connection);
         }
