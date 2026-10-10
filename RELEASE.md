@@ -1,7 +1,6 @@
-Observatory Scheduler 5.8.2.209: darks on closed-roof nights.
+Observatory Scheduler 5.8.2.210: grading and the web preview follow goals.
 
-- **Target Scheduler Darks Ready**: a new instruction that uses no camera. It succeeds when the stacker's dark backlog is not empty, the sun is below -8° and a needed dark (with its cooling and save time) ends before the sun reaches -8°, the weather device reports the ambient temperature, and the cooler is known to reach a needed set temperature at that ambient. Otherwise it fails and logs why. Use it as the condition of a Sequencer Powerups *If Fails* to decide whether to power up for darks.
-- **Cooler evidence**: Target Scheduler Darks now records each held set temperature (ambient, set temperature, peak cooler power) and each cooler failure with a known ambient in `observatory-scheduler-darks.json`, so they survive a NINA restart. The newest evidence wins when two disagree, and kept failures expire after 30 days. When no hold or failure covers a needed set temperature at the current ambient, Darks Ready allows one learning attempt per night. The attempt is used up when the first hold or failure is recorded.
-- **While Unsafe** darks now run warmest set temperature first.
+- **Delayed grading on goals**: for a goal-driven exposure plan, delayed grading waits until the goal has the configured share of the subs it needs (stack_subs against min_subs while collecting, sub_limit while unmeasurable, or the subs the measured hours still need), not the plan's desired count. A reached or done goal grades all pending subs. Plans without a goal are unchanged.
+- **Preview goal readiness**: the web preview counts the subs it plans toward the goal's stack_subs, so a target that reaches min_subs or sub_limit during the night stops being picked in the preview, as it does in the planner.
 
-No database changes. Requires NINA 3.1.2.9001 or later. Install like 5.8.2.208: with NINA closed, replace the "Observatory Scheduler" folder in %LOCALAPPDATA%\NINA\Plugins\3.0.0\ with the one in this zip.
+No database changes. Requires NINA 3.1.2.9001 or later. Install like 5.8.2.209: with NINA closed, replace the "Observatory Scheduler" folder in %LOCALAPPDATA%\NINA\Plugins\3.0.0\ with the one in this zip.
