@@ -70,7 +70,7 @@ namespace NINA.Plugin.TargetScheduler.Planning.Exposures {
         }
 
         public static string GetCacheKey(ITarget target) {
-            return $"{target.DatabaseId}";
+            return target.IsPreview ? $"preview-{target.DatabaseId}" : $"{target.DatabaseId}";
         }
 
         public static DitherManager Get(string cacheKey) {
@@ -103,6 +103,14 @@ namespace NINA.Plugin.TargetScheduler.Planning.Exposures {
         public static void Remove(string cacheKey) {
             lock (lockObj) {
                 _cache.Remove(cacheKey);
+            }
+        }
+
+        public static void ClearPreview() {
+            lock (lockObj) {
+                foreach (var key in _cache.Select(kv => kv.Key).Where(k => k.StartsWith("preview-")).ToList()) {
+                    _cache.Remove(key);
+                }
             }
         }
 

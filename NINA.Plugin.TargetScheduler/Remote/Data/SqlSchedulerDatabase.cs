@@ -94,6 +94,35 @@ namespace NINA.Plugin.TargetScheduler.Remote.Data {
             return outcome;
         }
 
+        public TargetSnapshot ReadSnapshot(int targetId) {
+            using var conn = connect();
+            TargetSnapshot snap;
+            using (var cmd = conn.CreateCommand()) {
+                cmd.CommandText = "SELECT t.projectid, t.active, p.state, p.priority FROM target t JOIN project p ON p.Id = t.projectid WHERE t.Id = @id";
+                SqlCommandStore.Add(cmd, "@id", targetId);
+                using var r = cmd.ExecuteReader();
+                if (!r.Read()) {
+                    return null;
+                }
+                snap = new TargetSnapshot {
+                    TargetId = targetId,
+                    ProjectId = Convert.ToInt32(r.GetValue(0), CultureInfo.InvariantCulture),
+                    TargetActive = !r.IsDBNull(1) && Convert.ToInt64(r.GetValue(1), CultureInfo.InvariantCulture) != 0,
+                    ProjectState = r.IsDBNull(2) ? 0 : Convert.ToInt32(r.GetValue(2), CultureInfo.InvariantCulture),
+                    ProjectPriority = r.IsDBNull(3) ? 0 : Convert.ToInt32(r.GetValue(3), CultureInfo.InvariantCulture),
+                };
+            }
+            using (var cmd = conn.CreateCommand()) {
+                cmd.CommandText = "SELECT Id FROM exposureplan WHERE targetid = @id AND (enabled IS NULL OR enabled <> 0)";
+                SqlCommandStore.Add(cmd, "@id", targetId);
+                using var r = cmd.ExecuteReader();
+                while (r.Read()) {
+                    snap.EnabledPlanIds.Add(Convert.ToInt32(r.GetValue(0), CultureInfo.InvariantCulture));
+                }
+            }
+            return snap;
+        }
+
         private static int? ToInt(object v) {
             if (v == null || v is DBNull) {
                 return null;

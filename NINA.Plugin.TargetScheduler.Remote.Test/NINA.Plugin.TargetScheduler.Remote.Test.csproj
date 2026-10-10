@@ -18,9 +18,11 @@
     <Compile Include="..\NINA.Plugin.TargetScheduler\Goals\GoalScoring.cs" Link="Linked\Goals\GoalScoring.cs" />
     <Compile Include="..\NINA.Plugin.TargetScheduler\Goals\SeasonCounter.cs" Link="Linked\Goals\SeasonCounter.cs" />
     <Compile Include="..\NINA.Plugin.TargetScheduler\Goals\TargetSeason.cs" Link="Linked\Goals\TargetSeason.cs" />
+    <Compile Include="..\NINA.Plugin.TargetScheduler\Remote\Api\**\*.cs" LinkBase="Linked\Api" />
   </ItemGroup>
 
   <ItemGroup>
+    <PackageReference Include="EmbedIO" Version="3.5.2" />
     <PackageReference Include="FluentAssertions" Version="6.12.1" />
     <PackageReference Include="Microsoft.Data.Sqlite" Version="8.0.11" />
     <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.11.1" />

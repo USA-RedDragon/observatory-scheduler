@@ -77,6 +77,9 @@ namespace NINA.Plugin.TargetScheduler {
                 SyncManager.Instance.Start(profileService);
             }
 
+            Remote.Plugin.RemoteHost.Start(profileService);
+            RemoteOptions = new Remote.Plugin.RemoteOptionsVM();
+
             //new ExportProfile(profileService.ActiveProfile, false).Export();
             //new ImportProfile(profileService.ActiveProfile, "C:\\Users\\Tom\\AppData\\Local\\NINA\\SchedulerPlugin\\exported-all.zip", true).Import();
 
@@ -100,6 +103,16 @@ namespace NINA.Plugin.TargetScheduler {
         private LogLevelEnum ProfileLogLevel(IProfileService profileService) {
             ProfilePreference profilePreference = new SchedulerPlanLoader(profileService.ActiveProfile).GetProfilePreferences();
             return profilePreference.LogLevel;
+        }
+
+        private Remote.Plugin.RemoteOptionsVM remoteOptions;
+
+        public Remote.Plugin.RemoteOptionsVM RemoteOptions {
+            get => remoteOptions;
+            set {
+                remoteOptions = value;
+                RaisePropertyChanged(nameof(RemoteOptions));
+            }
         }
 
         private DatabaseManagerVM databaseManagerVM;
@@ -196,6 +209,7 @@ namespace NINA.Plugin.TargetScheduler {
 
         public override Task Teardown() {
             ImageGradingController.Instance.Shutdown();
+            Remote.Plugin.RemoteHost.Shutdown();
 
             if (SyncManager.Instance.IsRunning) {
                 SyncManager.Instance.Shutdown();

@@ -111,5 +111,7 @@ namespace NINA.Plugin.TargetScheduler.Remote.Commands {
         ChangeOutcome CreateProject(ProjectCreatePayload payload, string profileId, IReadOnlyDictionary<string, double> defaultRuleWeights, DateTime now);
 
         ChangeOutcome DeleteProject(ProjectCreatePayload payload);
+
+        TargetSnapshot ReadSnapshot(int targetId);
     }
 }

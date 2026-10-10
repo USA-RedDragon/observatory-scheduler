@@ -267,6 +267,7 @@ namespace NINA.Plugin.TargetScheduler.Sequencer {
 
             imageSaveWatcher.Start(token);
             ITarget previousPlanTarget = null;
+            Remote.Plugin.RemoteHost.Instance?.Attach(this);
             DitherManagerCache.Clear();
             PlanExecutionHistory = new PlanExecutionHistory();
             synchronizationEnabled = IsSynchronizationEnabled();
@@ -279,13 +280,23 @@ namespace NINA.Plugin.TargetScheduler.Sequencer {
                     break;
                 }
 
+                Remote.Plugin.RemoteHost.Instance?.AtPlanBoundary();
+
                 if (PauseRequested) {
-                    await PauseContainer(progress, token);
+                    bool remotePause = Remote.Plugin.RemoteHost.Instance?.Control.Paused != null;
+                    if (remotePause && previousPlanTarget != null) {
+                        await ExecuteEventContainer(AfterTargetContainer, progress, token);
+                        await ExecuteEventContainer(AfterAllTargetsContainer, progress, token);
+                        previousPlanTarget = null;
+                        ClearTarget();
+                    }
+                    await PauseContainer(progress, token, remotePause);
                 }
 
                 atTime = GetPlannerTime(DateTime.Now, atTime);
                 profilePreferences = GetProfilePreferences();
                 SchedulerPlan plan = new Planner(atTime, profileService.ActiveProfile, profilePreferences, weatherDataMediator, false, false).GetPlan(previousPlanTarget);
+                Remote.Plugin.RemoteHost.Instance?.PlanComputed();
                 SetSyncServerState(ServerState.Ready);
 
                 if (plan == null) {
@@ -355,8 +366,13 @@ namespace NINA.Plugin.TargetScheduler.Sequencer {
 
                         // Create a container for this exposure, add the instructions, and execute
                         PlanContainer planContainer = GetPlanContainer(previousPlanTarget, plan, SchedulerProgress);
+                        Remote.Plugin.RemoteHost.Instance?.PlanStarting(target, previousPlanTarget);
                         TargetScheduler.EventMediator.InvokeExposureStarting(plan.PlanTarget, plan.PlanTarget.SelectedExposure, !target.Equals(previousPlanTarget));
-                        planContainer.Execute(progress, token).Wait();
+                        try {
+                            planContainer.Execute(progress, token).Wait();
+                        } finally {
+                            Remote.Plugin.RemoteHost.Instance?.PlanEnded();
+                        }
                         TargetScheduler.EventMediator.InvokeExposureStopping();
 
                         if (profilePreferences.EnableSimulatedRun) {
@@ -395,7 +411,8 @@ namespace NINA.Plugin.TargetScheduler.Sequencer {
             UnpauseEnabled = false;
         }
 
-        private async Task PauseContainer(IProgress<ApplicationStatus> progress, CancellationToken token) {
+        private async Task PauseContainer(IProgress<ApplicationStatus> progress, CancellationToken token, bool remotePause = false) {
+            bool parked = false;
             try {
                 TSLogger.Info("TS Container paused");
                 PauseRequested = false;
@@ -405,12 +422,28 @@ namespace NINA.Plugin.TargetScheduler.Sequencer {
                 TargetScheduler.EventMediator.InvokeContainerPaused(this);
                 SchedulerProgress.Add(SchedulerProgressVM.PausedLabel);
 
+                if (remotePause) {
+                    if (Remote.Plugin.RemoteHost.Instance?.MountShouldPark == true) {
+                        TSLogger.Info("web pause: stopping guiding and tracking, then parking the mount");
+                        SequenceCommands.SetTelescopeTracking(telescopeMediator, TrackingMode.Stopped, token);
+                        await SequenceCommands.ParkTelescope(telescopeMediator, guiderMediator, progress, token);
+                        parked = true;
+                    } else {
+                        TSLogger.Info("web pause: stopping guiding, the mount keeps tracking");
+                        SequenceCommands.StopGuiding(guiderMediator, token);
+                    }
+                }
+
                 int seconds = 0;
                 while (!UnpauseRequested && !token.IsCancellationRequested) {
                     progress?.Report(new ApplicationStatus() { Status = $"Target Scheduler: paused for {Utils.StoHMS(seconds++)}" });
                     await Task.Delay(1000);
                 }
             } finally {
+                if (parked && !token.IsCancellationRequested) {
+                    TSLogger.Info("web pause ended: unparking the mount");
+                    await SequenceCommands.UnparkTelescope(telescopeMediator, progress, token);
+                }
                 TSLogger.Info("TS Container unpaused");
                 TargetScheduler.EventMediator.InvokeContainerUnpaused(this);
                 PauseEnabled = true;
@@ -479,8 +512,17 @@ namespace NINA.Plugin.TargetScheduler.Sequencer {
                 SequenceCommands.SetTelescopeTracking(telescopeMediator, TrackingMode.Stopped, token);
             }
 
-            CoreUtil.Wait(duration, token, progress).Wait(token);
-            TSLogger.Info("done waiting for next target");
+            using (var waitCts = CancellationTokenSource.CreateLinkedTokenSource(token)) {
+                Remote.Plugin.RemoteHost.Instance?.SetWaitCanceller(waitCts);
+                try {
+                    CoreUtil.Wait(duration, waitCts.Token, progress).Wait(waitCts.Token);
+                    TSLogger.Info("done waiting for next target");
+                } catch (Exception ex) when (!token.IsCancellationRequested && Utils.IsCancelException(ex)) {
+                    TSLogger.Info("wait for next target ended early for a web re-plan");
+                } finally {
+                    Remote.Plugin.RemoteHost.Instance?.SetWaitCanceller(null);
+                }
+            }
 
             if (parked) {
                 SequenceCommands.UnparkTelescope(telescopeMediator, progress, token).Wait();
@@ -651,6 +693,7 @@ namespace NINA.Plugin.TargetScheduler.Sequencer {
             TSLogger.Info("TS Container unpause requested");
             PauseRequested = false;
             UnpauseRequested = true;
+            Remote.Plugin.RemoteHost.Instance?.LocalPauseChanged(false);
         }
 
         private bool pauseEnabled = false;

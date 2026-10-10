@@ -5,6 +5,7 @@
              xmlns:i="http://schemas.microsoft.com/xaml/behaviors"
              xmlns:local="clr-namespace:NINA.Plugin.TargetScheduler.Controls.DatabaseManager"
              xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             xmlns:remote="clr-namespace:NINA.Plugin.TargetScheduler.Remote.Plugin"
              d:DesignHeight="600"
              d:DesignWidth="800"
              mc:Ignorable="d">
@@ -13,6 +14,12 @@
         <ResourceDictionary Source="../Resources/Resources.xaml" />
     </UserControl.Resources>
 
+    <StackPanel Orientation="Vertical">
+    <TextBlock Margin="0,10,0,0"
+               Foreground="Orange"
+               TextWrapping="Wrap"
+               Text="{Binding Source={x:Static remote:LocalEditing.Instance}, Path=Banner}"
+               Visibility="{Binding Source={x:Static remote:LocalEditing.Instance}, Path=BannerVisibility}" />
     <StackPanel Margin="0,20,0,20"
                 Orientation="Horizontal">
         <Border Height="{Binding PanelHeight}"
@@ -27,7 +34,7 @@
                 BorderBrush="{StaticResource BorderBrush}"
                 BorderThickness="1"
                 Visibility="{Binding ShowProfileView}">
-            <StackPanel>
+            <StackPanel IsEnabled="{Binding Source={x:Static remote:LocalEditing.Instance}, Path=Allowed}">
                 <local:ProfileView DataContext="{Binding ProfileViewVM}" />
             </StackPanel>
         </Border>
@@ -35,7 +42,7 @@
                 BorderBrush="{StaticResource BorderBrush}"
                 BorderThickness="1"
                 Visibility="{Binding ShowOrphanedProjectsView}">
-            <StackPanel>
+            <StackPanel IsEnabled="{Binding Source={x:Static remote:LocalEditing.Instance}, Path=Allowed}">
                 <local:OrphanedProjectsView DataContext="{Binding OrphanedProjectsViewVM}" />
             </StackPanel>
         </Border>
@@ -43,7 +50,7 @@
                 BorderBrush="{StaticResource BorderBrush}"
                 BorderThickness="1"
                 Visibility="{Binding ShowProfilePreferencesView}">
-            <StackPanel>
+            <StackPanel IsEnabled="{Binding Source={x:Static remote:LocalEditing.Instance}, Path=Allowed}">
                 <local:ProfilePreferencesView DataContext="{Binding ProfilePreferencesViewVM}" />
             </StackPanel>
         </Border>
@@ -51,7 +58,7 @@
                 BorderBrush="{StaticResource BorderBrush}"
                 BorderThickness="1"
                 Visibility="{Binding ShowProjectView}">
-            <StackPanel>
+            <StackPanel IsEnabled="{Binding Source={x:Static remote:LocalEditing.Instance}, Path=Allowed}">
                 <local:ProjectView DataContext="{Binding ProjectViewVM}" />
             </StackPanel>
         </Border>
@@ -59,7 +66,7 @@
                 BorderBrush="{StaticResource BorderBrush}"
                 BorderThickness="1"
                 Visibility="{Binding ShowTargetView}">
-            <StackPanel>
+            <StackPanel IsEnabled="{Binding Source={x:Static remote:LocalEditing.Instance}, Path=Allowed}">
                 <local:TargetView DataContext="{Binding TargetViewVM}" />
             </StackPanel>
         </Border>
@@ -67,7 +74,7 @@
                 BorderBrush="{StaticResource BorderBrush}"
                 BorderThickness="1"
                 Visibility="{Binding ShowExposureTemplateProfileView}">
-            <StackPanel>
+            <StackPanel IsEnabled="{Binding Source={x:Static remote:LocalEditing.Instance}, Path=Allowed}">
                 <local:ExposureTemplateProfileView DataContext="{Binding ExposureTemplateProfileViewVM}" />
             </StackPanel>
         </Border>
@@ -75,7 +82,7 @@
                 BorderBrush="{StaticResource BorderBrush}"
                 BorderThickness="1"
                 Visibility="{Binding ShowOrphanedExposureTemplatesView}">
-            <StackPanel>
+            <StackPanel IsEnabled="{Binding Source={x:Static remote:LocalEditing.Instance}, Path=Allowed}">
                 <local:OrphanedExposureTemplatesView DataContext="{Binding OrphanedExposureTemplatesViewVM}" />
             </StackPanel>
         </Border>
@@ -83,9 +90,10 @@
                 BorderBrush="{StaticResource BorderBrush}"
                 BorderThickness="1"
                 Visibility="{Binding ShowExposureTemplateView}">
-            <StackPanel>
+            <StackPanel IsEnabled="{Binding Source={x:Static remote:LocalEditing.Instance}, Path=Allowed}">
                 <local:ExposureTemplateView DataContext="{Binding ExposureTemplateViewVM}" />
             </StackPanel>
         </Border>
+    </StackPanel>
     </StackPanel>
 </UserControl>

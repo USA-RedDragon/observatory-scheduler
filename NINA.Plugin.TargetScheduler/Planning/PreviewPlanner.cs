@@ -33,7 +33,8 @@ namespace NINA.Plugin.TargetScheduler.Planning {
         public List<SchedulerPlan> GetPlanPreview(DateTime atTime, IProfileService profileService, ProfilePreference profilePreferences, List<IProject> projects) {
             TSLogger.Info("-- BEGIN PLAN PREVIEW ----------------------------------------------------------");
 
-            DitherManagerCache.Clear();
+            DitherManagerCache.ClearPreview();
+            SmartExposureRotateCache.ClearPreview();
             List<SchedulerPlan> plans = new List<SchedulerPlan>();
             IWeatherDataMediator weatherData = new DisconnectedWeatherDataMediator();
             DateTime currentTime = atTime;

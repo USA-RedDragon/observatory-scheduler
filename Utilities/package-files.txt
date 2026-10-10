@@ -5,3 +5,5 @@ LinqKit.dll
 LinqKit.Core.dll
 Microsoft.WindowsAPICodePack.dll
 Microsoft.WindowsAPICodePack.Shell.dll
+EmbedIO.dll
+Swan.Lite.dll

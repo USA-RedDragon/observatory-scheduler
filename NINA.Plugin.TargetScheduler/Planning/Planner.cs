@@ -70,6 +70,8 @@ namespace NINA.Plugin.TargetScheduler.Planning {
                         return new SchedulerPlan(atTime, projects, previousTarget, instructions, !checkCondition);
                     }
 
+                    projects = FilterForSkips(projects);
+
                     // Filter all targets for suitability
                     projects = FilterForIncomplete(projects);
                     projects = FilterForVisibility(projects);
@@ -128,6 +130,22 @@ namespace NINA.Plugin.TargetScheduler.Planning {
                     TSLogger.Info($"-- END {title} -----------------------------------------------------");
                 }
             }
+        }
+
+        public List<IProject> FilterForSkips(List<IProject> projects) {
+            var host = Remote.Plugin.RemoteHost.Instance;
+            if (NoProjects(projects) || host == null) { return projects; }
+
+            foreach (IProject project in projects) {
+                foreach (ITarget target in project.Targets) {
+                    string reason = host.SkipReason(project.DatabaseId, target.DatabaseId, atTime);
+                    if (reason != null) {
+                        SetRejected(target, reason);
+                    }
+                }
+            }
+
+            return PropagateRejections(projects);
         }
 
         /// <summary>

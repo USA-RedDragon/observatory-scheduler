@@ -45,6 +45,11 @@ namespace NINA.Plugin.TargetScheduler.Planning {
         public bool CanContinue(DateTime atTime, IWeatherDataMediator weatherDataMediator, ITarget previousTarget) {
             if (previousTarget == null) { return false; }
 
+            if (!isPreview && Remote.Plugin.RemoteHost.Instance?.ContinuationBlocker(previousTarget, atTime) is string blocker) {
+                TSLogger.Info($"not continuing previous target at {atTime}, {previousTarget.Name}: {blocker}");
+                return false;
+            }
+
             // If we detect that the active target has been edited since it started, we have to abort
             if (!isPreview && TargetEditGuard.Instance.IsEdited(previousTarget.DatabaseId)) {
                 TSLogger.Info($"not continuing previous target at {atTime}, {previousTarget.Name}: detected impacting edit to target");
