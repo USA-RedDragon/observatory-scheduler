@@ -23,6 +23,7 @@
     <Compile Include="..\NINA.Plugin.TargetScheduler\Goals\FilterKind.cs" Link="Linked\Goals\FilterKind.cs" />
     <Compile Include="..\NINA.Plugin.TargetScheduler\Goals\ConditionMatch.cs" Link="Linked\Goals\ConditionMatch.cs" />
     <Compile Include="..\NINA.Plugin.TargetScheduler\Goals\SeasonalRunway.cs" Link="Linked\Goals\SeasonalRunway.cs" />
+    <Compile Include="..\NINA.Plugin.TargetScheduler\Goals\GoalCompletionLog.cs" Link="Linked\Goals\GoalCompletionLog.cs" />
     <Compile Include="..\NINA.Plugin.TargetScheduler\Goals\FilterSteering.cs" Link="Linked\Goals\FilterSteering.cs" />
     <Compile Include="..\NINA.Plugin.TargetScheduler\Goals\SeasonConstraints.cs" Link="Linked\Goals\SeasonConstraints.cs" />
   </ItemGroup>

@@ -1,6 +1,7 @@
 ﻿using NINA.Plugin.TargetScheduler.Database.Schema;
 using NINA.Plugin.TargetScheduler.Goals;
 using NINA.Plugin.TargetScheduler.Planning.Interfaces;
+using NINA.Plugin.TargetScheduler.Shared.Utility;
 using System.Collections.Generic;
 using System.Linq;
 
@@ -36,6 +37,31 @@ namespace NINA.Plugin.TargetScheduler.Planning.Exposures {
 
             if (string.IsNullOrWhiteSpace(targetGuid) || string.IsNullOrWhiteSpace(filterName)) { return null; }
             return goalSource.Get(targetGuid, filterName);
+        }
+
+        private static void LogDecision(IExposureCounts exposurePlan, GoalProgress goal) {
+            try {
+                string name = null, guid = null, filter = null;
+                int planId = 0;
+                if (exposurePlan is IExposure exposure) {
+                    if (exposure.PlanTarget == null || exposure.PlanTarget.IsPreview) { return; }
+                    name = exposure.PlanTarget.Name;
+                    guid = exposure.PlanTarget.Guid;
+                    filter = exposure.FilterName;
+                    planId = exposure.DatabaseId;
+                } else if (exposurePlan is ExposurePlan plan) {
+                    name = plan.Target?.Name;
+                    guid = plan.Target?.Guid;
+                    filter = plan.ExposureTemplate?.FilterName;
+                    planId = plan.Id;
+                }
+
+                string message = GoalCompletionLog.Instance.Observe(name, guid, filter, planId, goal, exposurePlan.Acquired, ExposureSeconds(exposurePlan), out bool firstSeen);
+                if (message == null) { return; }
+                if (firstSeen) { TSLogger.Debug(message); } else { TSLogger.Info(message); }
+            } catch (System.Exception ex) {
+                TSLogger.Warning($"goal completion log failed: {ex.Message}");
+            }
         }
 
         private static double ExposureSeconds(IExposureCounts exposurePlan) {
@@ -128,6 +154,7 @@ namespace NINA.Plugin.TargetScheduler.Planning.Exposures {
         public bool IsIncomplete(IExposureCounts exposurePlan) {
             GoalProgress goal = GoalFor(exposurePlan);
             if (goal != null) {
+                LogDecision(exposurePlan, goal);
                 return !GoalCompletion.IsComplete(goal, exposurePlan.Acquired);
             }
 
