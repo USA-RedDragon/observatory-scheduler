@@ -1105,7 +1105,7 @@ namespace NINA.Plugin.TargetScheduler.Database {
                             RuleWeight rw = project.RuleWeights.Where(r => r.Name == item.Key).FirstOrDefault();
                             if (rw == null) {
                                 TSLogger.Debug($"project '{project.Name}' is missing rule weight record: '{item.Value.Name}': adding");
-                                rw = new RuleWeight(item.Value.Name, item.Value.DefaultWeight);
+                                rw = new RuleWeight(item.Value.Name, item.Value is IOptInScoringRule ? 0 : item.Value.DefaultWeight);
                                 rw.Project = project;
                                 context.RuleWeightSet.Add(rw);
                                 updated = true;

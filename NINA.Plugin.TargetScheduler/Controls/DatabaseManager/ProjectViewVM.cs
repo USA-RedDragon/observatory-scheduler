@@ -341,7 +341,9 @@ namespace NINA.Plugin.TargetScheduler.Controls.DatabaseManager {
             List<RuleWeight> weights = ScoringRuleWeightsClipboard.GetItem();
             foreach (RuleWeight weight in ProjectProxy.Proxy.RuleWeights) {
                 RuleWeight newRuleWeight = weights.Where(rw => rw.Name == weight.Name).FirstOrDefault();
-                weight.Weight = newRuleWeight.Weight;
+                if (newRuleWeight != null) {
+                    weight.Weight = newRuleWeight.Weight;
+                }
             }
 
             managerVM.SaveProject(ProjectProxy.Proxy);
