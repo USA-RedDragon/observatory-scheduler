@@ -1,9 +1,7 @@
-Observatory Scheduler 5.8.2.206: a Target Scheduler Darks instruction that takes the stacker's dark backlog in gaps and yields to imaging.
+Observatory Scheduler 5.8.2.207: Target Scheduler Darks never takes darks in daylight.
 
-- **Target Scheduler Darks** (sequence instruction, Target Scheduler category) reads the `ts_dark_need` table that the stacker publishes over SymmetricDS. Each row is one dark combo (exposure, gain, offset, binning, readout mode, set temperature), ordered by how many lights it would calibrate, with the frames the stacker's master-dark builder needs.
-- It uses only the camera. It never connects, powers or uses the flat panel, its light or any switch. Put it only where the cover is already closed.
-- **Placement** says how it yields. *Before Wait*: inside the Target Scheduler container's Before Wait, it starts a dark only if the dark, the setpoint changes and the measured AfterWait time all fit before the planned wait ends. A re-plan or pause from the web also stops it. *While Unsafe*: inside the unsafe wait loop, it stops as soon as the safety monitor reports safe (a running dark finishes). *End Of Sequence*: after the flats at the end; it runs until the backlog is done, with an optional time limit.
-- **Temperature gate**: it moves the setpoint to each combo's set temperature with NINA's own cooling, uses NINA's at-target tolerance (2 °C), skips a combo the cooler cannot reach or hold, and restores the sequence's setpoint before it returns.
-- Pending web commands apply between darks.
+- **Sun limit**: in every placement, the instruction starts a dark only if it ends (setpoint move, exposure and download included) with the sun below -8°, and it stops when the sun reaches -8°. It uses NINA's sun altitude at the profile's observer location; with no location set it takes no darks. Placed at the end of the sequence after the dawn flats, it now ends at once.
+- **Basis**: darks on 2026-09-29 leaked from the one that started at sun -0.67° (0.71 to 4.14 ADU against a limit of about 0.6), and darks on 2025-02-05 leaked at dusk down to -5.66° and were at the limit to -7.73°. -8° is below all of them. The TS log states the limit and its basis.
+- The other yield rules, the temperature gate and the camera-only rule are unchanged.
 
-On start-up the plugin adds `ts_dark_need` and the local ledger `ts_dark_taken` to its SQLite database. The home database needs `ts_dark_need` and its SymmetricDS trigger before the stacker publishes. Requires NINA 3.1.2.9001 or later. Install like 5.8.2.205: with NINA closed, replace the "Observatory Scheduler" folder in %LOCALAPPDATA%\NINA\Plugins\3.0.0\ with the one in this zip.
+No database changes. Requires NINA 3.1.2.9001 or later. Install like 5.8.2.206: with NINA closed, replace the "Observatory Scheduler" folder in %LOCALAPPDATA%\NINA\Plugins\3.0.0\ with the one in this zip.

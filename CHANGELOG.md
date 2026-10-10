@@ -1,5 +1,9 @@
 # Observatory Scheduler
 
+## 5.8.2.207 - 2026-10-10
+* **Target Scheduler Darks** takes darks only while the sun is below -8°, in every placement. It does not start a dark (with its setpoint move, exposure and download) that would end with the sun at or above -8°, and it stops when the sun is there. The sun's altitude is NINA's, at the profile's observer location; without a location it takes no darks. *End Of Sequence* after the dawn flats now ends at once instead of running the backlog in daylight.
+* Basis for -8°, from the darks in `astro/DARK` with the stacker's light-leak spread (leak limit about 0.6 ADU): on 2026-09-29 at dawn the last clean dark ended at -0.67° (0.33 ADU) and the next one, -0.67° to +1.45°, leaked (0.71 ADU, then 1.76, 3.11, 4.14). On 2025-02-05 at dusk the dark from -3.61° to -5.66° leaked (5.51 ADU) and the one from -5.66° to -7.73° was at the limit (0.59 ADU). -8° is below every altitude at which any of these darks gained signal. The TS log states the limit and this basis each time the instruction runs.
+
 ## 5.8.2.206 - 2026-10-10
 * New sequence instruction **Target Scheduler Darks**. It reads `ts_dark_need`, which the stacker publishes home to the observatory over SymmetricDS: one row per dark combo (exposure, gain, camera offset, binning, readout mode, set temperature) with `priority` (by lights blocked, then lights on a scaled dark), `frames_needed` (the master-dark builder's minimum), `frames_have`, `frames_rejected` and `newest_dark_at`. It takes the remaining darks combo by combo. Darks taken but not yet ingested by the stacker are kept in a local `ts_dark_taken` ledger, so they are not taken twice.
 * The instruction only uses the camera: never the flat device, its light or a switch.
