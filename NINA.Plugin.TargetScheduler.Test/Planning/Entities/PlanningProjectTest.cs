@@ -53,7 +53,7 @@ namespace NINA.Plugin.TargetScheduler.Test.Planning.Entities {
             sut.EnableGrader.Should().BeTrue();
             sut.IsMosaic.Should().BeFalse();
             sut.FlatsHandling.Should().Be(Project.FLATS_HANDLING_TARGET_COMPLETION);
-            sut.RuleWeights.Should().NotBeNull().And.HaveCount(9);
+            sut.RuleWeights.Should().NotBeNull().And.HaveCount(ScoringRule.GetAllScoringRules().Count);
             sut.Rejected.Should().BeFalse();
             sut.HorizonDefinition.Should().NotBeNull();
             sut.ExposureCompletionHelper.Should().NotBeNull();
