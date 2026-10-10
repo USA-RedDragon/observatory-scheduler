@@ -42,8 +42,8 @@ namespace NINA.Plugin.TargetScheduler.Database {
 
         public static IGoalProgressSource RefreshGoalSource(SchedulerDatabaseContext context) {
             IGoalProgressSource source = LoadGoalProgress(context);
-            MosaicCompletion.GoalSource = source;
-            return source;
+            MosaicCompletion.GoalSource = source is SqliteGoalProgressSource snapshot && snapshot.Count == 0 ? null : source;
+            return MosaicCompletion.GoalSource;
         }
 
         public static ITargetSeasonWriter TargetSeasonWriter() {
