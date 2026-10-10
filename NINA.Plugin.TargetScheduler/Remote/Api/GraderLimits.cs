@@ -41,7 +41,7 @@ namespace NINA.Plugin.TargetScheduler.Remote.Api {
                 limit.State = StateNoImages;
                 return limit;
             }
-            limit.PopulationRule = PopulationRule(settings, limit);
+            limit.PopulationRule = PopulationRule(settings, limit, plan.GoalDriven);
             if (limit.Samples < GraderMath.MinimumSamples) {
                 limit.State = StateTooFewSamples;
                 return limit;
@@ -64,8 +64,12 @@ namespace NINA.Plugin.TargetScheduler.Remote.Api {
             return limit;
         }
 
-        public static string PopulationRule(GraderHfrSettings settings, GraderHfrLimit limit) {
+        public static string PopulationRule(GraderHfrSettings settings, GraderHfrLimit limit, bool goalDriven = false) {
             var match = "exposure, gain, offset, binning and ROI the next sub will use";
+            if (settings.Mode == "delayed" && goalDriven) {
+                return string.Create(CultureInfo.InvariantCulture,
+                    $"all {limit.Samples} subs of this exposure plan with the {match}, any grading status; grading waits until the goal has {settings.DelayThresholdPercent:0.#}% of the subs it needs (stack_subs against min_subs while collecting, sub_limit while unmeasurable, or the measured hours), and grades all pending subs once the goal is reached");
+            }
             if (settings.Mode == "delayed") {
                 return string.Create(CultureInfo.InvariantCulture,
                     $"all {limit.Samples} subs of this exposure plan with the {match}, any grading status; grading waits until the plan has {settings.DelayThresholdPercent:0.#}% of its desired subs");

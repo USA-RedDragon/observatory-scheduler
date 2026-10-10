@@ -434,6 +434,7 @@ namespace NINA.Plugin.TargetScheduler.Remote.Api {
         public string Binning { get; set; }
         public double? Roi { get; set; }
         public int Matching { get; set; }
+        public bool GoalDriven { get; set; }
         public IList<double> Samples { get; set; } = new List<double>();
     }
 

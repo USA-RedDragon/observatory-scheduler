@@ -257,6 +257,10 @@ namespace NINA.Plugin.TargetScheduler.Remote.Test {
             project.ProjectGrading = false;
             GraderLimits.Build(project, Plan(1, 2, 3)).State.Should().Be(GraderLimits.StateProjectGradingOff);
             GraderLimits.Build(Hfr(mode: "delayed"), Plan(1, 2, 3)).PopulationRule.Should().StartWith("all 3 subs").And.Contain("50%");
+            var goalPlan = Plan(1, 2, 3);
+            goalPlan.GoalDriven = true;
+            GraderLimits.Build(Hfr(mode: "delayed"), goalPlan).PopulationRule.Should().StartWith("all 3 subs").And.Contain("until the goal has 50%").And.NotContain("desired");
+            GraderLimits.Build(Hfr(), goalPlan).PopulationRule.Should().Contain("the 3 newest of 11 subs");
             var nan = GraderLimits.Build(Hfr(), Plan(1, double.NaN, 3, 4));
             nan.State.Should().Be(GraderLimits.StateInvalidSamples);
             nan.InvalidSamples.Should().Be(1);

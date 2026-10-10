@@ -33,6 +33,7 @@ namespace NINA.Plugin.TargetScheduler.Remote.Plugin {
                     TargetName = target.Name,
                     Hfr = settings,
                 };
+                var goals = ForkDatabase.LoadGoalProgress(context);
                 foreach (var plan in target.ExposurePlans.Where(p => p.ExposureTemplate != null).OrderBy(p => p.Id)) {
                     var all = context.GetAcquiredImagesForGrading(plan);
                     var input = new GraderPlanInput {
@@ -40,6 +41,7 @@ namespace NINA.Plugin.TargetScheduler.Remote.Plugin {
                         Filter = plan.ExposureTemplate.FilterName,
                         ExposureSeconds = plan.Exposure > 0 ? plan.Exposure : plan.ExposureTemplate.DefaultExposure,
                         Acquired = all.Count,
+                        GoalDriven = goals.Get(target.Guid, plan.ExposureTemplate.FilterName) != null,
                     };
                     var reference = all.FirstOrDefault(a => a.Metadata != null);
                     if (reference != null) {

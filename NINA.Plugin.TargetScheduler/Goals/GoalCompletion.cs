@@ -57,6 +57,13 @@ namespace NINA.Plugin.TargetScheduler.Goals {
             return 1;
         }
 
+        public static double DelayPercent(GoalProgress goal, double exposureSeconds, int localSubs) {
+            if (IsComplete(goal, localSubs)) { return 100; }
+            int subs = Subs(goal, localSubs);
+            int remaining = RemainingExposures(goal, exposureSeconds, localSubs);
+            return 100.0 * subs / (subs + remaining);
+        }
+
         public static double Clamp01(double value) {
             if (double.IsNaN(value)) { return 0; }
             if (value < 0) { return 0; }

@@ -2,6 +2,7 @@
 using Newtonsoft.Json.Converters;
 using NINA.Plugin.TargetScheduler.Database;
 using NINA.Plugin.TargetScheduler.Database.Schema;
+using NINA.Plugin.TargetScheduler.Goals;
 using NINA.Plugin.TargetScheduler.Shared.Utility;
 using NINA.Plugin.TargetScheduler.Util;
 using NINA.Profile.Interfaces;
@@ -48,14 +49,22 @@ namespace NINA.Plugin.TargetScheduler.Grading {
 
                 lock (lockObj) {
                     if (DelayedGradingEnabled(graderPreferences)) {
-                        if (exposurePlan.Desired == 0) {
+                        GoalProgress goal = GetGoal(target, exposurePlan);
+                        if (goal == null && exposurePlan.Desired == 0) {
                             TSLogger.Warning("desired count on exposure plan is zero during grading - aborting");
                             return;
                         }
 
-                        if (workData.ForceGrading || CurrentDelayThreshold(population.Count, exposurePlan.Desired) >= graderPreferences.DelayGradingThreshold) {
+                        double delayPercent = goal != null
+                            ? GoalCompletion.DelayPercent(goal, ExposureSeconds(exposurePlan), population.Count)
+                            : CurrentDelayThreshold(population.Count, exposurePlan.Desired);
+                        string basis = goal != null
+                            ? $"goal {GoalCompletionLog.Decision(goal, population.Count)} at {delayPercent:0.#}% (stack_subs={(goal.StackSubs.HasValue ? goal.StackSubs.Value.ToString() : "none")}, remaining_subs={GoalCompletion.RemainingExposures(goal, ExposureSeconds(exposurePlan), population.Count)})"
+                            : $"desired={exposurePlan.Desired}";
+
+                        if (workData.ForceGrading || delayPercent >= graderPreferences.DelayGradingThreshold) {
                             List<AcquiredImage> pending = population.Where(a => a.GradingStatus == GradingStatus.Pending).ToList();
-                            TSLogger.Info($"delayed grading triggered for {tag}: acquired={population.Count}, desired={exposurePlan.Desired}, pending={pending.Count}");
+                            TSLogger.Info($"delayed grading triggered for {tag}: acquired={population.Count}, {basis}, pending={pending.Count}");
 
                             pending.ForEach(acquiredImage => {
                                 GradingResult result = GradeImage(exposurePlan, acquiredImage, workData, population);
@@ -65,7 +74,7 @@ namespace NINA.Plugin.TargetScheduler.Grading {
                                 }
                             });
                         } else {
-                            TSLogger.Info($"delayed grading not yet triggered for {tag}");
+                            TSLogger.Info($"delayed grading not yet triggered for {tag}: acquired={population.Count}, {basis}");
                         }
                     } else {
                         AcquiredImage acquiredImage = GetCurrentAcquired(workData.AcquiredImageId);
@@ -193,6 +202,24 @@ namespace NINA.Plugin.TargetScheduler.Grading {
             using (var context = new SchedulerDatabaseInteraction().GetContext()) {
                 return context.GetExposurePlan(exposurePlanId);
             }
+        }
+
+        public virtual GoalProgress GetGoal(Target target, ExposurePlan exposurePlan) {
+            try {
+                string filter = exposurePlan?.ExposureTemplate?.FilterName;
+                if (string.IsNullOrWhiteSpace(target?.Guid) || string.IsNullOrWhiteSpace(filter)) { return null; }
+                using (var context = new SchedulerDatabaseInteraction().GetContext()) {
+                    return ForkDatabase.LoadGoalProgress(context).Get(target.Guid, filter);
+                }
+            } catch (Exception ex) {
+                TSLogger.Warning($"grading could not read goal progress, using the desired count: {ex.Message}");
+                return null;
+            }
+        }
+
+        private static double ExposureSeconds(ExposurePlan exposurePlan) {
+            if (exposurePlan.Exposure > 0) { return exposurePlan.Exposure; }
+            return exposurePlan.ExposureTemplate?.DefaultExposure ?? 0;
         }
 
         public virtual Target GetTarget(int targetId) {
