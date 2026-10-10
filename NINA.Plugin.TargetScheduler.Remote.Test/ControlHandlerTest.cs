@@ -73,7 +73,10 @@ namespace NINA.Plugin.TargetScheduler.Remote.Test {
             var reg = CommandRegistry.Builtin();
             reg.Kinds.Should().BeEquivalentTo(new[] {
                 CommandKinds.ProjectEdit, CommandKinds.TargetEdit, CommandKinds.ExposurePlanEdit,
-                CommandKinds.Skip, CommandKinds.Unskip, CommandKinds.Pause, CommandKinds.Resume, CommandKinds.Replan });
+                CommandKinds.Skip, CommandKinds.Unskip, CommandKinds.Pause, CommandKinds.Resume, CommandKinds.Replan,
+                CommandKinds.ExposureTemplateEdit, CommandKinds.ProjectBatchEdit, CommandKinds.ExposurePlanBatchEdit, CommandKinds.ExposureTemplateBatchEdit,
+                CommandKinds.ExposureTemplateClone, CommandKinds.ExposureTemplateDelete, CommandKinds.GoalEdit, CommandKinds.RuleWeightEdit,
+                CommandKinds.ApplySet, CommandKinds.UnapplySet, CommandKinds.ProjectCreate, CommandKinds.ProjectDelete });
             Action dup = () => reg.Register(new ReplanHandler());
             dup.Should().Throw<InvalidOperationException>();
         }

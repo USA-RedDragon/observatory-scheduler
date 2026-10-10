@@ -7,7 +7,7 @@ namespace NINA.Plugin.TargetScheduler.Remote.Commands {
     public abstract class ControlHandler<T> : ICommandHandler {
         public abstract string Kind { get; }
         public virtual CommandTiming Timing => CommandTiming.AtExposureEnd;
-        public bool IsEdit => false;
+        public virtual bool IsEdit => false;
 
         protected virtual string Check(T payload) {
             return null;

@@ -28,6 +28,18 @@ namespace NINA.Plugin.TargetScheduler.Remote.Commands {
         public const string Pause = "scheduler.pause";
         public const string Resume = "scheduler.resume";
         public const string Replan = "scheduler.replan";
+        public const string ExposureTemplateEdit = "exposuretemplate.edit";
+        public const string ProjectBatchEdit = "project.batchedit";
+        public const string ExposurePlanBatchEdit = "exposureplan.batchedit";
+        public const string ExposureTemplateBatchEdit = "exposuretemplate.batchedit";
+        public const string ExposureTemplateClone = "exposuretemplate.clone";
+        public const string ExposureTemplateDelete = "exposuretemplate.delete";
+        public const string GoalEdit = "goal.edit";
+        public const string RuleWeightEdit = "ruleweight.edit";
+        public const string ApplySet = "exposureplan.applyset";
+        public const string UnapplySet = "exposureplan.unapplyset";
+        public const string ProjectCreate = "project.create";
+        public const string ProjectDelete = "project.delete";
     }
 
     public class CommandEnvelope {

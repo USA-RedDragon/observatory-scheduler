@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 
 namespace NINA.Plugin.TargetScheduler.Remote.Commands {
@@ -61,8 +62,54 @@ namespace NINA.Plugin.TargetScheduler.Remote.Commands {
         public int? TargetId { get; set; }
     }
 
+    public class EditItem {
+        public int Id { get; set; }
+        public string Label { get; set; }
+        public IList<ColumnChange> Changes { get; set; }
+    }
+
+    public class ChangeOutcome {
+        public string Status { get; set; } = CommandStatus.Applied;
+        public string Message { get; set; }
+        public List<Dictionary<string, object>> Conflicts { get; } = new List<Dictionary<string, object>>();
+        public List<(int? ProjectId, int? TargetId)> Touched { get; } = new List<(int?, int?)>();
+        public bool Changed { get; set; }
+
+        public ChangeOutcome Reject(string message) {
+            Status = CommandStatus.Rejected;
+            Message = message;
+            return this;
+        }
+
+        public void Conflict(string what, object expected, object actual) {
+            Conflicts.Add(new Dictionary<string, object> { ["field"] = what, ["expected"] = expected, ["actual"] = actual });
+        }
+
+        public void Touch(int? projectId, int? targetId) {
+            if (!Touched.Contains((projectId, targetId))) {
+                Touched.Add((projectId, targetId));
+            }
+        }
+    }
+
     public interface ISchedulerDatabase {
 
         EditOutcome ApplyEdit(EditableTable table, int id, IList<ColumnChange> changes);
+
+        IList<EditOutcome> ApplyEdits(EditableTable table, IList<EditItem> items);
+
+        ChangeOutcome ApplyGoalEdit(GoalEditPayload payload, DateTime now);
+
+        ChangeOutcome ApplyRuleWeightEdit(RuleWeightEditPayload payload);
+
+        ChangeOutcome CloneTemplate(TemplateClonePayload payload);
+
+        ChangeOutcome DeleteTemplate(TemplateDeletePayload payload);
+
+        ChangeOutcome ApplyExposureSet(ApplySetPayload payload, bool undo);
+
+        ChangeOutcome CreateProject(ProjectCreatePayload payload, string profileId, IReadOnlyDictionary<string, double> defaultRuleWeights, DateTime now);
+
+        ChangeOutcome DeleteProject(ProjectCreatePayload payload);
     }
 }

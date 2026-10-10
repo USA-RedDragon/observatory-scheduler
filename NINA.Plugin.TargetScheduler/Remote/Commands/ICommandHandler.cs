@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 
 namespace NINA.Plugin.TargetScheduler.Remote.Commands {
 
@@ -20,6 +21,7 @@ namespace NINA.Plugin.TargetScheduler.Remote.Commands {
     public interface ICommandContext {
         DateTime Now { get; }
         string ProfileId { get; }
+        IReadOnlyDictionary<string, double> DefaultRuleWeights { get; }
         ISchedulerDatabase Database { get; }
         ISchedulerControl Control { get; }
     }

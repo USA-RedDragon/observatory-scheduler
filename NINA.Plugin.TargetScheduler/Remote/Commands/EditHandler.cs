@@ -36,6 +36,18 @@ namespace NINA.Plugin.TargetScheduler.Remote.Commands {
                 new EditableColumn("desired", "desired", ColumnType.Integer, 0, 100000)));
         }
 
+        public static EditHandler ExposureTemplate() {
+            return new EditHandler(CommandKinds.ExposureTemplateEdit, new EditableTable("exposuretemplate", "exposuretemplate",
+                new EditableColumn("defaultexposure", "defaultexposure", ColumnType.Real, 0.001, 86400),
+                new EditableColumn("gain", "gain", ColumnType.Integer, -1, 100000),
+                new EditableColumn("offset", "offset", ColumnType.Integer, -1, 100000),
+                new EditableColumn("moonavoidanceseparation", "moonavoidanceseparation", ColumnType.Real, 0, 180),
+                new EditableColumn("moonavoidancewidth", "moonavoidancewidth", ColumnType.Integer, 0, 14),
+                new EditableColumn("moonavoidanceenabled", "moonavoidanceenabled", ColumnType.Boolean),
+                new EditableColumn("maximumhumidity", "maximumhumidity", ColumnType.Real, 0, 100),
+                new EditableColumn("twilightlevel", "twilightlevel", ColumnType.Integer, 0, 3)));
+        }
+
         public string Validate(CommandEnvelope command) {
             EditPayload p;
             try {
@@ -43,6 +55,10 @@ namespace NINA.Plugin.TargetScheduler.Remote.Commands {
             } catch (JsonException e) {
                 return $"invalid payload: {e.Message}";
             }
+            return ValidatePayload(p);
+        }
+
+        public string ValidatePayload(EditPayload p) {
             if (p == null || p.Id <= 0) {
                 return "missing id";
             }
@@ -79,12 +95,7 @@ namespace NINA.Plugin.TargetScheduler.Remote.Commands {
                 return CommandResult.Of(command.Id, CommandStatus.Rejected, error);
             }
             var p = command.PayloadAs<EditPayload>();
-            var changes = p.Changes.Select(c => {
-                var col = Table.Columns[c.Field];
-                TryConvert(col, c.Before, out var before, out _);
-                TryConvert(col, c.After, out var after, out _);
-                return new ColumnChange { Column = col, Before = before, After = after };
-            }).ToList();
+            var changes = ColumnChanges(p);
 
             var outcome = context.Database.ApplyEdit(Table, p.Id, changes);
             if (!outcome.Found) {
@@ -101,11 +112,20 @@ namespace NINA.Plugin.TargetScheduler.Remote.Commands {
             return CommandResult.Of(command.Id, CommandStatus.Applied, null);
         }
 
-        private static string Label(EditPayload p) {
+        public List<ColumnChange> ColumnChanges(EditPayload p) {
+            return p.Changes.Select(c => {
+                var col = Table.Columns[c.Field];
+                TryConvert(col, c.Before, out var before, out _);
+                TryConvert(col, c.After, out var after, out _);
+                return new ColumnChange { Column = col, Before = before, After = after };
+            }).ToList();
+        }
+
+        public static string Label(EditPayload p) {
             return string.IsNullOrEmpty(p.Name) ? $"{p.Entity} {p.Id}" : p.Name;
         }
 
-        private static string Show(object v) {
+        public static string Show(object v) {
             return v == null ? "empty" : Convert.ToString(v, CultureInfo.InvariantCulture);
         }
 

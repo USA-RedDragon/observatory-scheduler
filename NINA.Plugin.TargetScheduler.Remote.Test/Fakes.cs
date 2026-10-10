@@ -38,7 +38,17 @@ namespace NINA.Plugin.TargetScheduler.Remote.Test {
 
     public class FakeContext : ICommandContext {
         public DateTime Now { get; set; } = new DateTime(2026, 10, 10, 6, 52, 0, DateTimeKind.Utc);
-        public string ProfileId => "p";
+        public string ProfileId { get; set; } = "p";
+        public IReadOnlyDictionary<string, double> DefaultRuleWeights { get; set; } = new Dictionary<string, double> {
+            ["Meridian Flip Penalty"] = 0,
+            ["Meridian Window Priority"] = 75,
+            ["Mosaic Completion"] = 0,
+            ["Percent Complete"] = 50,
+            ["Project Priority"] = 50,
+            ["Setting Soonest"] = 50,
+            ["Smart Exposure Order"] = 0,
+            ["Target Switch Penalty"] = 67,
+        };
         public ISchedulerDatabase Database { get; set; }
         public ISchedulerControl Control => FakeControlInstance;
         public FakeControl FakeControlInstance { get; } = new FakeControl();

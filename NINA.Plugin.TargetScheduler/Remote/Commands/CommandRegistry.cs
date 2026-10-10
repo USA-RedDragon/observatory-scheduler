@@ -36,6 +36,18 @@ namespace NINA.Plugin.TargetScheduler.Remote.Commands {
                 new PauseHandler(),
                 new ResumeHandler(),
                 new ReplanHandler(),
+                EditHandler.ExposureTemplate(),
+                BatchEditHandler.ExposureTemplates(),
+                BatchEditHandler.Projects(),
+                BatchEditHandler.ExposurePlans(),
+                new GoalEditHandler(),
+                new RuleWeightEditHandler(),
+                new TemplateCloneHandler(),
+                new TemplateDeleteHandler(),
+                new ExposureSetHandler(false),
+                new ExposureSetHandler(true),
+                new ProjectCreateHandler(false),
+                new ProjectCreateHandler(true),
             });
         }
     }

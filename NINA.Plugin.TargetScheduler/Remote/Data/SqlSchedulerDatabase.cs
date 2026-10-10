@@ -7,7 +7,7 @@ using System.Linq;
 
 namespace NINA.Plugin.TargetScheduler.Remote.Data {
 
-    public class SqlSchedulerDatabase : ISchedulerDatabase {
+    public partial class SqlSchedulerDatabase : ISchedulerDatabase {
         private readonly Func<DbConnection> connect;
 
         public SqlSchedulerDatabase(Func<DbConnection> connect) {
@@ -15,9 +15,36 @@ namespace NINA.Plugin.TargetScheduler.Remote.Data {
         }
 
         public EditOutcome ApplyEdit(EditableTable table, int id, IList<ColumnChange> changes) {
-            var outcome = new EditOutcome();
+            return ApplyEdits(table, new[] { new EditItem { Id = id, Changes = changes } })[0];
+        }
+
+        public IList<EditOutcome> ApplyEdits(EditableTable table, IList<EditItem> items) {
             using var conn = connect();
             using var tx = conn.BeginTransaction();
+            var outcomes = items.Select(item => CheckEdit(conn, tx, table, item.Id, item.Changes)).ToList();
+            if (outcomes.Any(o => !o.Found || o.Conflicts.Count > 0)) {
+                tx.Rollback();
+                return outcomes;
+            }
+            for (int n = 0; n < items.Count; n++) {
+                var changes = items[n].Changes;
+                using var upd = conn.CreateCommand();
+                upd.Transaction = tx;
+                var sets = changes.Select((c, i) => $"{Quote(c.Column.Column)} = @v{i}");
+                upd.CommandText = $"UPDATE {Quote(table.Table)} SET {string.Join(", ", sets)} WHERE Id = @id";
+                for (int i = 0; i < changes.Count; i++) {
+                    SqlCommandStore.Add(upd, $"@v{i}", Normalize(changes[i].Column, changes[i].After));
+                }
+                SqlCommandStore.Add(upd, "@id", items[n].Id);
+                upd.ExecuteNonQuery();
+            }
+            tx.Commit();
+            outcomes.ForEach(o => o.Applied = true);
+            return outcomes;
+        }
+
+        private static EditOutcome CheckEdit(DbConnection conn, DbTransaction tx, EditableTable table, int id, IList<ColumnChange> changes) {
+            var outcome = new EditOutcome();
             var cols = changes.Select(c => Quote(c.Column.Column)).ToList();
             string link = table.Table switch {
                 "project" => "Id",
@@ -57,29 +84,13 @@ namespace NINA.Plugin.TargetScheduler.Remote.Data {
                         break;
                 }
             }
-            if (outcome.Conflicts.Count > 0) {
-                tx.Rollback();
-                return outcome;
-            }
-            if (table.Table == "exposureplan" && outcome.TargetId.HasValue) {
+            if (outcome.Conflicts.Count == 0 && table.Table == "exposureplan" && outcome.TargetId.HasValue) {
                 using var q = conn.CreateCommand();
                 q.Transaction = tx;
                 q.CommandText = "SELECT projectid FROM target WHERE Id = @id";
                 SqlCommandStore.Add(q, "@id", outcome.TargetId.Value);
                 outcome.ProjectId = ToInt(q.ExecuteScalar());
             }
-            using (var upd = conn.CreateCommand()) {
-                upd.Transaction = tx;
-                var sets = changes.Select((c, i) => $"{Quote(c.Column.Column)} = @v{i}");
-                upd.CommandText = $"UPDATE {Quote(table.Table)} SET {string.Join(", ", sets)} WHERE Id = @id";
-                for (int i = 0; i < changes.Count; i++) {
-                    SqlCommandStore.Add(upd, $"@v{i}", Normalize(changes[i].Column, changes[i].After));
-                }
-                SqlCommandStore.Add(upd, "@id", id);
-                upd.ExecuteNonQuery();
-            }
-            tx.Commit();
-            outcome.Applied = true;
             return outcome;
         }
 
