@@ -17,7 +17,6 @@ cache=${TS_LINUX_TEST_CACHE:-${XDG_CACHE_HOME:-$HOME/.cache}/ts-linux-test}
 overlay=$cache/dotnet
 tool=$cache/stripr2r
 proj=NINA.Plugin.TargetScheduler.Test
-out=$repo/$proj/bin/Debug/net8.0-windows7.0
 
 if [ ! -f "$overlay/.ready" ] || [ "$(cat "$overlay/.ready")" != "$src" ]; then
   rm -rf "$overlay" "$tool"
@@ -93,15 +92,11 @@ EOF
 fi
 
 log=$cache/build.log
-DOTNET_ROOT=$src "$src/dotnet" build "$repo/$proj/$proj.csproj" -p:EnableWindowsTargeting=true -p:GenerateSupportedOSPlatformAttribute=false > "$log" 2>&1 || true
-if grep -E ": error " "$log" | grep -v MSB3073 | sort -u | grep . ; then
+if ! DOTNET_ROOT=$src "$src/dotnet" build "$repo/$proj/$proj.csproj" -p:EnableWindowsTargeting=true -p:GenerateSupportedOSPlatformAttribute=false > "$log" 2>&1; then
+  grep -E ": error " "$log" | sort -u >&2 || true
   echo "build failed, see $log" >&2
   exit 1
 fi
-
-mkdir -p "$out/External"
-cp -r "$repo/$proj/External/JPLEPH" "$out/External/"
-cp -r "$repo/$proj/Database" "$out/"
 
 PATH=$overlay:$PATH DOTNET_ROOT=$overlay TZ=${TS_TEST_TZ:-America/New_York} \
   "$overlay/dotnet" test "$repo/$proj/$proj.csproj" --no-build "$@"
