@@ -59,6 +59,14 @@ namespace NINA.Plugin.TargetScheduler.Remote.Test {
         }
 
         [Test]
+        public void ProjectMinimumAltitudeIsReal() {
+            db.Exec("ALTER TABLE project ADD COLUMN minimumaltitude REAL; UPDATE project SET minimumaltitude = 20 WHERE Id = 5");
+            var r = EditHandler.Project().Apply(Cmd.Of(CommandKinds.ProjectEdit, @"{""id"":5,""changes"":[{""field"":""minimumaltitude"",""before"":20,""after"":27.5}]}"), ctx);
+            r.Status.Should().Be(CommandStatus.Applied);
+            db.Scalar("SELECT minimumaltitude FROM project WHERE Id = 5").Should().Be(27.5);
+        }
+
+        [Test]
         public void MissingRowIsRejected() {
             var r = EditHandler.Target().Apply(Cmd.Of(CommandKinds.TargetEdit, @"{""id"":999,""changes"":[{""field"":""active"",""before"":true,""after"":false}]}"), ctx);
             r.Status.Should().Be(CommandStatus.Rejected);

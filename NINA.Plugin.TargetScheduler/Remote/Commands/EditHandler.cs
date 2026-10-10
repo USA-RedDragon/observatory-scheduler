@@ -21,7 +21,8 @@ namespace NINA.Plugin.TargetScheduler.Remote.Commands {
             return new EditHandler(CommandKinds.ProjectEdit, new EditableTable("project", "project",
                 new EditableColumn("state", "state", ColumnType.Integer, 0, 3),
                 new EditableColumn("priority", "priority", ColumnType.Integer, 0, 2),
-                new EditableColumn("minimumtime", "minimumtime", ColumnType.Integer, 1, 1440)));
+                new EditableColumn("minimumtime", "minimumtime", ColumnType.Integer, 1, 1440),
+                new EditableColumn("minimumaltitude", "minimumaltitude", ColumnType.Real, 0, 90)));
         }
 
         public static EditHandler Target() {
