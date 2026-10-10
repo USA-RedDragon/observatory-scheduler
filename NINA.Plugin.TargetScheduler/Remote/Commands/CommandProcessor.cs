@@ -111,6 +111,9 @@ namespace NINA.Plugin.TargetScheduler.Remote.Commands {
         public int ApplyPending() {
             List<CommandResult> results = new List<CommandResult>();
             lock (sync) {
+                var ordered = pending.Select((p, i) => (p, i)).OrderBy(x => x.p.Command.CreatedAt).ThenBy(x => x.i).Select(x => x.p).ToList();
+                pending.Clear();
+                pending.AddRange(ordered);
                 while (pending.Count > 0) {
                     var p = pending[0];
                     pending.RemoveAt(0);

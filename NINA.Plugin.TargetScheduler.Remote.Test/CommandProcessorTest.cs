@@ -55,6 +55,20 @@ namespace NINA.Plugin.TargetScheduler.Remote.Test {
         }
 
         [Test]
+        public void PendingCommandsApplyInCreationOrderWhateverTheArrivalOrder() {
+            var later = Cmd.Of(CommandKinds.ProjectEdit, @"{""id"":5,""changes"":[{""field"":""state"",""before"":2,""after"":3}]}", "later");
+            later.CreatedAt = ctx.Now.AddSeconds(10);
+            var earlier = Cmd.Of(CommandKinds.ProjectEdit, @"{""id"":5,""changes"":[{""field"":""state"",""before"":1,""after"":2}]}", "earlier");
+            earlier.CreatedAt = ctx.Now;
+            proc.Submit(later, "api");
+            proc.Submit(earlier, "queue");
+            proc.ApplyPending();
+            store.GetResult("earlier").Status.Should().Be(CommandStatus.Applied);
+            store.GetResult("later").Status.Should().Be(CommandStatus.Applied);
+            db.Scalar("SELECT state FROM project WHERE Id = 5").Should().Be(3L);
+        }
+
+        [Test]
         public void EditsApplyAtOnceWhenNotImaging() {
             inPlan = false;
             proc.Submit(Cmd.Of(CommandKinds.ProjectEdit, PriorityEdit), "api").Status.Should().Be(CommandStatus.Applied);
