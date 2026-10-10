@@ -21,6 +21,16 @@ Utilities/package.sh
 
 `package.sh` writes the plugin zip to `dist/`. CI (`.github/workflows/ci.yaml`, ubuntu-latest) builds, tests and packages every push, and publishes the zip as a GitHub release for a `v*` tag.
 
+## Web control
+
+The plugin can be driven from the astro-stacker web UI. In NINA's plugin options, the Web control section turns on an HTTP API on the tailnet (default port 8189, bearer token shown there) and switches web editing on or off. With web editing on, the Target Management editor in NINA is read-only and every change comes from the web UI.
+
+- `GET /os/v1/status`, and `GET /os/v1/ws` for live status and command results
+- `POST /os/v1/commands`, `GET` and `DELETE /os/v1/commands/{id}`
+- `GET` and `POST /os/v1/preview`, a full-night simulation that never writes the database, with optional what-if overrides
+
+Commands are also read from the `ts_command` table, which SymmetricDS carries from home, and results go to `ts_command_result`. Either way they apply when the current exposure ends, and the plugin is the only writer to the Target Scheduler tables. The command contract is in astro-stacker's `docs/scheduler-commands.md`.
+
 Licensed under the [Mozilla Public License 2.0](LICENSE.txt), as is the upstream project.
 
 ## Upstream: Target Scheduler NINA Plugin
