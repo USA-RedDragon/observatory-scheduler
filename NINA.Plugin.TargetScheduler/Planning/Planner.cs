@@ -29,6 +29,8 @@ namespace NINA.Plugin.TargetScheduler.Planning {
         private PreviousTargetExpert previousTargetExpert;
         private List<IProject> projects;
 
+        public Action<List<IProject>> Filtered { get; set; }
+
         public Planner(DateTime atTime, IProfile profile, ProfilePreference profilePreferences, IWeatherDataMediator weatherDataMediator, bool checkCondition, bool isPreview)
             : this(atTime, profile, profilePreferences, weatherDataMediator, checkCondition, isPreview, null) {
         }
@@ -79,6 +81,7 @@ namespace NINA.Plugin.TargetScheduler.Planning {
                     projects = FilterForMoonAvoidance(projects);
                     projects = FilterForTwilight(projects);
                     projects = FilterForHumidity(projects, weatherDataMediator);
+                    Filtered?.Invoke(projects);
 
                     // See if one or more targets are ready to image now
                     List<ITarget> readyTargets = GetTargetsReadyNow(projects);

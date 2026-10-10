@@ -5,6 +5,8 @@ using System.Linq;
 namespace NINA.Plugin.TargetScheduler.Remote.Api {
 
     public static class PreviewBuilder {
+        public const string LowerScore = "lower score";
+        public const string Complete = "its plans are complete";
 
         public static List<PreviewBlock> Blocks(IList<PlannedExposure> plans) {
             var blocks = new List<PreviewBlock>();
@@ -21,7 +23,7 @@ namespace NINA.Plugin.TargetScheduler.Remote.Api {
                 }
                 bool picked = !p.Wait && (p.NewPick || current == null || current.Wait || current.TargetId != p.TargetId);
                 if (current != null && !current.Wait && (p.Wait || current.TargetId != p.TargetId)) {
-                    current.Reason ??= EndReason(prev, p);
+                    current.Reason ??= EndReason(prev);
                 }
                 current = new PreviewBlock {
                     Start = p.Start,
@@ -42,33 +44,97 @@ namespace NINA.Plugin.TargetScheduler.Remote.Api {
                 blocks.Add(current);
             }
             if (current != null && !current.Wait) {
-                current.Reason ??= last != null && last.CompletesTarget ? "its plans are complete" : "end of the night";
+                current.Reason ??= EndReason(last);
             }
             return blocks;
         }
 
-        public static string EndReason(PlannedExposure ending, PlannedExposure next) {
+        public static string EndReason(PlannedExposure ending) {
             if (ending == null) {
                 return null;
             }
             if (ending.CompletesTarget) {
-                return "its plans are complete";
+                return Complete;
             }
-            if (ending.TargetEnd.HasValue && next != null && (ending.TargetEnd.Value - next.Start).TotalMinutes < 15) {
-                return $"it leaves its window at {ending.TargetEnd.Value.ToLocalTime():HH:mm}";
-            }
-            if (next == null || next.Wait) {
-                return "nothing else is ready";
-            }
-            return $"{next.TargetName} scored higher at the re-plan";
+            return ending.EndReason;
         }
 
-        public static List<LeftOut> LeftOut(IEnumerable<LeftOut> candidates, IEnumerable<PreviewBlock> blocks) {
+        public static List<LeftOut> LeftOut(IEnumerable<Rejection> candidates, IEnumerable<PreviewBlock> blocks, IEnumerable<DateTime> passTimes, DateTime end) {
             var used = new HashSet<int>(blocks.Where(b => !b.Wait).Select(b => b.TargetId));
+            var times = passTimes.Distinct().OrderBy(t => t).ToList();
             return candidates.Where(c => !used.Contains(c.TargetId))
-                .GroupBy(c => c.TargetId).Select(g => g.Last())
+                .GroupBy(c => c.TargetId)
+                .Select(g => Summarise(g.OrderBy(c => c.At).ToList(), times, end))
                 .OrderBy(c => c.ProjectName, StringComparer.OrdinalIgnoreCase).ThenBy(c => c.TargetName, StringComparer.OrdinalIgnoreCase)
                 .ToList();
+        }
+
+        private static LeftOut Summarise(List<Rejection> all, List<DateTime> times, DateTime end) {
+            var first = all[0];
+            var result = new LeftOut {
+                ProjectId = first.ProjectId,
+                ProjectName = first.ProjectName,
+                TargetId = first.TargetId,
+                TargetName = first.TargetName,
+            };
+            var night = all.Where(c => c.Pass != Rejection.PassEnd).ToList();
+            if (night.Count == 0) {
+                var last = all[^1];
+                result.Reason = last.Reason;
+                result.At = last.At;
+                result.Until = last.At;
+                result.AfterNight = true;
+                return result;
+            }
+
+            var spans = night.Select(c => (c, until: NextPass(times, c.At, end))).ToList();
+            result.Reasons = spans.GroupBy(s => s.c.Reason)
+                .Select(g => new LeftOutReason {
+                    Reason = g.Key,
+                    From = g.Min(s => s.c.At),
+                    Until = g.Max(s => s.until),
+                    Minutes = Math.Round(g.Sum(s => (s.until - s.c.At).TotalMinutes), 1),
+                })
+                .OrderBy(r => r.From)
+                .ToList();
+
+            var outscored = night.Where(c => c.Reason == LowerScore && c.Total.HasValue && c.WinnerTotal.HasValue)
+                .OrderBy(c => c.WinnerTotal.Value - c.Total.Value).ThenBy(c => c.At).FirstOrDefault();
+            if (outscored != null) {
+                result.Reason = LowerScore;
+                result.At = outscored.At;
+                result.Until = NextPass(times, outscored.At, end);
+                result.WinnerName = outscored.WinnerName;
+                result.WinnerTotal = outscored.WinnerTotal;
+                result.Total = outscored.Total;
+                return result;
+            }
+
+            var main = result.Reasons.OrderByDescending(r => r.Minutes).ThenBy(r => r.From).First();
+            result.Reason = main.Reason;
+            result.At = main.From;
+            result.Until = main.Until;
+            return result;
+        }
+
+        private static DateTime NextPass(List<DateTime> times, DateTime at, DateTime end) {
+            foreach (var t in times) {
+                if (t > at) {
+                    return t;
+                }
+            }
+            return end > at ? end : at;
+        }
+
+        public static List<PreviewAssumption> Assumptions(int previewSampleSeconds, int liveSampleSeconds, double hours, int maxPlans) {
+            return new List<PreviewAssumption> {
+                new PreviewAssumption { Key = "weather", Text = "No weather data is used, so humidity never rejects a target and no weather stop happens." },
+                new PreviewAssumption { Key = "grading", Text = "Every simulated sub counts as acquired, and as accepted on projects that use the grader." },
+                new PreviewAssumption { Key = "overhead", Text = "Each sub takes exactly its exposure time: no download, dither, slew, centering, autofocus or meridian flip time." },
+                new PreviewAssumption { Key = "visibility", Text = $"Target visibility is sampled every {previewSampleSeconds} s instead of the live planner's {liveSampleSeconds} s." },
+                new PreviewAssumption { Key = "web", Text = "Web pauses, re-plan requests and edits made after the simulation starts are not simulated; skips active now are applied until they end." },
+                new PreviewAssumption { Key = "limits", Text = $"The simulation stops after {hours:0} hours or {maxPlans} plans." },
+            };
         }
     }
 }

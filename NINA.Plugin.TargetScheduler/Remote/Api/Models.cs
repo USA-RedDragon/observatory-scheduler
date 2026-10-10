@@ -281,6 +281,21 @@ namespace NINA.Plugin.TargetScheduler.Remote.Api {
         public string Reason { get; set; }
     }
 
+    public class LeftOutReason {
+
+        [JsonPropertyName("reason")]
+        public string Reason { get; set; }
+
+        [JsonPropertyName("from")]
+        public DateTime From { get; set; }
+
+        [JsonPropertyName("until")]
+        public DateTime Until { get; set; }
+
+        [JsonPropertyName("minutes")]
+        public double Minutes { get; set; }
+    }
+
     public class LeftOut {
 
         [JsonPropertyName("project_id")]
@@ -297,6 +312,53 @@ namespace NINA.Plugin.TargetScheduler.Remote.Api {
 
         [JsonPropertyName("reason")]
         public string Reason { get; set; }
+
+        [JsonPropertyName("at")]
+        public DateTime? At { get; set; }
+
+        [JsonPropertyName("until")]
+        public DateTime? Until { get; set; }
+
+        [JsonPropertyName("winner_name")]
+        public string WinnerName { get; set; }
+
+        [JsonPropertyName("winner_total")]
+        public double? WinnerTotal { get; set; }
+
+        [JsonPropertyName("total")]
+        public double? Total { get; set; }
+
+        [JsonPropertyName("after_night")]
+        public bool AfterNight { get; set; }
+
+        [JsonPropertyName("reasons")]
+        public List<LeftOutReason> Reasons { get; set; }
+    }
+
+    public class Rejection {
+        public const string PassPick = "pick";
+        public const string PassWait = "wait";
+        public const string PassEnd = "end";
+
+        public int ProjectId { get; set; }
+        public string ProjectName { get; set; }
+        public int TargetId { get; set; }
+        public string TargetName { get; set; }
+        public string Reason { get; set; }
+        public DateTime At { get; set; }
+        public string Pass { get; set; }
+        public double? Total { get; set; }
+        public string WinnerName { get; set; }
+        public double? WinnerTotal { get; set; }
+    }
+
+    public class PreviewAssumption {
+
+        [JsonPropertyName("key")]
+        public string Key { get; set; }
+
+        [JsonPropertyName("text")]
+        public string Text { get; set; }
     }
 
     public class Preview {
@@ -321,6 +383,15 @@ namespace NINA.Plugin.TargetScheduler.Remote.Api {
 
         [JsonPropertyName("skips")]
         public IList<SkipEntry> Skips { get; set; } = new List<SkipEntry>();
+
+        [JsonPropertyName("stop_reason")]
+        public string StopReason { get; set; }
+
+        [JsonPropertyName("error")]
+        public string Error { get; set; }
+
+        [JsonPropertyName("assumptions")]
+        public List<PreviewAssumption> Assumptions { get; set; } = new List<PreviewAssumption>();
     }
 
     public class PlannedExposure {
@@ -339,6 +410,7 @@ namespace NINA.Plugin.TargetScheduler.Remote.Api {
         public RunnerUp RunnerUp { get; set; }
         public DateTime? TargetEnd { get; set; }
         public bool CompletesTarget { get; set; }
+        public string EndReason { get; set; }
     }
 
     public interface IRemoteBackend {

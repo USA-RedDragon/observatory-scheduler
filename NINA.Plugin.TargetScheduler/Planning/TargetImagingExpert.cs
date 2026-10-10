@@ -16,7 +16,8 @@ namespace NINA.Plugin.TargetScheduler.Planning {
     /// rejection details.
     /// </summary>
     public class TargetImagingExpert {
-        private const int TARGET_VISIBILITY_SAMPLE_INTERVAL = 10;
+        public const int TARGET_VISIBILITY_SAMPLE_INTERVAL = 10;
+        public const int PREVIEW_SAMPLE_FACTOR = 3;
         private const int TARGET_FUTURE_TEST_SAMPLE_INTERVAL = 60;
 
         private IProfile profile;
@@ -33,8 +34,8 @@ namespace NINA.Plugin.TargetScheduler.Planning {
             };
 
             if (isPreview) {
-                targetVisibilitySampleInterval *= 3;
-                targetFutureTestSampleInterval *= 3;
+                targetVisibilitySampleInterval *= PREVIEW_SAMPLE_FACTOR;
+                targetFutureTestSampleInterval *= PREVIEW_SAMPLE_FACTOR;
             }
         }
 

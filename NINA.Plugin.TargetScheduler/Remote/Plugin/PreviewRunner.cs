@@ -9,12 +9,14 @@ using NINA.Plugin.TargetScheduler.Shared.Utility;
 using NINA.Profile.Interfaces;
 using System;
 using System.Collections.Generic;
+using System.Globalization;
 using System.Linq;
 
 namespace NINA.Plugin.TargetScheduler.Remote.Plugin {
 
     public class PreviewRunner {
         private const int MaxPlans = 5000;
+        private const int Hours = 20;
         private static readonly object runLock = new object();
         private readonly IProfileService profileService;
         private readonly RemoteHost host;
@@ -53,6 +55,7 @@ namespace NINA.Plugin.TargetScheduler.Remote.Plugin {
                     Sunrise = tc.CivilTwilightEnd?.ToUniversalTime(),
                 },
                 Skips = host.Control.Skips.Active(DateTime.UtcNow),
+                Assumptions = PreviewBuilder.Assumptions(TargetImagingExpert.TARGET_VISIBILITY_SAMPLE_INTERVAL * TargetImagingExpert.PREVIEW_SAMPLE_FACTOR, TargetImagingExpert.TARGET_VISIBILITY_SAMPLE_INTERVAL, Hours, MaxPlans),
             };
 
             var projects = LoadProjects(profile, prefs, request.Overrides ?? new List<PreviewOverride>());
@@ -64,25 +67,43 @@ namespace NINA.Plugin.TargetScheduler.Remote.Plugin {
             SmartExposureRotateCache.ClearPreview();
             var weather = new DisconnectedWeatherDataMediator();
             var planned = new List<PlannedExposure>();
-            var leftOut = new List<LeftOut>();
+            var rejections = new List<Rejection>();
+            var passTimes = new List<DateTime>();
             ITarget previous = null;
             DateTime current = startLocal;
-            var stopAt = startLocal.AddHours(20);
+            var stopAt = startLocal.AddHours(Hours);
+            string stopReason = null;
+            int i = 0;
 
-            for (int i = 0; i < MaxPlans && current < stopAt; i++) {
+            for (; i < MaxPlans && current < stopAt; i++) {
                 SchedulerPlan plan;
+                Dictionary<ITarget, string> filtered = null;
                 try {
-                    plan = new Planner(current, profile, prefs, weather, false, true, projects).GetPlan(previous);
+                    var planner = new Planner(current, profile, prefs, weather, false, true, projects) {
+                        Filtered = ps => filtered = Snapshot(ps),
+                    };
+                    plan = planner.GetPlan(previous);
                 } catch (Exception e) {
                     TSLogger.Warning($"remote preview stopped at {current}: {e.Message}");
+                    preview.Error = e.Message;
+                    stopReason = $"the simulation failed at {current:HH:mm}: {e.Message}";
+                    EndLast(planned, previous, stopReason);
                     break;
                 }
+                bool continuing = plan != null && !plan.IsWait && ReferenceEquals(plan.PlanTarget, previous);
+                if (previous != null && !continuing) {
+                    EndLast(planned, previous, GaveWay(previous, filtered, plan, current));
+                }
+                if (filtered != null) {
+                    passTimes.Add(current.ToUniversalTime());
+                    string pass = plan == null ? Rejection.PassEnd : plan.IsWait ? Rejection.PassWait : Rejection.PassPick;
+                    CollectRejections(projects, filtered, plan, current, pass, rejections);
+                }
                 if (plan == null) {
-                    CollectRejections(projects, leftOut);
+                    stopReason = $"the planner found nothing left to image at {current:HH:mm}";
                     break;
                 }
                 if (plan.IsWait) {
-                    CollectRejections(projects, leftOut);
                     var until = (DateTime)plan.WaitForNextTargetTime;
                     planned.Add(new PlannedExposure { Start = current.ToUniversalTime(), End = until.ToUniversalTime(), Wait = true, TargetName = plan.PlanTarget?.Name, TargetId = plan.PlanTarget?.DatabaseId ?? 0 });
                     current = until;
@@ -90,9 +111,6 @@ namespace NINA.Plugin.TargetScheduler.Remote.Plugin {
                 } else {
                     var t = plan.PlanTarget;
                     bool newPick = !ReferenceEquals(t, previous);
-                    if (newPick) {
-                        CollectRejections(projects, leftOut);
-                    }
                     var p = new PlannedExposure {
                         Start = plan.StartTime.ToUniversalTime(),
                         End = plan.EndTime.ToUniversalTime(),
@@ -122,11 +140,60 @@ namespace NINA.Plugin.TargetScheduler.Remote.Plugin {
                 }
                 Reset(projects);
             }
+            if (stopReason == null) {
+                stopReason = i >= MaxPlans
+                    ? $"the simulation stopped after {MaxPlans} plans"
+                    : $"the simulation covers {Hours} hours from its start";
+                EndLast(planned, previous, stopReason);
+            }
 
-            preview.Blocks = PreviewBuilder.Blocks(planned);
-            preview.LeftOut = PreviewBuilder.LeftOut(leftOut, preview.Blocks);
+            preview.StopReason = stopReason;
             preview.End = planned.Count > 0 ? planned[^1].End : preview.Start;
+            preview.Blocks = PreviewBuilder.Blocks(planned);
+            preview.LeftOut = PreviewBuilder.LeftOut(rejections, preview.Blocks, passTimes, preview.End);
             return preview;
+        }
+
+        private static void EndLast(List<PlannedExposure> planned, ITarget previous, string reason) {
+            if (previous == null || planned.Count == 0) {
+                return;
+            }
+            var last = planned[^1];
+            if (!last.Wait && last.TargetId == previous.DatabaseId) {
+                last.EndReason ??= reason;
+            }
+        }
+
+        private static Dictionary<ITarget, string> Snapshot(List<IProject> projects) {
+            var reasons = new Dictionary<ITarget, string>(ReferenceEqualityComparer.Instance);
+            foreach (var p in projects ?? new List<IProject>()) {
+                foreach (var t in p.Targets) {
+                    reasons[t] = t.Rejected ? t.RejectedReason ?? p.RejectedReason : null;
+                }
+            }
+            return reasons;
+        }
+
+        private static bool LostOnScore(ITarget t, SchedulerPlan plan) {
+            return t.Rejected && t.RejectedReason == Reasons.TargetLowerScore && plan != null && !plan.IsWait && plan.PlanTarget != null;
+        }
+
+        public static string GaveWay(ITarget previous, Dictionary<ITarget, string> filtered, SchedulerPlan plan, DateTime at) {
+            if (LostOnScore(previous, plan)) {
+                var w = plan.PlanTarget;
+                return string.Create(CultureInfo.InvariantCulture,
+                    $"{w.Name} scored higher at the re-plan ({w.ScoringResults?.TotalScore:0.00} vs {previous.ScoringResults?.TotalScore:0.00})");
+            }
+            string reason = null;
+            filtered?.TryGetValue(previous, out reason);
+            bool readyLater = plan != null && plan.IsWait && !previous.Rejected && previous.StartTime > at;
+            if (reason != null) {
+                return readyLater ? $"{reason}; next ready at {previous.StartTime:HH:mm}" : reason;
+            }
+            if (readyLater) {
+                return $"it is not ready again until {previous.StartTime:HH:mm}";
+            }
+            return "the planner did not offer it at the re-plan";
         }
 
         private static DateTime DefaultStart(DateTime nowLocal, Astrometry.TwilightCircumstances tc) {
@@ -148,18 +215,30 @@ namespace NINA.Plugin.TargetScheduler.Remote.Plugin {
             }
         }
 
-        private static void CollectRejections(List<IProject> projects, List<LeftOut> leftOut) {
+        private static void CollectRejections(List<IProject> projects, Dictionary<ITarget, string> filtered, SchedulerPlan plan, DateTime at, string pass, List<Rejection> rejections) {
+            var winner = plan != null && !plan.IsWait ? plan.PlanTarget : null;
             foreach (var p in projects) {
                 foreach (var t in p.Targets) {
-                    if (t.Rejected || p.Rejected) {
-                        leftOut.Add(new LeftOut {
-                            ProjectId = p.DatabaseId,
-                            ProjectName = p.Name,
-                            TargetId = t.DatabaseId,
-                            TargetName = t.Name,
-                            Reason = t.RejectedReason ?? p.RejectedReason,
-                        });
+                    filtered.TryGetValue(t, out var reason);
+                    bool lost = LostOnScore(t, plan);
+                    if (reason == null && !lost) {
+                        continue;
                     }
+                    var r = new Rejection {
+                        ProjectId = p.DatabaseId,
+                        ProjectName = p.Name,
+                        TargetId = t.DatabaseId,
+                        TargetName = t.Name,
+                        Reason = lost ? Reasons.TargetLowerScore : reason,
+                        At = at.ToUniversalTime(),
+                        Pass = pass,
+                    };
+                    if (lost) {
+                        r.Total = t.ScoringResults?.TotalScore;
+                        r.WinnerName = winner.Name;
+                        r.WinnerTotal = winner.ScoringResults?.TotalScore;
+                    }
+                    rejections.Add(r);
                 }
             }
         }

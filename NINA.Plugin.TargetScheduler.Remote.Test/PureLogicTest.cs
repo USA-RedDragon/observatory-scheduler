@@ -126,27 +126,92 @@ namespace NINA.Plugin.TargetScheduler.Remote.Test {
                 Exp(25, 0, null, wait: true),
                 Exp(60, 1, "Ha", pick: true),
             };
+            plans[2].EndReason = "T2 scored higher at the re-plan (0.90 vs 0.80)";
+            plans[4].EndReason = "not visible";
             plans[4].TargetEnd = Now.AddMinutes(30);
+            plans[6].EndReason = "the simulation failed at 07:05: boom";
             var blocks = PreviewBuilder.Blocks(plans);
             blocks.Select(b => (b.TargetId, b.Filter, b.Count, b.Picked)).Should().Equal(
                 (1, "Ha", 2, true), (1, "OIII", 1, false), (2, "L", 2, true), (0, null, 0, false), (1, "Ha", 1, true));
             blocks[0].End.Should().Be(Now.AddMinutes(10));
             blocks[0].Scores.Should().ContainSingle();
+            blocks[0].Reason.Should().BeNull();
             blocks[1].Scores.Should().BeNull();
-            blocks[1].Reason.Should().Contain("T2 scored higher");
-            blocks[2].Reason.Should().Contain("leaves its window");
-            blocks[4].Reason.Should().Be("end of the night");
+            blocks[1].Reason.Should().Be("T2 scored higher at the re-plan (0.90 vs 0.80)");
+            blocks[2].Reason.Should().Be("not visible");
+            blocks[4].Reason.Should().Be("the simulation failed at 07:05: boom");
         }
 
         [Test]
-        public void LeftOutSkipsTargetsThatGotTime() {
+        public void PreviewBlockReasonsComeOnlyFromTheRun() {
+            var plans = new List<PlannedExposure> { Exp(0, 1, "Ha", pick: true), Exp(5, 2, "L", pick: true) };
+            plans[0].TargetEnd = Now.AddMinutes(10);
+            plans[1].CompletesTarget = true;
+            plans[1].EndReason = "not visible";
+            var blocks = PreviewBuilder.Blocks(plans);
+            blocks[0].Reason.Should().BeNull();
+            blocks[1].Reason.Should().Be(PreviewBuilder.Complete);
+        }
+
+        private static Rejection Rej(int target, int min, string reason, string pass = Rejection.PassPick, double? total = null, string winner = null, double? winnerTotal = null) {
+            return new Rejection {
+                TargetId = target, ProjectName = "P" + target, TargetName = "T" + target, Reason = reason, At = Now.AddMinutes(min), Pass = pass,
+                Total = total, WinnerName = winner, WinnerTotal = winnerTotal,
+            };
+        }
+
+        [Test]
+        public void LeftOutSkipsTargetsThatGotTimeAndIgnoresTheEndPass() {
             var blocks = new List<PreviewBlock> { new PreviewBlock { TargetId = 1 } };
+            var passes = new[] { 0, 60, 120, 600 }.Select(m => Now.AddMinutes(m)).ToList();
             var left = PreviewBuilder.LeftOut(new[] {
-                new LeftOut { TargetId = 1, ProjectName = "A", TargetName = "a", Reason = "lower score" },
-                new LeftOut { TargetId = 2, ProjectName = "B", TargetName = "b", Reason = "not visible" },
-                new LeftOut { TargetId = 2, ProjectName = "B", TargetName = "b", Reason = "moon avoidance" },
-            }, blocks);
-            left.Should().ContainSingle().Which.Reason.Should().Be("moon avoidance");
+                Rej(1, 0, "lower score"),
+                Rej(2, 0, "not yet visible"),
+                Rej(2, 60, "all exposure plans rejected for moon avoidance"),
+                Rej(2, 120, "all exposure plans rejected for moon avoidance"),
+                Rej(2, 600, "not visible", Rejection.PassEnd),
+            }, blocks, passes, Now.AddMinutes(600));
+            var l = left.Should().ContainSingle().Which;
+            l.TargetId.Should().Be(2);
+            l.Reason.Should().Be("all exposure plans rejected for moon avoidance");
+            l.At.Should().Be(Now.AddMinutes(60));
+            l.Until.Should().Be(Now.AddMinutes(600));
+            l.AfterNight.Should().BeFalse();
+            l.Reasons.Select(r => (r.Reason, r.Minutes)).Should().Equal(("not yet visible", 60.0), ("all exposure plans rejected for moon avoidance", 540.0));
+        }
+
+        [Test]
+        public void LeftOutPrefersTheClosestScoreLoss() {
+            var passes = new[] { 0, 30, 90, 500 }.Select(m => Now.AddMinutes(m)).ToList();
+            var left = PreviewBuilder.LeftOut(new[] {
+                Rej(3, 0, "not yet visible"),
+                Rej(3, 30, "lower score", total: 0.5, winner: "M31", winnerTotal: 0.9),
+                Rej(3, 90, "lower score", total: 0.72, winner: "M33", winnerTotal: 0.81),
+                Rej(3, 500, "not visible", Rejection.PassEnd),
+            }, new List<PreviewBlock>(), passes, Now.AddMinutes(500));
+            var l = left.Should().ContainSingle().Which;
+            l.Reason.Should().Be(PreviewBuilder.LowerScore);
+            l.WinnerName.Should().Be("M33");
+            l.WinnerTotal.Should().Be(0.81);
+            l.Total.Should().Be(0.72);
+            l.At.Should().Be(Now.AddMinutes(90));
+            l.Until.Should().Be(Now.AddMinutes(500));
+        }
+
+        [Test]
+        public void LeftOutOnlyAtTheEndIsLabelled() {
+            var left = PreviewBuilder.LeftOut(new[] { Rej(4, 600, "not visible", Rejection.PassEnd) }, new List<PreviewBlock>(), new[] { Now.AddMinutes(600) }, Now.AddMinutes(600));
+            var l = left.Should().ContainSingle().Which;
+            l.AfterNight.Should().BeTrue();
+            l.Reason.Should().Be("not visible");
+            l.Reasons.Should().BeNull();
+        }
+
+        [Test]
+        public void PreviewStatesItsAssumptions() {
+            var a = PreviewBuilder.Assumptions(30, 10, 20, 5000);
+            a.Select(x => x.Key).Should().Equal("weather", "grading", "overhead", "visibility", "web", "limits");
+            a.Single(x => x.Key == "visibility").Text.Should().Contain("30 s").And.Contain("10 s");
         }
     }
 }
