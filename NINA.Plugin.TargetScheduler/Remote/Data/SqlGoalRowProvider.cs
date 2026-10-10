@@ -1,21 +1,23 @@
+using NINA.Plugin.TargetScheduler.Goals;
+using NINA.Plugin.TargetScheduler.Remote.Commands;
 using System;
 using System.Collections.Generic;
 using System.Data;
 using System.Data.Common;
 using System.Globalization;
 
-namespace NINA.Plugin.TargetScheduler.Goals {
+namespace NINA.Plugin.TargetScheduler.Remote.Data {
 
-    public class DbGoalRowProvider : IGoalRowProvider {
+    public class SqlGoalRowProvider : IGoalRowProvider {
         private readonly DbConnection connection;
 
-        public DbGoalRowProvider(DbConnection connection) {
+        public SqlGoalRowProvider(DbConnection connection) {
             this.connection = connection;
         }
 
         public IList<GoalRow> LoadGoals() {
             List<GoalRow> rows = new List<GoalRow>();
-            Read(ForkSchema.GoalTable, "SELECT target_guid, filter, kind, snr_goal, depth_goal, plateau_stop, region, updated_at FROM ts_goal", r => {
+            Read(GoalSchema.GoalTable, "SELECT target_guid, filter, kind, snr_goal, depth_goal, plateau_stop, region, updated_at FROM ts_goal", r => {
                 rows.Add(new GoalRow {
                     TargetGuid = Text(r, 0),
                     Filter = Text(r, 1),
@@ -32,7 +34,7 @@ namespace NINA.Plugin.TargetScheduler.Goals {
 
         public IList<GoalProgressRow> LoadProgress() {
             List<GoalProgressRow> rows = new List<GoalProgressRow>();
-            Read(ForkSchema.GoalProgressTable, "SELECT target_guid, filter, kind, goal_value, achieved_value, progress, snr, depth, effective_hours, hours_needed, gain_per_hour_pct, plateau, low_confidence, done, measured_at FROM ts_goal_progress", r => {
+            Read(GoalSchema.GoalProgressTable, "SELECT target_guid, filter, kind, goal_value, achieved_value, progress, snr, depth, effective_hours, hours_needed, gain_per_hour_pct, plateau, low_confidence, done, measured_at FROM ts_goal_progress", r => {
                 rows.Add(new GoalProgressRow {
                     TargetGuid = Text(r, 0),
                     Filter = Text(r, 1),
@@ -62,7 +64,7 @@ namespace NINA.Plugin.TargetScheduler.Goals {
             }
 
             try {
-                if (!ForkSchema.TableExists(connection, table)) { return; }
+                if (!TableExists(connection, table)) { return; }
 
                 using (DbCommand cmd = connection.CreateCommand()) {
                     cmd.CommandText = sql;
@@ -75,6 +77,13 @@ namespace NINA.Plugin.TargetScheduler.Goals {
             } finally {
                 if (opened) { connection.Close(); }
             }
+        }
+
+        public static bool TableExists(DbConnection connection, string table) {
+            using DbCommand cmd = connection.CreateCommand();
+            cmd.CommandText = "SELECT COUNT(*) FROM sqlite_master WHERE type = 'table' AND name = @name";
+            SqlCommandStore.Add(cmd, "@name", table);
+            return Convert.ToInt64(cmd.ExecuteScalar(), CultureInfo.InvariantCulture) > 0;
         }
 
         private static string Text(DbDataReader r, int i) {

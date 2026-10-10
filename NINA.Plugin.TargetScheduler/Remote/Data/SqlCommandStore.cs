@@ -19,6 +19,7 @@ namespace NINA.Plugin.TargetScheduler.Remote.Data {
             using var conn = connect();
             Exec(conn, QueueSchema.CreateCommandTable);
             Exec(conn, QueueSchema.CreateResultTable);
+            GoalSchema.Ensure(conn);
         }
 
         public void SaveCommand(CommandEnvelope command) {

@@ -1,6 +1,5 @@
 using System;
 using System.Collections.Generic;
-using System.Data.Common;
 using System.Linq;
 
 namespace NINA.Plugin.TargetScheduler.Goals {
@@ -39,10 +38,6 @@ namespace NINA.Plugin.TargetScheduler.Goals {
                 }
                 list.Add(gp);
             }
-        }
-
-        public static SqliteGoalProgressSource Load(DbConnection connection) {
-            return new SqliteGoalProgressSource(new DbGoalRowProvider(connection));
         }
 
         public int Count => byKey.Count;

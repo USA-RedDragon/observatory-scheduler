@@ -1,28 +1,35 @@
 using NINA.Plugin.TargetScheduler.Goals;
+using NINA.Plugin.TargetScheduler.Remote.Commands;
+using NINA.Plugin.TargetScheduler.Remote.Data;
 using NINA.Plugin.TargetScheduler.Shared.Utility;
 using System;
-using System.Data.Common;
 using System.Diagnostics;
 
 namespace NINA.Plugin.TargetScheduler.Database {
 
     public static class ForkDatabase {
+        private static readonly object ensureLock = new object();
+        private static bool ensured;
 
         public static void EnsureSchema(SchedulerDatabaseContext context) {
-            try {
-                if (ForkSchema.EnsureOnce(sql => context.Database.ExecuteSqlCommand(sql))) {
-                    TSLogger.Info("fork schema ensured: ts_goal, ts_goal_progress, ts_target_season");
+            lock (ensureLock) {
+                if (ensured) { return; }
+                try {
+                    foreach (string sql in GoalSchema.All) {
+                        context.Database.ExecuteSqlCommand(sql);
+                    }
+                    ensured = true;
+                    TSLogger.Info("fork goal schema ensured");
+                } catch (Exception ex) {
+                    TSLogger.Error($"failed to ensure fork goal schema: {ex.Message}\n{ex.StackTrace}");
                 }
-            } catch (Exception ex) {
-                TSLogger.Error($"failed to ensure fork schema: {ex.Message}\n{ex.StackTrace}");
             }
         }
 
         public static IGoalProgressSource LoadGoalProgress(SchedulerDatabaseContext context) {
             try {
                 Stopwatch sw = Stopwatch.StartNew();
-                DbConnection connection = context.Database.Connection;
-                SqliteGoalProgressSource source = SqliteGoalProgressSource.Load(connection);
+                SqliteGoalProgressSource source = new SqliteGoalProgressSource(new SqlGoalRowProvider(context.Database.Connection));
                 TSLogger.Debug($"loaded goal progress snapshot: {source.Count} goal-driven filters in {sw.ElapsedMilliseconds}ms");
                 return source;
             } catch (Exception ex) {
@@ -31,14 +38,8 @@ namespace NINA.Plugin.TargetScheduler.Database {
             }
         }
 
-        public static IGoalProgressSource LoadGoalProgress() {
-            using (SchedulerDatabaseContext context = new SchedulerDatabaseInteraction().GetContext()) {
-                return LoadGoalProgress(context);
-            }
-        }
-
         public static ITargetSeasonWriter TargetSeasonWriter() {
-            return new DbTargetSeasonWriter(() => new SchedulerDatabaseInteraction().GetContext().Database.Connection);
+            return new SqlTargetSeasonWriter(() => new SchedulerDatabaseInteraction().GetContext().Database.Connection);
         }
     }
 }
