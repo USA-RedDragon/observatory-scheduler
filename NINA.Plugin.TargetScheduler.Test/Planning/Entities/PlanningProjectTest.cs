@@ -3,9 +3,11 @@ using Moq;
 using NINA.Plugin.TargetScheduler.Database.Schema;
 using NINA.Plugin.TargetScheduler.Planning.Entities;
 using NINA.Plugin.TargetScheduler.Planning.Exposures;
+using NINA.Plugin.TargetScheduler.Planning.Scoring.Rules;
 using NINA.Profile.Interfaces;
 using NUnit.Framework;
 using System;
+using System.Collections.Generic;
 
 namespace NINA.Plugin.TargetScheduler.Test.Planning.Entities {
 
@@ -51,11 +53,38 @@ namespace NINA.Plugin.TargetScheduler.Test.Planning.Entities {
             sut.EnableGrader.Should().BeTrue();
             sut.IsMosaic.Should().BeFalse();
             sut.FlatsHandling.Should().Be(Project.FLATS_HANDLING_TARGET_COMPLETION);
-            sut.RuleWeights.Should().NotBeNull().And.HaveCount(8);
+            sut.RuleWeights.Should().NotBeNull().And.HaveCount(9);
             sut.Rejected.Should().BeFalse();
             sut.HorizonDefinition.Should().NotBeNull();
             sut.ExposureCompletionHelper.Should().NotBeNull();
             sut.Targets.Should().NotBeNull();
+        }
+
+        [Test]
+        public void TestMissingRuleWeightsFilledWithZero() {
+            Mock<IProfile> profileMock = new Mock<IProfile>();
+            Project project = new Project("abc123");
+            project.RuleWeights = new List<RuleWeight> {
+                new RuleWeight(ProjectPriorityRule.RULE_NAME, 40),
+                new RuleWeight(MosaicCompletionRule.RULE_NAME, 25)
+            };
+
+            PlanningProject sut = new PlanningProject(profileMock.Object, project, new ExposureCompletionHelper(false, 0, 0));
+
+            sut.RuleWeights.Keys.Should().BeEquivalentTo(ScoringRule.GetAllScoringRules().Keys);
+            sut.RuleWeights[ProjectPriorityRule.RULE_NAME].Should().Be(40);
+            sut.RuleWeights[MosaicCompletionRule.RULE_NAME].Should().Be(25);
+            sut.RuleWeights[PanelDeficitRule.RULE_NAME].Should().Be(0);
+            sut.RuleWeights[PercentCompleteRule.RULE_NAME].Should().Be(0);
+        }
+
+        [Test]
+        public void TestRuleWeightsDictionaryKeepsExplicitWeights() {
+            Dictionary<string, double> sut = PlanningProject.GetRuleWeightsDictionary(new List<RuleWeight> { new RuleWeight(PanelDeficitRule.RULE_NAME, 70) });
+            sut[PanelDeficitRule.RULE_NAME].Should().Be(70);
+            sut.Should().HaveCount(ScoringRule.GetAllScoringRules().Count);
+
+            PlanningProject.GetRuleWeightsDictionary(null).Values.Should().OnlyContain(w => w == 0);
         }
     }
 }

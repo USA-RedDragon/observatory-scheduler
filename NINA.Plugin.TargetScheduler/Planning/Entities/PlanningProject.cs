@@ -3,6 +3,7 @@ using NINA.Plugin.TargetScheduler.Database.Schema;
 using NINA.Plugin.TargetScheduler.Flats;
 using NINA.Plugin.TargetScheduler.Planning.Exposures;
 using NINA.Plugin.TargetScheduler.Planning.Interfaces;
+using NINA.Plugin.TargetScheduler.Planning.Scoring.Rules;
 using NINA.Plugin.TargetScheduler.Shared.Utility;
 using NINA.Profile.Interfaces;
 using System;
@@ -83,11 +84,17 @@ namespace NINA.Plugin.TargetScheduler.Planning.Entities {
             }
         }
 
-        private Dictionary<string, double> GetRuleWeightsDictionary(List<RuleWeight> ruleWeights) {
-            Dictionary<string, double> dict = new Dictionary<string, double>(ruleWeights.Count);
-            ruleWeights.ForEach((rw) => {
-                dict.Add(rw.Name, rw.Weight);
+        public static Dictionary<string, double> GetRuleWeightsDictionary(List<RuleWeight> ruleWeights) {
+            Dictionary<string, double> dict = new Dictionary<string, double>();
+            ruleWeights?.ForEach((rw) => {
+                dict[rw.Name] = rw.Weight;
             });
+
+            foreach (string ruleName in ScoringRule.GetAllScoringRules().Keys) {
+                if (!dict.ContainsKey(ruleName)) {
+                    dict[ruleName] = 0;
+                }
+            }
 
             return dict;
         }

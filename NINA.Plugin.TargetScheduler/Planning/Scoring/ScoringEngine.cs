@@ -1,4 +1,5 @@
 ﻿using NINA.Plugin.TargetScheduler.Database.Schema;
+using NINA.Plugin.TargetScheduler.Planning.Exposures;
 using NINA.Plugin.TargetScheduler.Planning.Interfaces;
 using NINA.Plugin.TargetScheduler.Planning.Scoring.Rules;
 using NINA.Profile.Interfaces;
@@ -37,10 +38,14 @@ namespace NINA.Plugin.TargetScheduler.Planning.Scoring {
 
             double totalScore = 0;
             foreach (ScoringRule rule in Rules) {
-                double weight = RuleWeights[rule.Name] / ScoringRule.WEIGHT_SCALE;
+                double weight = GetRuleWeight(RuleWeights, rule.Name) / ScoringRule.WEIGHT_SCALE;
                 double score = rule.Score(this, target);
                 totalScore += weight * score;
                 target.ScoringResults.AddRuleResult(new RuleResult(rule, weight, score));
+            }
+
+            if (GetRuleWeight(RuleWeights, PanelDeficitRule.RULE_NAME) > 0 && MosaicCompletion.IsPanelPastGoalWhileMosaicIncomplete(target)) {
+                totalScore = 0;
             }
 
             target.ScoringResults.TotalScore = totalScore;
@@ -52,12 +57,20 @@ namespace NINA.Plugin.TargetScheduler.Planning.Scoring {
             List<IScoringRule> activeRules = new List<IScoringRule>();
 
             foreach (KeyValuePair<string, IScoringRule> item in allRules) {
-                if (ruleWeights[item.Value.Name] > 0) {
+                if (GetRuleWeight(ruleWeights, item.Value.Name) > 0) {
                     activeRules.Add(item.Value);
                 }
             }
 
             return activeRules;
+        }
+
+        public static double GetRuleWeight(Dictionary<string, double> ruleWeights, string ruleName) {
+            if (ruleWeights == null || ruleName == null) {
+                return 0;
+            }
+
+            return ruleWeights.TryGetValue(ruleName, out double weight) ? weight : 0;
         }
     }
 }
