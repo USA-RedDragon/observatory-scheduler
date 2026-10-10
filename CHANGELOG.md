@@ -1,5 +1,14 @@
 # Observatory Scheduler
 
+## 5.8.2.202 - 2026-10-09
+* Condition Match rule: scores a target on how well tonight suits it. Its altitude now against its own peak (culmination, capped by the project's maximum altitude), times the best of its open filters, each scored for the moon (illumination × how close and how high the moon is; narrowband keeps 75% under the worst glare, broadband loses it all) and for the sky quality the stacker measured on the last three hours of subs (unknown counts as perfect; poor skies hurt broadband fully and narrowband half as much).
+* Seasonal Runway rule: the hours a target's goals still need (goal `hours_needed`, or remaining exposures for plans without a goal) against 30% of the usable hours left in its season. 1.0 when it won't finish in season at that pace, falling linearly to 0.
+* Season Priority rule: the boost the stacker publishes for mosaic panels under the weakest-first season plan (balancing on), 1.0 for the panel most behind with the fewest months of window left.
+* Filter Steering, a per-project switch stored as a `Filter Steering` rule weight (any weight above 0 is on): in a target or panel with goals, the planner shoots the open filter with the largest goal deficit and best gain per hour, keeping broadband out of a bright moon, instead of the exposure plan order. It keeps the current filter when another is within 2%, and falls back to the normal order without goals.
+* Rarity's season scan now counts a night only when the target is inside the project's maximum altitude and meridian window and at least one of its filters passes moon avoidance.
+* The new rules and the switch are added to every project at weight 0, so nothing changes until a weight is raised.
+* `ts_goal_progress` gains `night_quality`, `night_quality_at` and `season_boost`, added on start-up when missing.
+
 ## 5.8.2.201 - 2026-10-09
 * The web status `exposure` block now comes from the real camera exposure: `started_at` is when the TakeExposure instruction opens the shutter and `ends_at` is that plus the exposure time. Before, both came from the plan pick, so a slew, autofocus or guiding settle made them minutes early.
 * Between exposures `exposure` is absent and the new `activity` field says what the rig is doing (`slewing`, `centering`, `focusing`, `guiding`, `meridian_flip`, `switching_filter`, `starting_exposure`, `exposing`, `downloading`, `saving`, `dithering`, `waiting`, `preparing` or `busy`), with `activity_detail` naming the NINA instruction or trigger and `activity_since` when it began.
