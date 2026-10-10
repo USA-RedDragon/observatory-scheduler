@@ -218,5 +218,65 @@ namespace NINA.Plugin.TargetScheduler.Planning.Test {
                 File.Delete(path);
             }
         }
+
+        [Test]
+        public void WarmFirstOrdersBySetTemperatureThenPriority() {
+            var q = DarkPlanner.WarmFirst(new[] { Need("c", 1, -20), Need("w2", 3, 0), Need("w1", 2, 0), Need("m", 1, -10) });
+            q.ConvertAll(n => n.ComboKey).Should().Equal("w1", "w2", "m", "c");
+        }
+
+        [Test]
+        public void EvidencePersistsAndTheNewestWins() {
+            string path = Path.Combine(TestContext.CurrentContext.WorkDirectory, $"darks-{Guid.NewGuid():N}.json");
+            try {
+                var s = new DarkState(path);
+                s.AddLimit(new CoolerLimit { At = Now, SetTemp = -15, Ambient = 12, Reason = "r" });
+                s.AddLimit(new CoolerLimit { At = Now, SetTemp = -20, Reason = "no ambient" });
+                s.RecordLearning("2026-10-10", Now, 12);
+
+                var again = new DarkState(path);
+                again.Limits().Should().ContainSingle().Which.SetTemp.Should().Be(-15);
+                again.LearningUsed("2026-10-10").Should().Be(Now);
+                again.LearningUsed("2026-10-11").Should().BeNull();
+
+                again.RecordHold(new CoolerHold { At = Now.AddHours(1), Ambient = 13, SetTemp = -16, PeakPower = 95 });
+                again.Limits().Should().BeEmpty();
+                again.Holds().Should().ContainSingle();
+
+                again.AddLimit(new CoolerLimit { At = Now.AddHours(2), SetTemp = -14, Ambient = 12.5, Reason = "r2" });
+                var third = new DarkState(path);
+                third.Holds().Should().BeEmpty();
+                third.Limits().Should().ContainSingle().Which.Reason.Should().Be("r2");
+            } finally {
+                File.Delete(path);
+            }
+        }
+
+        [Test]
+        public void EvidenceKeepsTheNewestEntries() {
+            var s = new DarkState(null);
+            for (int k = 0; k < DarkState.MaxEvidence + 10; k++) {
+                s.RecordHold(new CoolerHold { At = Now.AddMinutes(k), Ambient = k, SetTemp = 100 + k });
+            }
+            s.Holds().Should().HaveCount(DarkState.MaxEvidence);
+            s.Holds().Should().NotContain(h => h.At < Now.AddMinutes(10));
+        }
+
+        [Test]
+        public void KeptFailuresExpireAndCanBeLeftOut() {
+            var s = new DarkState(null);
+            s.AddLimit(new CoolerLimit { At = DateTime.UtcNow.AddDays(-31), SetTemp = -20, Ambient = 10, Reason = "old" });
+            s.AddLimit(new CoolerLimit { At = DateTime.UtcNow, SetTemp = -15, Ambient = 10, Reason = "new" });
+            s.AddLimit(new CoolerLimit { At = DateTime.UtcNow, SetTemp = -25, Reason = "this run" });
+            s.Limits().Should().HaveCount(2).And.NotContain(l => l.Reason == "old");
+            s.Limits(false).Should().ContainSingle().Which.Reason.Should().Be("this run");
+        }
+
+        [Test]
+        public void ASetTemperatureAboveAmbientCannotBeReached() {
+            DarkPlanner.AboveAmbientReason(15, 12).Should().Contain("cannot heat");
+            DarkPlanner.AboveAmbientReason(12, 12).Should().BeNull();
+            DarkPlanner.AboveAmbientReason(15, null).Should().BeNull();
+        }
     }
 }

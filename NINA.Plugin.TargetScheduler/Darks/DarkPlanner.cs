@@ -46,11 +46,19 @@ namespace NINA.Plugin.TargetScheduler.Darks {
     }
 
     public class CoolerLimit {
+        public DateTime? At { get; set; }
         public double SetTemp { get; set; }
         public double? Ambient { get; set; }
         public double? ImagingPower { get; set; }
         public double? ImagingSetpoint { get; set; }
         public string Reason { get; set; }
+    }
+
+    public class CoolerHold {
+        public DateTime At { get; set; }
+        public double Ambient { get; set; }
+        public double SetTemp { get; set; }
+        public double? PeakPower { get; set; }
     }
 
     public class DarkWindow {
@@ -96,6 +104,14 @@ namespace NINA.Plugin.TargetScheduler.Darks {
             return (needs ?? Enumerable.Empty<DarkNeed>())
                 .Where(n => n != null && n.Exposure > 0 && Remaining(n, list, nowUtc) > 0)
                 .OrderBy(n => n.Priority)
+                .ThenBy(n => n.ComboKey, StringComparer.Ordinal)
+                .ToList();
+        }
+
+        public static List<DarkNeed> WarmFirst(IEnumerable<DarkNeed> queue) {
+            return (queue ?? Enumerable.Empty<DarkNeed>())
+                .OrderByDescending(n => n.SetTemp)
+                .ThenBy(n => n.Priority)
                 .ThenBy(n => n.ComboKey, StringComparer.Ordinal)
                 .ToList();
         }
@@ -283,6 +299,16 @@ namespace NINA.Plugin.TargetScheduler.Darks {
             }
 
             return null;
+        }
+
+        public const string CameraDisconnected = "the camera disconnected";
+
+        public static string AboveAmbientReason(double setTemp, double? ambient) {
+            if (!ambient.HasValue || setTemp <= ambient.Value) {
+                return null;
+            }
+            return string.Format(CultureInfo.InvariantCulture,
+                "{0} °C is above the {1:0.#} °C ambient, and the cooler cannot heat the sensor", setTemp, ambient.Value);
         }
 
         public static string LimitReason(IEnumerable<CoolerLimit> limits, double setTemp, double? ambient, double imagingSetpoint, double? imagingPower) {

@@ -243,6 +243,9 @@ namespace NINA.Plugin.TargetScheduler.Sequencer {
                 IList<DarkNeed> needs = DarkRuntime.Store.LoadNeeds();
                 taken = DarkRuntime.Store.LoadTaken(DateTime.UtcNow.AddDays(-7)).ToList();
                 queue = DarkPlanner.Queue(needs, taken, DateTime.UtcNow);
+                if (Placement == DarkPlacement.WhileUnsafe) {
+                    queue = DarkPlanner.WarmFirst(queue);
+                }
                 TSLogger.Info($"TS Darks: {needs.Count} combos in the stacker's backlog, {queue.Count} still need darks");
             } catch (Exception ex) {
                 TSLogger.Error($"TS Darks: could not read the dark backlog: {ex.Message}");
@@ -280,7 +283,9 @@ namespace NINA.Plugin.TargetScheduler.Sequencer {
                             break;
                         }
 
-                        string skip = DarkPlanner.LimitReason(DarkRuntime.State.Limits(), need.SetTemp, Ambient(), imagingSetpoint, imagingPower);
+                        double? ambient = Ambient();
+                        string skip = DarkPlanner.AboveAmbientReason(need.SetTemp, ambient)
+                            ?? DarkPlanner.LimitReason(DarkRuntime.State.Limits(ambient.HasValue), need.SetTemp, ambient, imagingSetpoint, imagingPower);
                         CameraInfo info = cameraMediator.GetInfo();
                         TimeSpan overhead = TimeSpan.FromSeconds(Math.Max(0, info.LastDownloadTime));
                         skip ??= DarkPlanner.FitReason(w, need, currentSetpoint, imagingSetpoint, DarkRuntime.State.Rates(), overhead);
@@ -296,7 +301,7 @@ namespace NINA.Plugin.TargetScheduler.Sequencer {
                         string reach = await Reach(need.SetTemp, watch, deadline, progress, token, yieldToken);
                         currentSetpoint = cameraMediator.GetInfo().TemperatureSetPoint;
                         if (reach != null) {
-                            if (!token.IsCancellationRequested && !yieldToken.IsCancellationRequested && (deadline == null || DateTime.UtcNow < deadline.Value)) {
+                            if (reach != DarkPlanner.CameraDisconnected && !token.IsCancellationRequested && !yieldToken.IsCancellationRequested && (deadline == null || DateTime.UtcNow < deadline.Value)) {
                                 DarkRuntime.State.AddLimit(Limit(need.SetTemp, imagingSetpoint, imagingPower, reach));
                             }
                             TSLogger.Info($"TS Darks: skipping {need}: {reach}");
@@ -315,7 +320,10 @@ namespace NINA.Plugin.TargetScheduler.Sequencer {
                             break;
                         }
 
-                        (double deviation, DateTime takenAt, string path) = await TakeDark(need, watch, info.ReadoutModes?.ToList(), progress, token);
+                        (double deviation, double? peakPower, DateTime takenAt, string path) = await TakeDark(need, watch, info.ReadoutModes?.ToList(), progress, token);
+                        if (deviation <= DarkPlanner.AtTargetToleranceC) {
+                            RecordHold(need, peakPower);
+                        }
                         if (deviation > DarkPlanner.AtTargetToleranceC) {
                             string why = $"the sensor drifted {deviation:0.0} °C from {need.SetTemp} °C during the dark";
                             DarkRuntime.State.AddLimit(Limit(need.SetTemp, imagingSetpoint, imagingPower, why));
@@ -351,7 +359,21 @@ namespace NINA.Plugin.TargetScheduler.Sequencer {
         }
 
         private CoolerLimit Limit(double setTemp, double imagingSetpoint, double? imagingPower, string reason) {
-            return new CoolerLimit { SetTemp = setTemp, Ambient = Ambient(), ImagingPower = imagingPower, ImagingSetpoint = imagingSetpoint, Reason = reason };
+            var l = new CoolerLimit { At = DateTime.UtcNow, SetTemp = setTemp, Ambient = Ambient(), ImagingPower = imagingPower, ImagingSetpoint = imagingSetpoint, Reason = reason };
+            TSLogger.Info(l.Ambient.HasValue
+                ? $"TS Darks: recorded a cooler failure at {setTemp} °C and {l.Ambient.Value:0.#} °C ambient: {reason}"
+                : $"TS Darks: cooler failure at {setTemp} °C kept for this run only, the ambient temperature is not known: {reason}");
+            return l;
+        }
+
+        private void RecordHold(DarkNeed need, double? peakPower) {
+            double? ambient = Ambient();
+            if (!ambient.HasValue) {
+                TSLogger.Info($"TS Darks: the cooler held {need.SetTemp} °C, not recorded because the ambient temperature is not known");
+                return;
+            }
+            DarkRuntime.State.RecordHold(new CoolerHold { At = DateTime.UtcNow, Ambient = ambient.Value, SetTemp = need.SetTemp, PeakPower = peakPower });
+            TSLogger.Info($"TS Darks: recorded a hold at {need.SetTemp} °C and {ambient.Value:0.#} °C ambient, peak cooler power {(peakPower.HasValue ? $"{peakPower.Value:0}%" : "not reported")}");
         }
 
         private DateTime? Deadline(DarkWindow w, DarkNeed need, double imagingSetpoint, TimeSpan overhead) {
@@ -411,7 +433,7 @@ namespace NINA.Plugin.TargetScheduler.Sequencer {
             while (!DarkPlanner.AtTemperature(info.Temperature, target)) {
                 info = await watch.Next(token);
                 if (info == null || !info.Connected) {
-                    return "the camera disconnected";
+                    return DarkPlanner.CameraDisconnected;
                 }
                 double gap = Math.Abs(info.Temperature - target);
                 if (gap <= best - 0.5) {
@@ -450,7 +472,7 @@ namespace NINA.Plugin.TargetScheduler.Sequencer {
             DarkRuntime.State.RecordMove(from, imagingSetpoint, DateTime.UtcNow - start, DateTime.UtcNow);
         }
 
-        private async Task<(double deviation, DateTime takenAt, string path)> TakeDark(DarkNeed need, TemperatureWatch watch, IList<string> readoutModes, IProgress<ApplicationStatus> progress, CancellationToken token) {
+        private async Task<(double deviation, double? peakPower, DateTime takenAt, string path)> TakeDark(DarkNeed need, TemperatureWatch watch, IList<string> readoutModes, IProgress<ApplicationStatus> progress, CancellationToken token) {
             short? readout = DarkPlanner.ReadoutIndex(need.ReadoutMode, readoutModes);
             if (readout.HasValue && cameraMediator.GetInfo().ReadoutModeForNormalImages != readout.Value) {
                 cameraMediator.SetReadoutModeForNormalImages(readout.Value);
@@ -473,7 +495,7 @@ namespace NINA.Plugin.TargetScheduler.Sequencer {
             };
 
             CameraInfo before = cameraMediator.GetInfo();
-            watch.BeginHold(need.SetTemp, before.Temperature);
+            watch.BeginHold(need.SetTemp, before.Temperature, before.CoolerPower);
             DateTime takenAt = DateTime.UtcNow;
             DisplayText = $"Dark {need}";
             TSLogger.Info($"TS Darks: taking a dark: {need}, sensor {before.Temperature} °C, cooler {before.CoolerPower}%");
@@ -497,9 +519,11 @@ namespace NINA.Plugin.TargetScheduler.Sequencer {
                 imageSaveMediator.ImageSaved -= OnSaved;
             }
 
-            double deviation = watch.EndHold(cameraMediator.GetInfo().Temperature);
+            CameraInfo after = cameraMediator.GetInfo();
+            double deviation = watch.EndHold(after.Temperature, after.CoolerPower);
+            double? peakPower = watch.PeakPower;
             TSLogger.Info($"TS Darks: dark saved to {path ?? "(not reported)"}, largest sensor deviation {deviation:0.0} °C");
-            return (deviation, takenAt, path);
+            return (deviation, peakPower, takenAt, path);
         }
 
         public override string ToString() {

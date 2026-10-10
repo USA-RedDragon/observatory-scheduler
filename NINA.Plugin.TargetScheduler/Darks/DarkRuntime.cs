@@ -31,6 +31,7 @@ namespace NINA.Plugin.TargetScheduler.Darks {
         private readonly List<TaskCompletionSource<CameraInfo>> waiters = new List<TaskCompletionSource<CameraInfo>>();
         private double? holdSetpoint;
         private double maxDeviation;
+        private double? peakPower;
         private bool disposed;
 
         public TemperatureWatch(ICameraMediator camera) {
@@ -43,6 +44,9 @@ namespace NINA.Plugin.TargetScheduler.Darks {
             lock (sync) {
                 if (holdSetpoint.HasValue && info != null && info.Connected && !double.IsNaN(info.Temperature)) {
                     maxDeviation = Math.Max(maxDeviation, Math.Abs(info.Temperature - holdSetpoint.Value));
+                }
+                if (holdSetpoint.HasValue && info != null && info.Connected) {
+                    peakPower = Peak(peakPower, info.CoolerPower);
                 }
                 wake = new List<TaskCompletionSource<CameraInfo>>(waiters);
                 waiters.Clear();
@@ -65,21 +69,40 @@ namespace NINA.Plugin.TargetScheduler.Darks {
             }
         }
 
-        public void BeginHold(double setpoint, double sensor) {
-            lock (sync) {
-                holdSetpoint = setpoint;
-                maxDeviation = double.IsNaN(sensor) ? 0 : Math.Abs(sensor - setpoint);
+        public double? PeakPower {
+            get {
+                lock (sync) {
+                    return peakPower;
+                }
             }
         }
 
-        public double EndHold(double sensor) {
+        public void BeginHold(double setpoint, double sensor, double power) {
+            lock (sync) {
+                holdSetpoint = setpoint;
+                maxDeviation = double.IsNaN(sensor) ? 0 : Math.Abs(sensor - setpoint);
+                peakPower = Peak(null, power);
+            }
+        }
+
+        public double EndHold(double sensor, double power) {
             lock (sync) {
                 if (holdSetpoint.HasValue && !double.IsNaN(sensor)) {
                     maxDeviation = Math.Max(maxDeviation, Math.Abs(sensor - holdSetpoint.Value));
                 }
+                if (holdSetpoint.HasValue) {
+                    peakPower = Peak(peakPower, power);
+                }
                 holdSetpoint = null;
                 return maxDeviation;
             }
+        }
+
+        private static double? Peak(double? peak, double power) {
+            if (double.IsNaN(power)) {
+                return peak;
+            }
+            return peak.HasValue ? Math.Max(peak.Value, power) : power;
         }
 
         public void Dispose() {
