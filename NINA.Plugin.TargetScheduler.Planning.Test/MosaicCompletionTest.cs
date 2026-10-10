@@ -3,7 +3,7 @@ using NINA.Plugin.TargetScheduler.Planning.Exposures;
 using NUnit.Framework;
 using System.Collections.Generic;
 
-namespace NINA.Plugin.TargetScheduler.Test.Planning.Exposures {
+namespace NINA.Plugin.TargetScheduler.Planning.Test {
 
     [TestFixture]
     public class MosaicCompletionTest {

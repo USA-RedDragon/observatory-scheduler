@@ -32,7 +32,9 @@ jobs:
         run: dotnet build NINA.Plugin.TargetScheduler.sln -c Release -p:EnableWindowsTargeting=true
 
       - name: Test
-        run: dotnet test NINA.Plugin.TargetScheduler.Remote.Test/NINA.Plugin.TargetScheduler.Remote.Test.csproj -c Release --no-build --logger "trx;LogFileName=remote.trx" --results-directory test-results
+        run: |
+          dotnet test NINA.Plugin.TargetScheduler.Remote.Test/NINA.Plugin.TargetScheduler.Remote.Test.csproj -c Release --no-build --logger "trx;LogFileName=remote.trx" --results-directory test-results
+          dotnet test NINA.Plugin.TargetScheduler.Planning.Test/NINA.Plugin.TargetScheduler.Planning.Test.csproj -c Release --no-build --logger "trx;LogFileName=planning.trx" --results-directory test-results
 
       - name: Package
         id: package

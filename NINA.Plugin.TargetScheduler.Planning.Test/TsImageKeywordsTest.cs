@@ -3,7 +3,7 @@ using NINA.Plugin.TargetScheduler.Sequencer;
 using NUnit.Framework;
 using System.Linq;
 
-namespace NINA.Plugin.TargetScheduler.Test.Sequencer {
+namespace NINA.Plugin.TargetScheduler.Planning.Test {
 
     [TestFixture]
     public class TsImageKeywordsTest {
