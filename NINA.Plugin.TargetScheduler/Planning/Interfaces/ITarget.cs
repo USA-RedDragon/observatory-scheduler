@@ -9,6 +9,7 @@ namespace NINA.Plugin.TargetScheduler.Planning.Interfaces {
     public interface ITarget {
         string PlanId { get; set; }
         int DatabaseId { get; set; }
+        string Guid { get; set; }
         string Name { get; set; }
         Coordinates Coordinates { get; set; }
         Epoch Epoch { get; set; }

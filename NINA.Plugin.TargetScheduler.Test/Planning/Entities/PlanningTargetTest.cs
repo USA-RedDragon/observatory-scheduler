@@ -29,6 +29,7 @@ namespace NINA.Plugin.TargetScheduler.Test.Planning.Entities {
 
             PlanningTarget sut = new PlanningTarget(project, target);
             sut.PlanId.Should().NotBeNull();
+            sut.Guid.Should().Be(target.Guid).And.NotBeNullOrEmpty();
             sut.DatabaseId = 101;
             sut.Name = "target";
             sut.Coordinates.Should().Be(target.Coordinates);

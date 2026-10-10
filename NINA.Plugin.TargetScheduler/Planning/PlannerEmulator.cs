@@ -146,6 +146,7 @@ namespace NINA.Plugin.TargetScheduler.Planning {
     internal class EmulatedProject : IProject {
         public string PlanId { get; set; }
         public int DatabaseId { get; set; }
+        public string Guid { get; set; }
         public string Name { get; set; }
         public DateTime CreateDate { get; set; }
         public int SessionId { get; set; }
@@ -175,7 +176,7 @@ namespace NINA.Plugin.TargetScheduler.Planning {
         public string RejectedReason { get => throw new NotImplementedException(); set => throw new NotImplementedException(); }
 
         public EmulatedProject(string name) {
-            PlanId = Guid.NewGuid().ToString();
+            PlanId = System.Guid.NewGuid().ToString();
             Name = name;
             SessionId = 1;
         }
@@ -184,7 +185,7 @@ namespace NINA.Plugin.TargetScheduler.Planning {
     internal class EmulatedTarget : PlanningTarget {
 
         public EmulatedTarget() : base() {
-            this.PlanId = Guid.NewGuid().ToString();
+            this.PlanId = System.Guid.NewGuid().ToString();
             this.ExposurePlans = new List<IExposure>();
         }
     }
@@ -203,6 +204,7 @@ namespace NINA.Plugin.TargetScheduler.Planning {
         public int Accepted { get; set; }
         public ITarget PlanTarget { get; set; }
         public int DatabaseId { get; set; }
+        public string Guid { get; set; }
 
         public bool Rejected { get => throw new NotImplementedException(); set => throw new NotImplementedException(); }
         public string RejectedReason { get => throw new NotImplementedException(); set => throw new NotImplementedException(); }
@@ -223,7 +225,7 @@ namespace NINA.Plugin.TargetScheduler.Planning {
         public bool PreDither { get => throw new NotImplementedException(); set => throw new NotImplementedException(); }
 
         public EmulatedExposure() {
-            this.PlanId = Guid.NewGuid().ToString();
+            this.PlanId = System.Guid.NewGuid().ToString();
         }
 
         public bool IsIncomplete() {

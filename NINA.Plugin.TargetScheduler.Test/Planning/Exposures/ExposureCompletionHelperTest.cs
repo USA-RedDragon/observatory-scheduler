@@ -383,6 +383,7 @@ namespace NINA.Plugin.TargetScheduler.Test.Planning.Exposures {
 
         public string PlanId { get => throw new NotImplementedException(); set => throw new NotImplementedException(); }
         public int DatabaseId { get => throw new NotImplementedException(); set => throw new NotImplementedException(); }
+        public string Guid { get; set; }
         public string Name { get => throw new NotImplementedException(); set => throw new NotImplementedException(); }
         public Coordinates Coordinates { get => throw new NotImplementedException(); set => throw new NotImplementedException(); }
         public Epoch Epoch { get => throw new NotImplementedException(); set => throw new NotImplementedException(); }
@@ -445,6 +446,7 @@ namespace NINA.Plugin.TargetScheduler.Test.Planning.Exposures {
 
         public string PlanId { get => throw new NotImplementedException(); set => throw new NotImplementedException(); }
         public int DatabaseId { get => throw new NotImplementedException(); set => throw new NotImplementedException(); }
+        public string Guid { get; set; }
         public string FilterName { get => throw new NotImplementedException(); set => throw new NotImplementedException(); }
         public double ExposureLength { get => throw new NotImplementedException(); set => throw new NotImplementedException(); }
         public int? Gain { get => throw new NotImplementedException(); set => throw new NotImplementedException(); }

@@ -14,6 +14,7 @@ namespace NINA.Plugin.TargetScheduler.Planning.Entities {
     public class PlanningTarget : ITarget {
         public string PlanId { get; set; }
         public int DatabaseId { get; set; }
+        public string Guid { get; set; }
         public string Name { get; set; }
         public Coordinates Coordinates { get; set; }
         public Epoch Epoch { get; set; }
@@ -39,8 +40,9 @@ namespace NINA.Plugin.TargetScheduler.Planning.Entities {
         public TimeInterval MeridianWindow { get; set; }
 
         public PlanningTarget(IProject planProject, Target target) {
-            this.PlanId = Guid.NewGuid().ToString();
+            this.PlanId = System.Guid.NewGuid().ToString();
             this.DatabaseId = target.Id;
+            this.Guid = target.Guid;
             this.Name = target.Name;
             this.Coordinates = target.Coordinates;
             this.Epoch = target.Epoch;

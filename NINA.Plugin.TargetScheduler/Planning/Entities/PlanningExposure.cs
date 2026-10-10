@@ -10,6 +10,7 @@ namespace NINA.Plugin.TargetScheduler.Planning.Entities {
     public class PlanningExposure : IExposure {
         public string PlanId { get; set; }
         public int DatabaseId { get; set; }
+        public string Guid { get; set; }
         public bool IsEnabled { get; set; }
         public string FilterName { get; set; }
         public double ExposureLength { get; set; }
@@ -43,8 +44,9 @@ namespace NINA.Plugin.TargetScheduler.Planning.Entities {
         public string RejectedReason { get; set; }
 
         public PlanningExposure(ITarget planTarget, ExposurePlan exposurePlan, ExposureTemplate exposureTemplate) {
-            this.PlanId = Guid.NewGuid().ToString();
+            this.PlanId = System.Guid.NewGuid().ToString();
             this.DatabaseId = exposurePlan.Id;
+            this.Guid = exposurePlan.Guid;
             this.IsEnabled = exposurePlan.IsEnabled;
             this.FilterName = exposureTemplate.FilterName;
             this.ExposureLength = exposurePlan.Exposure != -1 ? exposurePlan.Exposure : exposureTemplate.DefaultExposure;

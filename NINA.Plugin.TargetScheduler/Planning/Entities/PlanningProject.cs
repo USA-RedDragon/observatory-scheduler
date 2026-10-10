@@ -14,6 +14,7 @@ namespace NINA.Plugin.TargetScheduler.Planning.Entities {
     public class PlanningProject : IProject {
         public string PlanId { get; set; }
         public int DatabaseId { get; set; }
+        public string Guid { get; set; }
         public string Name { get; set; }
         public string Description { get; set; }
         public ProjectState State { get; set; }
@@ -44,8 +45,9 @@ namespace NINA.Plugin.TargetScheduler.Planning.Entities {
         public string RejectedReason { get; set; }
 
         public PlanningProject(IProfile profile, Project project, ExposureCompletionHelper exposureCompletionHelper) {
-            this.PlanId = Guid.NewGuid().ToString();
+            this.PlanId = System.Guid.NewGuid().ToString();
             this.DatabaseId = project.Id;
+            this.Guid = project.Guid;
             this.Name = project.Name;
             this.Description = project.Description;
             this.State = project.State;

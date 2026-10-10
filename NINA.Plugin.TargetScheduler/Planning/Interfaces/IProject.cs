@@ -9,6 +9,7 @@ namespace NINA.Plugin.TargetScheduler.Planning.Interfaces {
     public interface IProject {
         string PlanId { get; set; }
         int DatabaseId { get; set; }
+        string Guid { get; set; }
         string Name { get; set; }
         string Description { get; set; }
         ProjectState State { get; set; }

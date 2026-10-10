@@ -25,6 +25,7 @@ namespace NINA.Plugin.TargetScheduler.Test.Planning.Entities {
 
             sut.PlanId.Should().NotBeNull();
             sut.DatabaseId.Should().Be(101);
+            sut.Guid.Should().Be(ep.Guid).And.NotBeNullOrEmpty();
             sut.FilterName.Should().Be("Ha");
             sut.TwilightLevel.Should().Be(TwilightLevel.Astronomical);
             sut.ExposureLength.Should().Be(60);
@@ -44,6 +45,7 @@ namespace NINA.Plugin.TargetScheduler.Test.Planning.Entities {
         private ExposurePlan GetExposurePlan(int id, double exposure, int desired, int accepted, int acquired) {
             ExposurePlan ep = new ExposurePlan();
             ep.Id = id;
+            ep.Guid = System.Guid.NewGuid().ToString();
             ep.Exposure = exposure;
             ep.Desired = desired;
             ep.Accepted = accepted;

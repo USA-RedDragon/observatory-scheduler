@@ -34,6 +34,7 @@ namespace NINA.Plugin.TargetScheduler.Test.Planning.Entities {
 
             sut.PlanId.Should().NotBeNull();
             sut.DatabaseId.Should().Be(101);
+            sut.Guid.Should().Be(project.Guid).And.NotBeNullOrEmpty();
             sut.Name.Should().Be("project");
             sut.State.Should().Be(ProjectState.Draft);
             sut.Priority.Should().Be(ProjectPriority.Normal);
