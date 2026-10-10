@@ -83,6 +83,8 @@ namespace NINA.Plugin.TargetScheduler.Sequencer {
         /* Before renaming BeforeTargetContainer and AfterTargetContainer to contain 'New'
          * (again) consider that it would break any existing sequence using those. */
 
+        public DateTime? CurrentWaitUntil { get; private set; }
+
         [JsonProperty] public InstructionContainer BeforeWaitContainer { get; set; }
         [JsonProperty] public InstructionContainer AfterWaitContainer { get; set; }
         [JsonProperty] public InstructionContainer BeforeTargetContainer { get; set; }
@@ -330,7 +332,12 @@ namespace NINA.Plugin.TargetScheduler.Sequencer {
 
                     SetSyncServerState(ServerState.PlanWait);
                     SchedulerProgress.WaitStart(plan.WaitForNextTargetTime);
-                    await ExecuteEventContainer(BeforeWaitContainer, progress, token);
+                    CurrentWaitUntil = plan.WaitForNextTargetTime;
+                    try {
+                        await ExecuteEventContainer(BeforeWaitContainer, progress, token);
+                    } finally {
+                        CurrentWaitUntil = null;
+                    }
 
                     SchedulerProgress.Add("Wait");
 
@@ -341,7 +348,11 @@ namespace NINA.Plugin.TargetScheduler.Sequencer {
                         TSLogger.Info($"simulated run enabled, skipping planned wait and advancing time to {atTime}");
                     }
 
+                    DateTime afterWaitStart = DateTime.UtcNow;
                     await ExecuteEventContainer(AfterWaitContainer, progress, token);
+                    if (AfterWaitContainer.Items?.Count > 0) {
+                        Darks.DarkRuntime.State.RecordAfterWait(DateTime.UtcNow - afterWaitStart, DateTime.UtcNow);
+                    }
                     TargetScheduler.EventMediator.InvokeWaitStopping();
                     SchedulerProgress.End();
 

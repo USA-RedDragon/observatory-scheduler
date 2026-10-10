@@ -22,6 +22,8 @@
     <Compile Include="..\NINA.Plugin.TargetScheduler\Grading\GraderMath.cs" Link="Linked\Grading\GraderMath.cs" />
     <Compile Include="..\NINA.Plugin.TargetScheduler\Goals\SeasonStore.cs" Link="Linked\Goals\SeasonStore.cs" />
     <Compile Include="..\NINA.Plugin.TargetScheduler\Goals\PlannerSignals.cs" Link="Linked\Goals\PlannerSignals.cs" />
+    <Compile Include="..\NINA.Plugin.TargetScheduler\Darks\DarkPlanner.cs" Link="Linked\Darks\DarkPlanner.cs" />
+    <Compile Include="..\NINA.Plugin.TargetScheduler\Darks\DarkStore.cs" Link="Linked\Darks\DarkStore.cs" />
   </ItemGroup>
 
   <ItemGroup>

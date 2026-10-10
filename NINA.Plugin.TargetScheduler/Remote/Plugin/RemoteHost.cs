@@ -203,7 +203,10 @@ namespace NINA.Plugin.TargetScheduler.Remote.Plugin {
             lock (sync) {
                 waitCanceller = cts;
             }
+            EndWaitIfReplanning();
         }
+
+        public bool ReplanOrPauseRequested => Control.ReplanRequested || Control.Paused != null;
 
         private void EndWaitIfReplanning() {
             CancellationTokenSource cts;

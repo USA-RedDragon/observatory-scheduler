@@ -26,6 +26,8 @@
     <Compile Include="..\NINA.Plugin.TargetScheduler\Goals\GoalCompletionLog.cs" Link="Linked\Goals\GoalCompletionLog.cs" />
     <Compile Include="..\NINA.Plugin.TargetScheduler\Goals\FilterSteering.cs" Link="Linked\Goals\FilterSteering.cs" />
     <Compile Include="..\NINA.Plugin.TargetScheduler\Goals\SeasonConstraints.cs" Link="Linked\Goals\SeasonConstraints.cs" />
+    <Compile Include="..\NINA.Plugin.TargetScheduler\Darks\DarkPlanner.cs" Link="Linked\Darks\DarkPlanner.cs" />
+    <Compile Include="..\NINA.Plugin.TargetScheduler\Darks\DarkState.cs" Link="Linked\Darks\DarkState.cs" />
   </ItemGroup>
 
   <ItemGroup>

@@ -20,6 +20,7 @@ namespace NINA.Plugin.TargetScheduler.Remote.Data {
             Exec(conn, QueueSchema.CreateCommandTable);
             Exec(conn, QueueSchema.CreateResultTable);
             GoalSchema.Ensure(conn);
+            Darks.DarkStore.Ensure(conn);
         }
 
         public void SaveCommand(CommandEnvelope command) {

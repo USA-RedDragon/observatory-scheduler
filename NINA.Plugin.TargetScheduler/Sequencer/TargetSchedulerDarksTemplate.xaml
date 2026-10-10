@@ -1,0 +1,54 @@
+﻿<ResourceDictionary
+    x:Class="NINA.Plugin.TargetScheduler.Sequencer.TargetSchedulerDarksTemplate"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:local="clr-namespace:NINA.Plugin.TargetScheduler.Sequencer"
+    xmlns:mini="clr-namespace:NINA.View.Sequencer.MiniSequencer;assembly=NINA.Sequencer"
+    xmlns:nina="clr-namespace:NINA.View.Sequencer;assembly=NINA.Sequencer">
+
+    <DataTemplate DataType="{x:Type local:TargetSchedulerDarks}">
+        <nina:SequenceBlockView DataContext="{Binding}">
+            <nina:SequenceBlockView.SequenceItemContent>
+                <WrapPanel Orientation="Horizontal">
+                    <TextBlock
+                        VerticalAlignment="Center"
+                        Text="Placement: "
+                        ToolTip="Before Wait: inside the Target Scheduler container's Before Wait, after the cover is closed; yields before the wait ends. While Unsafe: inside the unsafe wait loop; yields as soon as it is safe. End Of Sequence: after the cover is closed at the end." />
+                    <ComboBox
+                        Margin="4,0,4,0"
+                        VerticalAlignment="Center"
+                        ItemsSource="{Binding Placements}"
+                        SelectedItem="{Binding Placement}" />
+                    <TextBlock
+                        Margin="7.5,0,7.5,0"
+                        HorizontalAlignment="Center"
+                        VerticalAlignment="Center"
+                        Text="|" />
+                    <TextBlock
+                        VerticalAlignment="Center"
+                        Text="Stop after (min): "
+                        ToolTip="Stop starting new darks after this many minutes; 0 means no limit" />
+                    <TextBox
+                        MinWidth="40"
+                        Margin="4,0,4,0"
+                        VerticalAlignment="Center"
+                        Text="{Binding StopAfterMinutes}" />
+                    <TextBlock VerticalAlignment="Center" Text="{Binding DisplayText}" />
+                </WrapPanel>
+            </nina:SequenceBlockView.SequenceItemContent>
+            <nina:SequenceBlockView.SequenceItemProgressContent>
+                <StackPanel HorizontalAlignment="Right" Orientation="Horizontal">
+                    <TextBlock VerticalAlignment="Center" Text="Darks" />
+                    <TextBlock
+                        Margin="5,0,0,0"
+                        VerticalAlignment="Center"
+                        Text="{Binding ProgressText}" />
+                </StackPanel>
+            </nina:SequenceBlockView.SequenceItemProgressContent>
+        </nina:SequenceBlockView>
+    </DataTemplate>
+
+    <DataTemplate x:Key="NINA.Plugin.TargetScheduler.Sequencer.TargetSchedulerDarks_Mini">
+        <mini:MiniSequenceItem />
+    </DataTemplate>
+</ResourceDictionary>
