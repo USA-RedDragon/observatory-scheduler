@@ -18,6 +18,8 @@ namespace NINA.Plugin.TargetScheduler.Planning.Exposures {
             this.exposureThrottle = exposureThrottle / 100;
         }
 
+        public SimulatedStackSubs PreviewSubs { get; set; }
+
         public GoalProgress GoalFor(IExposureCounts exposurePlan) {
             return GoalFor(exposurePlan, null);
         }
@@ -36,7 +38,8 @@ namespace NINA.Plugin.TargetScheduler.Planning.Exposures {
             }
 
             if (string.IsNullOrWhiteSpace(targetGuid) || string.IsNullOrWhiteSpace(filterName)) { return null; }
-            return goalSource.Get(targetGuid, filterName);
+            GoalProgress goal = goalSource.Get(targetGuid, filterName);
+            return PreviewSubs == null ? goal : PreviewSubs.Apply(goal, targetGuid, filterName);
         }
 
         private static void LogDecision(IExposureCounts exposurePlan, GoalProgress goal) {

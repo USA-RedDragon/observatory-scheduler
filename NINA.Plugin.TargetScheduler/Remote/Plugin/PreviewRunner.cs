@@ -1,5 +1,6 @@
 using NINA.Plugin.TargetScheduler.Database;
 using NINA.Plugin.TargetScheduler.Database.Schema;
+using NINA.Plugin.TargetScheduler.Goals;
 using NINA.Plugin.TargetScheduler.Planning;
 using NINA.Plugin.TargetScheduler.Planning.Entities;
 using NINA.Plugin.TargetScheduler.Planning.Exposures;
@@ -58,7 +59,8 @@ namespace NINA.Plugin.TargetScheduler.Remote.Plugin {
                 Assumptions = PreviewBuilder.Assumptions(TargetImagingExpert.TARGET_VISIBILITY_SAMPLE_INTERVAL * TargetImagingExpert.PREVIEW_SAMPLE_FACTOR, TargetImagingExpert.TARGET_VISIBILITY_SAMPLE_INTERVAL, Hours, MaxPlans),
             };
 
-            var projects = LoadProjects(profile, prefs, request.Overrides ?? new List<PreviewOverride>());
+            var simulated = new SimulatedStackSubs();
+            var projects = LoadProjects(profile, prefs, request.Overrides ?? new List<PreviewOverride>(), simulated);
             if (projects.Count == 0) {
                 return preview;
             }
@@ -132,7 +134,7 @@ namespace NINA.Plugin.TargetScheduler.Remote.Plugin {
                             p.RunnerUp = new RunnerUp { TargetName = runner.Name, Total = runner.ScoringResults.TotalScore };
                         }
                     }
-                    Advance(t, previous);
+                    Advance(t, previous, simulated);
                     p.CompletesTarget = t.AllExposurePlans.All(ep => !ep.IsIncomplete());
                     planned.Add(p);
                     current = plan.EndTime;
@@ -204,12 +206,13 @@ namespace NINA.Plugin.TargetScheduler.Remote.Plugin {
             return nowLocal;
         }
 
-        private static void Advance(ITarget t, ITarget previous) {
+        private static void Advance(ITarget t, ITarget previous, SimulatedStackSubs simulated) {
             if (previous != null && !ReferenceEquals(t, previous)) {
                 t.ExposureSelector.TargetReset();
             }
             t.ExposureSelector.ExposureTaken(t.SelectedExposure);
             t.SelectedExposure.Acquired++;
+            simulated.Add(t.Guid, t.SelectedExposure.FilterName);
             if (t.Project.EnableGrader) {
                 t.SelectedExposure.Accepted++;
             }
@@ -260,7 +263,7 @@ namespace NINA.Plugin.TargetScheduler.Remote.Plugin {
             }
         }
 
-        private static List<IProject> LoadProjects(IProfile profile, ProfilePreference prefs, List<PreviewOverride> overrides) {
+        private static List<IProject> LoadProjects(IProfile profile, ProfilePreference prefs, List<PreviewOverride> overrides, SimulatedStackSubs simulated) {
             var profileId = profile.Id.ToString();
             var overridden = new HashSet<int>(overrides.Where(o => o.Entity == "project").Select(o => o.Id));
             var result = new List<IProject>();
@@ -298,7 +301,7 @@ namespace NINA.Plugin.TargetScheduler.Remote.Plugin {
                         target.FilterCadences = context.GetFilterCadences(target.Id);
                         target.ExposurePlans.RemoveAll(ep => !ep.IsEnabled);
                     }
-                    var helper = new ExposureCompletionHelper(project.EnableGrader, prefs.DelayGrading, prefs.ExposureThrottle);
+                    var helper = new ExposureCompletionHelper(project.EnableGrader, prefs.DelayGrading, prefs.ExposureThrottle) { PreviewSubs = simulated };
                     var planning = new PlanningProject(profile, project, helper);
                     planning.Targets.ForEach(t => t.IsPreview = true);
                     result.Add(planning);

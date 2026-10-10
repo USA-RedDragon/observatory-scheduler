@@ -34,6 +34,10 @@ namespace NINA.Plugin.TargetScheduler.Goals {
         public int? StackSubs { get; set; }
         public int? MinSubs { get; set; }
         public int? SubLimit { get; set; }
+
+        public GoalProgress Copy() {
+            return (GoalProgress)MemberwiseClone();
+        }
     }
 
     public interface IGoalProgressSource {
