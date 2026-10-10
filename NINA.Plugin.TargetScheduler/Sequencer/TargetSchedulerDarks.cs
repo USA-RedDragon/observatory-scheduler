@@ -292,7 +292,7 @@ namespace NINA.Plugin.TargetScheduler.Sequencer {
                         DisplayText = $"{need} ({ci + 1}/{queue.Count})";
                         ProgressText = $"{need.FramesNeeded - remaining}/{need.FramesNeeded}";
 
-                        DateTime? deadline = Deadline(w, need, imagingSetpoint);
+                        DateTime? deadline = Deadline(w, need, imagingSetpoint, overhead);
                         string reach = await Reach(need.SetTemp, watch, deadline, progress, token, yieldToken);
                         currentSetpoint = cameraMediator.GetInfo().TemperatureSetPoint;
                         if (reach != null) {
@@ -354,12 +354,17 @@ namespace NINA.Plugin.TargetScheduler.Sequencer {
             return new CoolerLimit { SetTemp = setTemp, Ambient = Ambient(), ImagingPower = imagingPower, ImagingSetpoint = imagingSetpoint, Reason = reason };
         }
 
-        private DateTime? Deadline(DarkWindow w, DarkNeed need, double imagingSetpoint) {
-            if (w.Placement != DarkPlacement.BeforeWait || !w.WaitUntil.HasValue) {
-                return null;
+        private DateTime? Deadline(DarkWindow w, DarkNeed need, double imagingSetpoint, TimeSpan overhead) {
+            DateTime? deadline = null;
+            if (w.Placement == DarkPlacement.BeforeWait && w.WaitUntil.HasValue) {
+                TimeSpan back = DarkPlanner.MoveTime(need.SetTemp, imagingSetpoint, DarkRuntime.State.Rates()) ?? TimeSpan.Zero;
+                deadline = w.WaitUntil.Value - (w.AfterWait ?? TimeSpan.Zero) - back - TimeSpan.FromSeconds(need.Exposure);
             }
-            TimeSpan back = DarkPlanner.MoveTime(need.SetTemp, imagingSetpoint, DarkRuntime.State.Rates()) ?? TimeSpan.Zero;
-            return w.WaitUntil.Value - (w.AfterWait ?? TimeSpan.Zero) - back - TimeSpan.FromSeconds(need.Exposure);
+            DateTime? sun = DarkPlanner.LatestStart(w, need.Exposure, overhead, TimeSpan.FromHours(18));
+            if (sun.HasValue && (!deadline.HasValue || sun.Value < deadline.Value)) {
+                deadline = sun;
+            }
+            return deadline;
         }
 
         private async Task<string> Reach(double target, TemperatureWatch watch, DateTime? deadline, IProgress<ApplicationStatus> progress, CancellationToken token, CancellationToken yieldToken) {
@@ -372,7 +377,7 @@ namespace NINA.Plugin.TargetScheduler.Sequencer {
             if (deadline.HasValue) {
                 TimeSpan left = deadline.Value - DateTime.UtcNow;
                 if (left <= TimeSpan.Zero) {
-                    return "no time left before the wait ends";
+                    return $"no time left before {deadline.Value.ToLocalTime():HH:mm:ss}, the latest start for the dark";
                 }
                 cts.CancelAfter(left);
             }
@@ -392,7 +397,7 @@ namespace NINA.Plugin.TargetScheduler.Sequencer {
             } catch (OperationCanceledException) when (!token.IsCancellationRequested) {
                 return yieldToken.IsCancellationRequested
                     ? $"imaging can resume, so the move to {target} °C was stopped"
-                    : $"{target} °C was not reached before the wait ends";
+                    : $"{target} °C was not reached by {deadline?.ToLocalTime():HH:mm:ss}, the latest start for the dark";
             }
 
             DarkRuntime.State.RecordMove(from, target, DateTime.UtcNow - start, DateTime.UtcNow);

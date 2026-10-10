@@ -71,6 +71,8 @@ namespace NINA.Plugin.TargetScheduler.Darks {
 
         public const string SunLimitBasis = "measured from the darks in s3:astro/DARK with the stacker's light-leak spread (leak limit about 0.6 ADU) and the sun's altitude over each exposure at the site in their headers. 2026-09-29 dawn, 600 s Blue at -5 °C: dark 0020 ended at -0.67° and is clean (0.33 ADU); dark 0021 ran from -0.67° to +1.45° and leaks (0.71 ADU), then 1.76, 3.11 and 4.14 ADU. 2026-09-30 dawn, 600 s Luminance at +5 °C: clean to -4.46° (0.37 ADU). 2025-02-05 dusk, 600 s S-II at 0 °C: dark 0113 from -3.61° to -5.66° leaks (5.51 ADU) and dark 0114 from -5.66° to -7.73° is at the limit (0.59 ADU). -8° is below every altitude at which any of these darks gained signal, and below the last clean dawn dark at -0.67°";
 
+        public static readonly TimeSpan UnmeasuredMoveHorizon = TimeSpan.FromHours(1);
+
         private static readonly TimeSpan SunStep = TimeSpan.FromMinutes(1);
 
         public static TimeSpan SessionGap(DarkNeed need) {
@@ -202,8 +204,43 @@ namespace NINA.Plugin.TargetScheduler.Darks {
             }
         }
 
+        public static DateTime? SunLimitAt(DarkWindow w, TimeSpan within) {
+            if (w.SunAltitudeAt == null) {
+                return w.Now;
+            }
+            DateTime end = w.Now + within;
+            for (DateTime t = w.Now; ; t += SunStep) {
+                if (t > end) {
+                    t = end;
+                }
+                double? alt = w.SunAltitudeAt(t);
+                if (!alt.HasValue || double.IsNaN(alt.Value) || alt.Value >= SunLimitDegrees) {
+                    return t;
+                }
+                if (t >= end) {
+                    return null;
+                }
+            }
+        }
+
+        public static DateTime? LatestStart(DarkWindow w, double exposure, TimeSpan overhead, TimeSpan within) {
+            DateTime? sun = SunLimitAt(w, within);
+            if (!sun.HasValue) {
+                return null;
+            }
+            return sun.Value - TimeSpan.FromSeconds(Math.Max(0, exposure)) - (overhead > TimeSpan.Zero ? overhead : TimeSpan.Zero);
+        }
+
         public static string FitReason(DarkWindow w, DarkNeed need, double currentSetpoint, double imagingSetpoint, CoolerRates rates, TimeSpan overhead) {
-            string sun = SunFitReason(w, MoveTime(currentSetpoint, need.SetTemp, rates) ?? TimeSpan.Zero, need.Exposure, overhead);
+            TimeSpan? there = MoveTime(currentSetpoint, need.SetTemp, rates);
+            if (!there.HasValue) {
+                string unmeasured = UnmeasuredMoveReason(w, need, currentSetpoint, overhead);
+                if (unmeasured != null) {
+                    return unmeasured;
+                }
+            }
+
+            string sun = SunFitReason(w, there ?? TimeSpan.Zero, need.Exposure, overhead);
             if (sun != null) {
                 return sun;
             }
@@ -212,7 +249,6 @@ namespace NINA.Plugin.TargetScheduler.Darks {
                 return null;
             }
 
-            TimeSpan? there = MoveTime(currentSetpoint, need.SetTemp, rates);
             TimeSpan? back = MoveTime(need.SetTemp, imagingSetpoint, rates);
             if (!there.HasValue || !back.HasValue) {
                 return string.Format(CultureInfo.InvariantCulture,
@@ -226,6 +262,24 @@ namespace NINA.Plugin.TargetScheduler.Darks {
                     "a {0} s dark with {1:0} s to reach {2} °C, {3:0} s to return and {4:0} s of AfterWait would end at {5:HH:mm:ss}, after the wait ends at {6:HH:mm:ss}",
                     need.Exposure, there.Value.TotalSeconds, need.SetTemp, back.Value.TotalSeconds, (w.AfterWait ?? TimeSpan.Zero).TotalSeconds,
                     end.ToLocalTime(), w.WaitUntil.Value.ToLocalTime());
+            }
+
+            return null;
+        }
+
+        public static string UnmeasuredMoveReason(DarkWindow w, DarkNeed need, double currentSetpoint, TimeSpan overhead) {
+            string direction = need.SetTemp < currentSetpoint ? "cooling" : "warming";
+            if (w.Placement == DarkPlacement.BeforeWait && w.WaitUntil.HasValue) {
+                return string.Format(CultureInfo.InvariantCulture,
+                    "it needs the setpoint moved from {0} °C to {1} °C, the cooler's {2} rate has not been measured, and the wait ends at {3:HH:mm:ss}, so the move cannot be shown to finish in time",
+                    currentSetpoint, need.SetTemp, direction, w.WaitUntil.Value.ToLocalTime());
+            }
+
+            DateTime? latest = LatestStart(w, need.Exposure, overhead, UnmeasuredMoveHorizon + TimeSpan.FromSeconds(Math.Max(0, need.Exposure)) + overhead);
+            if (latest.HasValue) {
+                return string.Format(CultureInfo.InvariantCulture,
+                    "it needs the setpoint moved from {0} °C to {1} °C, the cooler's {2} rate has not been measured, and a {3} s dark must start by {4:HH:mm:ss} to end before the sun reaches {5:0.0}°, so the move cannot be shown to finish in time",
+                    currentSetpoint, need.SetTemp, direction, need.Exposure, latest.Value.ToLocalTime(), SunLimitDegrees);
             }
 
             return null;

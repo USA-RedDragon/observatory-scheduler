@@ -86,6 +86,35 @@ namespace NINA.Plugin.TargetScheduler.Planning.Test {
         }
 
         [Test]
+        public void AnUnmeasuredMoveIsSkippedWhenTheSunLimitIsNear() {
+            var w = new DarkWindow { Placement = DarkPlacement.EndOfSequence, Now = Now, SunAltitudeAt = Rising(DarkPlanner.SunLimitDegrees - 0.8, 0.2) };
+            string reason = DarkPlanner.FitReason(w, Need("cold", 1, -20, exposure: 120), -14, -14, new CoolerRates { WarmingSecondsPerC = 25.9 }, TimeSpan.FromSeconds(3));
+            reason.Should().Contain("cooling rate has not been measured").And.Contain("must start by");
+            DarkPlanner.FitReason(w, Need("same", 1, -14, exposure: 120), -14, -14, new CoolerRates(), TimeSpan.FromSeconds(3)).Should().BeNull();
+        }
+
+        [Test]
+        public void TheMeasuredRateRejectsTheDarkTheIncidentStarted() {
+            var w = new DarkWindow { Placement = DarkPlacement.EndOfSequence, Now = Now, SunAltitudeAt = Rising(DarkPlanner.SunLimitDegrees - 0.8, 0.2) };
+            var rates = new CoolerRates { CoolingSecondsPerC = 41.8, WarmingSecondsPerC = 25.9 };
+            DarkPlanner.FitReason(w, Need("cold", 1, -20, exposure: 120), -14, -14, rates, TimeSpan.FromSeconds(3)).Should().Contain("light-safe limit");
+        }
+
+        [Test]
+        public void AnUnmeasuredMoveIsMeasuredWhenNoDeadlineIsNear() {
+            var w = new DarkWindow { Placement = DarkPlacement.WhileUnsafe, Now = Now, Safe = false, SunAltitudeAt = Rising(DarkPlanner.SunLimitDegrees - 30, 0.2) };
+            DarkPlanner.FitReason(w, Need("cold", 1, -20, exposure: 300), -14, -14, new CoolerRates(), TimeSpan.FromSeconds(3)).Should().BeNull();
+            DarkPlanner.LatestStart(w, 300, TimeSpan.FromSeconds(3), TimeSpan.FromHours(18)).Should().Be(Now.AddMinutes(150).AddSeconds(-303));
+            DarkPlanner.LatestStart(w, 300, TimeSpan.Zero, TimeSpan.FromHours(1)).Should().BeNull();
+        }
+
+        [Test]
+        public void BeforeWaitSkipsAnUnmeasuredMoveBecauseTheWaitEnds() {
+            var w = new DarkWindow { Placement = DarkPlacement.BeforeWait, Now = Now, WaitUntil = Now.AddHours(5), AfterWait = TimeSpan.Zero, SunAltitudeAt = Night };
+            DarkPlanner.FitReason(w, Need("cold", 1, -20), -14, -14, new CoolerRates { WarmingSecondsPerC = 10 }, TimeSpan.Zero).Should().Contain("the wait ends");
+        }
+
+        [Test]
         public void WhileUnsafeYieldsAsSoonAsItIsSafe() {
             var w = new DarkWindow { Placement = DarkPlacement.WhileUnsafe, Now = Now, SunAltitudeAt = Night };
             DarkPlanner.StopReason(w).Should().Contain("no safety monitor");
