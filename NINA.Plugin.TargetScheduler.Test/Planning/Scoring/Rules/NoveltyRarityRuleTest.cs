@@ -2,6 +2,8 @@ using FluentAssertions;
 using Moq;
 using NINA.Astrometry;
 using NINA.Plugin.TargetScheduler.Astrometry;
+using NINA.Plugin.TargetScheduler.Database;
+using NINA.Plugin.TargetScheduler.Planning;
 using NINA.Plugin.TargetScheduler.Database.Schema;
 using NINA.Plugin.TargetScheduler.Goals;
 using NINA.Plugin.TargetScheduler.Planning.Exposures;
@@ -19,28 +21,33 @@ namespace NINA.Plugin.TargetScheduler.Test.Planning.Scoring.Rules {
     [TestFixture]
     public class NoveltyRarityRuleTest {
 
-        private class Writer : ITargetSeasonWriter {
+        private class Reader : ITargetSeasonReader {
             public List<TargetSeasonRow> Rows { get; } = new List<TargetSeasonRow>();
+            public int Loads { get; private set; }
 
-            public void Upsert(TargetSeasonRow row) => Rows.Add(row);
+            public IList<TargetSeasonRow> LoadAll() {
+                Loads++;
+                return Rows;
+            }
         }
 
-        private Writer writer;
+        private Reader reader;
+        private static readonly DateTime Today = new DateTime(2026, 10, 9);
 
         [SetUp]
         public void SetUp() {
-            writer = new Writer();
-            RarityRule.SeasonWriter = writer;
-            RarityRule.WriteInBackground = false;
-            RarityRule.ClearCache();
+            reader = new Reader();
+            SeasonWorker.ReaderFactory = () => reader;
+            SeasonWorker.Store.Clear();
+            RarityRule.Today = () => Today;
         }
 
         [TearDown]
         public void TearDown() {
             MosaicCompletion.GoalSource = null;
-            RarityRule.SeasonWriter = null;
-            RarityRule.WriteInBackground = true;
-            RarityRule.ClearCache();
+            SeasonWorker.ReaderFactory = ForkDatabase.TargetSeasonReader;
+            SeasonWorker.Store.Clear();
+            RarityRule.Today = () => DateTime.Now.Date;
         }
 
         [Test]
@@ -113,58 +120,89 @@ namespace NINA.Plugin.TargetScheduler.Test.Planning.Scoring.Rules {
             return (engine.Object, target);
         }
 
-        [Test]
-        public void RarityWithRealAstrometry() {
-            DateTime night = new DateTime(2026, 10, 9, 22, 0, 0);
-            Coordinates rhoOph = new Coordinates(AstroUtil.HMSToDegrees("16:25:35"), AstroUtil.DMSToDegrees("-23:26:50"), Epoch.J2000, Coordinates.RAType.Degrees);
+        private static void Put(IScoringEngine engine, ITarget target, int nights, bool outOfSeason, DateTime computedFor) {
+            SeasonWorker.Store.Put(new SeasonEntry {
+                TargetGuid = target.Guid,
+                Key = RarityRule.Key(engine, target),
+                Season = new SeasonResult { NightsLeft = nights, OutOfSeason = outOfSeason },
+                ComputedFor = computedFor
+            });
+        }
 
-            var (e1, oph) = RarityCase(rhoOph, night, 20, 60);
-            new RarityRule().Score(e1, oph.Object).Should().Be(0);
-            RarityRule.GetSeason(e1, oph.Object).OutOfSeason.Should().BeTrue();
+        [Test]
+        public void RarityColdCacheScoresZeroWithoutComputing() {
+            var (engine, target) = RarityCase(TestData.M42, Today.AddHours(22), 20, 60);
+            Stopwatch sw = Stopwatch.StartNew();
+            new RarityRule().Score(engine, target.Object).Should().Be(0);
+            sw.ElapsedMilliseconds.Should().BeLessThan(200);
+            reader.Loads.Should().Be(1);
+            new RarityRule().Score(engine, target.Object).Should().Be(0);
+            reader.Loads.Should().Be(1);
+        }
+
+        [Test]
+        public void RarityReadsTheWorkerCache() {
+            var (engine, target) = RarityCase(TestData.M42, Today.AddHours(22), 20, 60);
+            Put(engine, target.Object, 10, false, Today);
+            new RarityRule().Score(engine, target.Object).Should().Be(1);
+
+            Put(engine, target.Object, 65, false, Today.AddDays(-1));
+            new RarityRule().Score(engine, target.Object).Should().BeApproximately(0.5, 0.0001);
+
+            Put(engine, target.Object, 10, false, Today.AddDays(-2));
+            new RarityRule().Score(engine, target.Object).Should().Be(0);
+
+            Put(engine, target.Object, 0, true, Today);
+            new RarityRule().Score(engine, target.Object).Should().Be(0);
+        }
+
+        [Test]
+        public void RarityIgnoresAnEntryForOldTargetSettings() {
+            var (engine, target) = RarityCase(TestData.M42, Today.AddHours(22), 20, 60);
+            Put(engine, target.Object, 10, false, Today);
+            target.Object.Project.MinimumTime = 90;
+            new RarityRule().Score(engine, target.Object).Should().Be(0);
+        }
+
+        [Test]
+        public void RarityFallsBackToTheSeasonTable() {
+            var (engine, target) = RarityCase(TestData.M42, Today.AddHours(22), 20, 60);
+            reader.Rows.Add(new TargetSeasonRow { TargetGuid = target.Object.Guid.ToUpperInvariant(), NightsLeft = 21, ComputedFor = Today.AddDays(-1) });
+            new RarityRule().Score(engine, target.Object).Should().BeApproximately(0.9, 0.0001);
+
+            target.Object.IsPreview = true;
+            new RarityRule().Score(engine, target.Object).Should().BeApproximately(0.9, 0.0001);
+        }
+
+        [Test]
+        public void RarityIgnoresStaleTableRows() {
+            var (engine, target) = RarityCase(TestData.M42, Today.AddHours(22), 20, 60);
+            reader.Rows.Add(new TargetSeasonRow { TargetGuid = target.Object.Guid, NightsLeft = 21, ComputedFor = Today.AddDays(-3) });
+            new RarityRule().Score(engine, target.Object).Should().Be(0);
+        }
+
+        [Test]
+        public void SeasonScanWithRealAstrometry() {
+            DateTime night = new DateTime(2026, 10, 9);
+            ObserverInfo observer = TestData.North_Mid_Lat;
+            Coordinates rhoOph = new Coordinates(AstroUtil.HMSToDegrees("16:25:35"), AstroUtil.DMSToDegrees("-23:26:50"), Epoch.J2000, Coordinates.RAType.Degrees);
+            HorizonDefinition horizon = new HorizonDefinition(20);
+
+            SeasonCalculator.Compute(observer, rhoOph, horizon, TwilightLevel.Nighttime, 60, night).OutOfSeason.Should().BeTrue();
+            SeasonCalculator.Compute(observer, rhoOph, horizon, TwilightLevel.Nighttime, 60, new DateTime(2026, 7, 20)).NightsLeft.Should().BeInRange(15, 60);
 
             Stopwatch sw = Stopwatch.StartNew();
-            var (e2, m42) = RarityCase(TestData.M42, night, 20, 60);
-            SeasonResult season = RarityRule.GetSeason(e2, m42.Object);
-            long firstMs = sw.ElapsedMilliseconds;
-            season.OutOfSeason.Should().BeFalse();
-            season.NightsLeft.Should().BeInRange(120, 220);
-            new RarityRule().Score(e2, m42.Object).Should().Be(0);
+            SeasonResult m42 = SeasonCalculator.Compute(observer, TestData.M42, horizon, TwilightLevel.Nighttime, 60, night);
+            long m42Ms = sw.ElapsedMilliseconds;
+            m42.OutOfSeason.Should().BeFalse();
+            m42.NightsLeft.Should().BeInRange(120, 220);
 
-            var (e3, polar) = RarityCase(TestData.STAR_NORTH_CIRCP, night, 20, 60);
             sw.Restart();
-            SeasonResult circumpolar = RarityRule.GetSeason(e3, polar.Object);
+            SeasonResult polar = SeasonCalculator.Compute(observer, TestData.STAR_NORTH_CIRCP, horizon, TwilightLevel.Nighttime, 60, night);
             long polarMs = sw.ElapsedMilliseconds;
-            circumpolar.NightsLeft.Should().Be(365);
-            circumpolar.Capped.Should().BeTrue();
-
-            sw.Restart();
-            RarityRule.GetSeason(e3, polar.Object);
-            sw.ElapsedMilliseconds.Should().BeLessThan(50);
-            TestContext.WriteLine($"rarity scan: M42 {firstMs}ms, circumpolar {polarMs}ms");
-
-            writer.Rows.Should().HaveCount(3);
-            writer.Rows[1].TargetGuid.Should().Be(m42.Object.Guid);
-            writer.Rows[1].ComputedFor.Should().Be(new DateTime(2026, 10, 9));
-            writer.Rows[1].SeasonEnd.Should().NotBeNull();
-        }
-
-        [Test]
-        public void RarityLateInSeasonScoresHigh() {
-            DateTime night = new DateTime(2026, 7, 20, 22, 0, 0);
-            Coordinates rhoOph = new Coordinates(AstroUtil.HMSToDegrees("16:25:35"), AstroUtil.DMSToDegrees("-23:26:50"), Epoch.J2000, Coordinates.RAType.Degrees);
-            var (engine, oph) = RarityCase(rhoOph, night, 20, 60);
-            SeasonResult season = RarityRule.GetSeason(engine, oph.Object);
-            season.OutOfSeason.Should().BeFalse();
-            season.NightsLeft.Should().BeLessThan(60);
-            new RarityRule().Score(engine, oph.Object).Should().BeGreaterThan(0.5);
-        }
-
-        [Test]
-        public void RarityDoesNotWriteForPreviews() {
-            var (engine, target) = RarityCase(TestData.M42, new DateTime(2026, 10, 9, 22, 0, 0), 20, 60);
-            target.Object.IsPreview = true;
-            RarityRule.GetSeason(engine, target.Object);
-            writer.Rows.Should().BeEmpty();
+            polar.NightsLeft.Should().Be(365);
+            polar.Capped.Should().BeTrue();
+            TestContext.WriteLine($"season scan with TS astrometry: M42 {m42Ms}ms, circumpolar {polarMs}ms");
         }
     }
 }

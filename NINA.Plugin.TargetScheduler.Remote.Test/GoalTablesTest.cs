@@ -115,6 +115,21 @@ VALUES ('t1', 'ha ', 1, 24.5, 23.9, 0.82, NULL, 23.9, 6.5, 1.25, 3.5, 1, 0, 0, '
         }
 
         [Test]
+        public void SeasonReaderReturnsWrittenRows() {
+            new SqlTargetSeasonReader(db.Connect).LoadAll().Should().BeEmpty();
+            using (var conn = db.Connect()) { GoalSchema.Ensure(conn); }
+            var writer = new SqlTargetSeasonWriter(db.Connect);
+            writer.Upsert(new TargetSeasonRow { TargetGuid = "t1", NightsLeft = 40, SeasonEnd = new DateTime(2026, 11, 17), ComputedFor = new DateTime(2026, 10, 9), ComputedAt = DateTime.UtcNow });
+            writer.Upsert(new TargetSeasonRow { TargetGuid = "t2", NightsLeft = 0, OutOfSeason = true, ComputedFor = new DateTime(2026, 10, 8), ComputedAt = DateTime.UtcNow });
+            db.Exec("INSERT INTO ts_target_season (target_guid, nights_left, computed_for) VALUES ('bad', 3, 'not a date')");
+
+            var rows = new SqlTargetSeasonReader(db.Connect).LoadAll();
+            rows.Should().HaveCount(2);
+            rows.Should().ContainSingle(r => r.TargetGuid == "t1" && r.NightsLeft == 40 && !r.OutOfSeason && r.ComputedFor == new DateTime(2026, 10, 9));
+            rows.Should().ContainSingle(r => r.TargetGuid == "t2" && r.OutOfSeason && r.ComputedFor == new DateTime(2026, 10, 8));
+        }
+
+        [Test]
         public void SeasonUpsertWithoutTableThrowsForTheCallerToSwallow() {
             var writer = new SqlTargetSeasonWriter(db.Connect);
             Action act = () => writer.Upsert(new TargetSeasonRow { TargetGuid = "t1" });

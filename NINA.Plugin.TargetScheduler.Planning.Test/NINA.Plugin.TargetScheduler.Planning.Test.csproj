@@ -18,6 +18,7 @@
     <Compile Include="..\NINA.Plugin.TargetScheduler\Goals\GoalScoring.cs" Link="Linked\Goals\GoalScoring.cs" />
     <Compile Include="..\NINA.Plugin.TargetScheduler\Goals\SeasonCounter.cs" Link="Linked\Goals\SeasonCounter.cs" />
     <Compile Include="..\NINA.Plugin.TargetScheduler\Goals\TargetSeason.cs" Link="Linked\Goals\TargetSeason.cs" />
+    <Compile Include="..\NINA.Plugin.TargetScheduler\Goals\SeasonStore.cs" Link="Linked\Goals\SeasonStore.cs" />
   </ItemGroup>
 
   <ItemGroup>
