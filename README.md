@@ -2,7 +2,7 @@
 
 A personal build of [Target Scheduler](https://github.com/tcpalmer/nina.plugin.targetscheduler) by Tom Palmer, for one observatory. It is not a fork for general use and is not supported by Target Scheduler's author. If you want Target Scheduler, install the official plugin from the NINA plugin manager.
 
-Each release is upstream Target Scheduler at a fixed base plus a small set of fixes, listed in the GitHub release notes. Release 1 (5.8.2.100) is based on upstream v5.8.2.0.
+Each release is upstream Target Scheduler at a fixed base plus a small set of fixes, listed in the GitHub release notes. Releases 5.8.2.100 and later are based on upstream v5.8.2.0.
 
 The plugin has its own NINA plugin identifier and name, so NINA never offers to update it to the official plugin. It deliberately keeps Target Scheduler's assembly name, namespaces, sequence item types and the `%LOCALAPPDATA%\NINA\SchedulerPlugin` data folder, so existing sequences and the existing database keep working. Never install it alongside the official plugin.
 

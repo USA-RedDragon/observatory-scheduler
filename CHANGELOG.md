@@ -1,3 +1,19 @@
+# Observatory Scheduler
+
+## 5.8.2.200 - 2026-10-09
+* Web control: optional HTTP API on port 8189 with a bearer token, plus a durable command queue (`ts_command`, `ts_command_result`). Commands apply when the current exposure ends, in the order they were made.
+* Web editing switch that makes NINA's Target Management editor read-only while the web UI edits.
+* Per-filter SNR or depth goals (`ts_goal`, `ts_goal_progress`); targets with goals finish on the goal instead of the image count.
+* Novelty, Rarity and Panel Deficit scoring rules, added to existing projects at weight 0. Rarity reads a background season cache (`ts_target_season`).
+* TS project, target, exposure plan and panel FITS keywords on lights.
+* Includes the 5.8.2.101 options page fix.
+
+## 5.8.2.101 - 2026-10-09
+* The plugin options page shows again.
+
+## 5.8.2.100 - 2026-10-09
+* Renamed to Observatory Scheduler with its own NINA plugin identifier, based on upstream 5.8.2.0.
+
 # Target Scheduler
 
 ## 5.8.3.1 - 2025-12-28
