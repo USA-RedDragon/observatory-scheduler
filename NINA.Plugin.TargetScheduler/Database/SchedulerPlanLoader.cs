@@ -1,4 +1,5 @@
 ﻿using NINA.Plugin.TargetScheduler.Database.Schema;
+using NINA.Plugin.TargetScheduler.Goals;
 using NINA.Plugin.TargetScheduler.Planning.Entities;
 using NINA.Plugin.TargetScheduler.Planning.Exposures;
 using NINA.Plugin.TargetScheduler.Planning.Interfaces;
@@ -12,6 +13,8 @@ namespace NINA.Plugin.TargetScheduler.Database {
     public class SchedulerPlanLoader {
         private IProfile activeProfile;
         private string profileId;
+
+        public IGoalProgressSource GoalSource { get; private set; }
 
         public SchedulerPlanLoader(IProfile activeProfile) {
             this.activeProfile = activeProfile;
@@ -45,9 +48,10 @@ namespace NINA.Plugin.TargetScheduler.Database {
 
                 bool haveActiveTargets = false;
                 ProfilePreference profilePreference = GetProfilePreferences();
+                GoalSource = ForkDatabase.LoadGoalProgress(context);
 
                 foreach (Project project in projects) {
-                    ExposureCompletionHelper helper = new ExposureCompletionHelper(project.EnableGrader, profilePreference.DelayGrading, profilePreference.ExposureThrottle);
+                    ExposureCompletionHelper helper = new ExposureCompletionHelper(project.EnableGrader, profilePreference.DelayGrading, profilePreference.ExposureThrottle, GoalSource);
                     foreach (Target target in project.Targets) {
                         if (target.Enabled) {
                             target.ExposurePlans.RemoveAll(ep => !ep.IsEnabled);
@@ -68,7 +72,7 @@ namespace NINA.Plugin.TargetScheduler.Database {
 
                 List<IProject> planProjects = new List<IProject>();
                 foreach (Project project in projects) {
-                    ExposureCompletionHelper helper = new ExposureCompletionHelper(project.EnableGrader, profilePreference.DelayGrading, profilePreference.ExposureThrottle);
+                    ExposureCompletionHelper helper = new ExposureCompletionHelper(project.EnableGrader, profilePreference.DelayGrading, profilePreference.ExposureThrottle, GoalSource);
                     PlanningProject planProject = new PlanningProject(activeProfile, project, helper);
                     planProjects.Add(planProject);
                 }

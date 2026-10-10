@@ -367,7 +367,7 @@ namespace NINA.Plugin.TargetScheduler.Sequencer {
                 target = context.GetTargetByProject(target.ProjectId, targetDatabaseId);
 
                 ProfilePreference profilePreference = context.GetProfilePreference(target.Project.ProfileId, true);
-                ExposureCompletionHelper helper = new ExposureCompletionHelper(target.Project.EnableGrader, profilePreference.DelayGrading, profilePreference.ExposureThrottle);
+                ExposureCompletionHelper helper = new ExposureCompletionHelper(target.Project.EnableGrader, profilePreference.DelayGrading, profilePreference.ExposureThrottle, ForkDatabase.LoadGoalProgress(context));
 
                 IProject project = new PlanningProject(serverProfile, target.Project, helper);
                 return new PlanningTarget(project, target);

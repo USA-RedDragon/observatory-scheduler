@@ -1,4 +1,5 @@
 ﻿using NINA.Plugin.TargetScheduler.Database.Schema;
+using NINA.Plugin.TargetScheduler.Goals;
 using NINA.Plugin.TargetScheduler.Planning.Interfaces;
 using System.Collections.Generic;
 using System.Linq;
@@ -10,13 +11,58 @@ namespace NINA.Plugin.TargetScheduler.Planning.Exposures {
         private double delayGrading;
         private double exposureThrottle;
 
+        public IGoalProgressSource GoalSource { get; set; }
+
         public ExposureCompletionHelper(bool imageGradingEnabled, double delayGrading, double exposureThrottle) {
             this.imageGradingEnabled = imageGradingEnabled;
             this.delayGrading = delayGrading;
             this.exposureThrottle = exposureThrottle / 100;
         }
 
+        public ExposureCompletionHelper(bool imageGradingEnabled, double delayGrading, double exposureThrottle, IGoalProgressSource goalSource)
+            : this(imageGradingEnabled, delayGrading, exposureThrottle) {
+            GoalSource = goalSource;
+        }
+
+        public GoalProgress GoalFor(IExposureCounts exposurePlan) {
+            return GoalFor(exposurePlan, null);
+        }
+
+        private GoalProgress GoalFor(IExposureCounts exposurePlan, string targetGuid) {
+            if (GoalSource == null || exposurePlan == null) { return null; }
+
+            string filterName = null;
+            if (exposurePlan is IExposure exposure) {
+                targetGuid ??= exposure.PlanTarget?.Guid;
+                filterName = exposure.FilterName;
+            } else if (exposurePlan is ExposurePlan plan) {
+                targetGuid ??= plan.Target?.Guid;
+                filterName = plan.ExposureTemplate?.FilterName;
+            }
+
+            if (string.IsNullOrWhiteSpace(targetGuid) || string.IsNullOrWhiteSpace(filterName)) { return null; }
+            return GoalSource.Get(targetGuid, filterName);
+        }
+
+        private static double ExposureSeconds(IExposureCounts exposurePlan) {
+            if (exposurePlan is IExposure exposure) { return exposure.ExposureLength; }
+            if (exposurePlan is ExposurePlan plan) {
+                return plan.Exposure > 0 ? plan.Exposure : plan.ExposureTemplate?.DefaultExposure ?? 0;
+            }
+
+            return 0;
+        }
+
         public double PercentComplete(IExposureCounts exposurePlan) {
+            return PercentComplete(exposurePlan, null);
+        }
+
+        private double PercentComplete(IExposureCounts exposurePlan, string targetGuid) {
+            GoalProgress goal = GoalFor(exposurePlan, targetGuid);
+            if (goal != null) {
+                return GoalCompletion.PercentComplete(goal);
+            }
+
             if (imageGradingEnabled) {
                 // If delayed grading threshold has not been reached, then 'provisional' completion is based on raw number acquired
                 if (IsProvisionalPercentComplete(exposurePlan)) {
@@ -37,7 +83,7 @@ namespace NINA.Plugin.TargetScheduler.Planning.Exposures {
                 return noExposurePlansIsComplete ? 100 : 0;
             }
 
-            return target.ExposurePlans.Sum(PercentComplete) / target.ExposurePlans.Count;
+            return target.ExposurePlans.Sum(ep => PercentComplete(ep, target.Guid)) / target.ExposurePlans.Count;
         }
 
         public double PercentComplete(ITarget target) {
@@ -58,10 +104,16 @@ namespace NINA.Plugin.TargetScheduler.Planning.Exposures {
         }
 
         public bool IsProvisionalPercentComplete(IExposureCounts exposurePlan) {
+            if (GoalFor(exposurePlan) != null) { return false; }
             return imageGradingEnabled && delayGrading > 0 && CurrentDelayThreshold(exposurePlan) < delayGrading;
         }
 
         public int RemainingExposures(IExposureCounts exposurePlan) {
+            GoalProgress goal = GoalFor(exposurePlan);
+            if (goal != null) {
+                return GoalCompletion.RemainingExposures(goal, ExposureSeconds(exposurePlan));
+            }
+
             if (imageGradingEnabled) {
                 return exposurePlan.Accepted >= exposurePlan.Desired ? 0 : exposurePlan.Desired - exposurePlan.Accepted;
             }
