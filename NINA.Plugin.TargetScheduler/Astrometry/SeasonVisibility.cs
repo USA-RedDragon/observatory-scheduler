@@ -7,6 +7,7 @@ namespace NINA.Plugin.TargetScheduler.Astrometry {
 
     public class SeasonVisibility : INightUsability {
         public const int DEFAULT_SAMPLE_MINUTES = 10;
+        public const int TWILIGHT_STRIDE_NIGHTS = 7;
 
         private readonly ObserverInfo observerInfo;
         private readonly Coordinates coordinates;
@@ -27,8 +28,7 @@ namespace NINA.Plugin.TargetScheduler.Astrometry {
         }
 
         public double UsableMinutes(int night) {
-            TwilightCircumstances twilight = new TwilightCircumstances(observerInfo, firstNight.AddDays(night));
-            TimeInterval span = twilight.GetTwilightSpan(twilightLevel);
+            TimeInterval span = DarkSpan(night);
             if (span == null || span.EndTime <= span.StartTime) { return 0; }
 
             double longest = 0;
@@ -57,6 +57,15 @@ namespace NINA.Plugin.TargetScheduler.Astrometry {
             }
 
             return longest;
+        }
+
+        private TimeInterval DarkSpan(int night) {
+            int anchor = night - night % TWILIGHT_STRIDE_NIGHTS;
+            TwilightCircumstances twilight = new TwilightCircumstances(observerInfo, firstNight.AddDays(anchor));
+            TimeInterval span = twilight.GetTwilightSpan(twilightLevel);
+            if (span == null || anchor == night) { return span; }
+            int shift = night - anchor;
+            return new TimeInterval(span.StartTime.AddDays(shift), span.EndTime.AddDays(shift));
         }
     }
 }
