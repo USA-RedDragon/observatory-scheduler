@@ -85,6 +85,10 @@ namespace NINA.Plugin.TargetScheduler.Sequencer {
 
         public DateTime? CurrentWaitUntil { get; private set; }
 
+        public ImagingLimit CurrentLimit { get; private set; }
+
+        private string lastLimitText;
+
         [JsonProperty] public InstructionContainer BeforeWaitContainer { get; set; }
         [JsonProperty] public InstructionContainer AfterWaitContainer { get; set; }
         [JsonProperty] public InstructionContainer BeforeTargetContainer { get; set; }
@@ -297,7 +301,13 @@ namespace NINA.Plugin.TargetScheduler.Sequencer {
 
                 atTime = GetPlannerTime(DateTime.Now, atTime);
                 profilePreferences = GetProfilePreferences();
-                SchedulerPlan plan = new Planner(atTime, profileService.ActiveProfile, profilePreferences, weatherDataMediator, false, false).GetPlan(previousPlanTarget);
+                CurrentLimit = SequenceLimits.Find(this, profileService.ActiveProfile, atTime);
+                string limitText = SequenceLimits.Describe(CurrentLimit);
+                if (limitText != lastLimitText) {
+                    TSLogger.Info($"end of imaging: {limitText}");
+                    lastLimitText = limitText;
+                }
+                SchedulerPlan plan = new Planner(atTime, profileService.ActiveProfile, profilePreferences, weatherDataMediator, false, false) { Limit = CurrentLimit }.GetPlan(previousPlanTarget);
                 Remote.Plugin.RemoteHost.Instance?.PlanComputed();
                 SetSyncServerState(ServerState.Ready);
 

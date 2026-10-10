@@ -25,6 +25,8 @@ namespace NINA.Plugin.TargetScheduler.Planning {
         private int targetVisibilitySampleInterval = TARGET_VISIBILITY_SAMPLE_INTERVAL;
         private int targetFutureTestSampleInterval = TARGET_FUTURE_TEST_SAMPLE_INTERVAL;
 
+        public ImagingLimit Limit { get; set; }
+
         public TargetImagingExpert(IProfile activeProfile, ProfilePreference profilePreferences, bool isPreview) {
             this.profile = activeProfile;
             this.observerInfo = new ObserverInfo {
@@ -74,6 +76,15 @@ namespace NINA.Plugin.TargetScheduler.Planning {
                 TSLogger.Warning($"No twilight span for target {project.Name}/{target.Name} on {Utils.FormatDateTimeFull(atTime)} at latitude {observerInfo.Latitude}");
                 SetRejected(target, Reasons.TargetAllExposurePlans);
                 return false;
+            }
+
+            if (Limit != null && Limit.End < twilightSpan.EndTime) {
+                if (Limit.End <= twilightSpan.StartTime || Limit.End <= atTime) {
+                    TSLogger.Trace($"Target not visible before the sequence ends imaging {project.Name}/{target.Name} at {Utils.FormatDateTimeFull(Limit.End)}");
+                    SetRejected(target, Reasons.TargetNotVisible);
+                    return false;
+                }
+                twilightSpan = new TimeInterval(twilightSpan.StartTime, Limit.End);
             }
 
             if (!targetVisibility.ImagingPossible) {

@@ -1,6 +1,8 @@
 ﻿using NINA.Astrometry;
+using NINA.Core.Enum;
 using NINA.Core.Model;
 using NINA.Core.Utility.WindowService;
+using NINA.Equipment.Equipment.MyTelescope;
 using NINA.Equipment.Interfaces;
 using NINA.Equipment.Interfaces.Mediator;
 using NINA.PlateSolving.Interfaces;
@@ -64,6 +66,9 @@ namespace NINA.Plugin.TargetScheduler.Sequencer {
         private int syncActionTimeout;
         private int syncSolveRotateTimeout;
 
+        private readonly object flipLock = new object();
+        private DateTime? flipStart;
+        private TimeSpan flipWait;
         private NewTargetStartPublisher newTargetStartPublisher;
         private TargetStartPublisher targetStartPublisher;
 
@@ -135,6 +140,8 @@ namespace NINA.Plugin.TargetScheduler.Sequencer {
             TSLogger.Debug("executing target container");
 
             try {
+                telescopeMediator.BeforeMeridianFlip += BeforeMeridianFlip;
+                telescopeMediator.AfterMeridianFlip += AfterMeridianFlip;
                 AddEndTimeTrigger(plan.PlanTarget);
                 AddInstructions(plan);
                 EnsureUnparked(progress, token);
@@ -145,6 +152,8 @@ namespace NINA.Plugin.TargetScheduler.Sequencer {
             } catch (Exception ex) {
                 throw;
             } finally {
+                telescopeMediator.BeforeMeridianFlip -= BeforeMeridianFlip;
+                telescopeMediator.AfterMeridianFlip -= AfterMeridianFlip;
                 imageSaveWatcher.WaitForAllImagesSaved();
                 parentContainer.ExecuteEventContainer(parentContainer.AfterEachExposureContainer, progress, token).Wait();
 
@@ -310,6 +319,7 @@ namespace NINA.Plugin.TargetScheduler.Sequencer {
                         target,
                         exposure);
             SetItemDefaults(takeExposure, nameof(TakeExposure));
+            takeExposure.Guard = () => BeforeExposure(exposure);
 
             takeExposure.ExposureCount = GetExposureCount();
             takeExposure.ExposureTime = exposure.ExposureLength;
@@ -319,6 +329,60 @@ namespace NINA.Plugin.TargetScheduler.Sequencer {
             takeExposure.ROI = target.ROI;
 
             Add(takeExposure);
+        }
+
+        private FlipSettings ProfileFlipSettings() {
+            var m = activeProfile.MeridianFlipSettings;
+            return m == null ? null : new FlipSettings { MinutesAfterMeridian = m.MinutesAfterMeridian, MaxMinutesAfterMeridian = m.MaxMinutesAfterMeridian, PauseTimeBeforeMeridian = m.PauseTimeBeforeMeridian, UseSideOfPier = m.UseSideOfPier };
+        }
+
+        private Task BeforeMeridianFlip(object sender, BeforeMeridianFlipEventArgs e) {
+            try {
+                TelescopeInfo scope = telescopeMediator.GetInfo();
+                TimeSpan wait = ImagingLimit.NinaFlipWait(scope.TimeToMeridianFlip, ProfileFlipSettings());
+                lock (flipLock) {
+                    flipStart = DateTime.Now;
+                    flipWait = wait;
+                }
+            } catch (Exception ex) {
+                TSLogger.Warning($"meridian flip start not recorded: {ex.Message}");
+            }
+            return Task.CompletedTask;
+        }
+
+        private Task AfterMeridianFlip(object sender, AfterMeridianFlipEventArgs e) {
+            DateTime? start;
+            TimeSpan wait;
+            lock (flipLock) {
+                start = flipStart;
+                wait = flipWait;
+                flipStart = null;
+            }
+            if (!start.HasValue || !e.Success) {
+                return Task.CompletedTask;
+            }
+            TimeSpan elapsed = DateTime.Now - start.Value;
+            TimeSpan? overhead = ImagingLimit.MeasuredOverhead(elapsed, wait);
+            if (overhead.HasValue) {
+                SequenceLimits.Flips.Record(overhead.Value, DateTime.UtcNow);
+                TSLogger.Info($"meridian flip measured from NINA's flip start and end events: {elapsed.TotalSeconds:0} s in total, {wait.TotalSeconds:0} s of it waiting to pass the meridian, {overhead.Value.TotalSeconds:0} s for the slew, recenter and settle");
+            }
+            return Task.CompletedTask;
+        }
+
+        private string BeforeExposure(IExposure exposure) {
+            DateTime now = DateTime.Now;
+            ImagingLimit limit = parentContainer.CurrentLimit;
+            if (limit == null || now.AddSeconds(exposure.ExposureLength) <= limit.End) {
+                return null;
+            }
+
+            foreach (ISequenceItem item in GetItemsSnapshot()) {
+                if (item.Status == SequenceEntityStatus.CREATED) {
+                    item.Skip();
+                }
+            }
+            return $"a {exposure.ExposureLength} s exposure starting now would end at {now.AddSeconds(exposure.ExposureLength):HH:mm:ss}, after the sequence ends imaging at {limit.End:HH:mm:ss} ({limit.Basis}), so the rest of this plan is skipped";
         }
 
         private void AddDither() {

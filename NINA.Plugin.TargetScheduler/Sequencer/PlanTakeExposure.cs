@@ -62,7 +62,15 @@ namespace NINA.Plugin.TargetScheduler.Sequencer {
             this.exposure = exposure;
         }
 
+        public Func<string> Guard { get; set; }
+
         public override async Task Execute(IProgress<ApplicationStatus> progress, CancellationToken token) {
+            string skip = Guard?.Invoke();
+            if (skip != null) {
+                TSLogger.Info($"not starting the exposure: {skip}");
+                return;
+            }
+
             var capture = new CaptureSequence() {
                 ExposureTime = ExposureTime,
                 Binning = Binning,

@@ -57,7 +57,7 @@ namespace NINA.Plugin.TargetScheduler.Sequencer {
 
             try {
                 TSLogger.Info("TargetSchedulerBackgroundCondition: running planner");
-                Planner planner = new Planner(DateTime.Now, GetApplicableProfile(), GetProfilePreferences(), weatherDataMediator, true, false);
+                Planner planner = new Planner(DateTime.Now, GetApplicableProfile(), GetProfilePreferences(), weatherDataMediator, true, false) { Limit = SequenceLimits.Find(Parent, GetApplicableProfile(), DateTime.Now) };
                 SchedulerPlan plan = planner.GetPlan(null);
 
                 if (plan == null) {

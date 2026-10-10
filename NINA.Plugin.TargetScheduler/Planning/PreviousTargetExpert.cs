@@ -21,6 +21,8 @@ namespace NINA.Plugin.TargetScheduler.Planning {
         private bool isPreview;
         private ObserverInfo observerInfo;
 
+        public ImagingLimit Limit { get; set; }
+
         public PreviousTargetExpert(IProfile profile, ProfilePreference profilePreferences, bool isPreview, ObserverInfo observerInfo) {
             this.activeProfile = profile;
             this.profilePreferences = profilePreferences;
@@ -114,6 +116,12 @@ namespace NINA.Plugin.TargetScheduler.Planning {
             targetExpert.ExposureTwilightFilter(nextExposure, atTime, twilightCircumstances, (TwilightLevel)twilightLevel);
             if (nextExposure.Rejected) {
                 TSLogger.Info($"not continuing previous target at {atTime}, {previousTarget.Name}: next exposure ({nextExposure.FilterName}) not suitable for current twilight level ({twilightLevel})");
+                return false;
+            }
+
+            string limitReason = Limit?.FitReason(atTime, nextExposure.ExposureLength, previousTarget.CulminationTime);
+            if (limitReason != null) {
+                TSLogger.Info($"not continuing previous target at {atTime}, {previousTarget.Name}: {limitReason}");
                 return false;
             }
 

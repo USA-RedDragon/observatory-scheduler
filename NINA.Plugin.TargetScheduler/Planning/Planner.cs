@@ -31,6 +31,20 @@ namespace NINA.Plugin.TargetScheduler.Planning {
 
         public Action<List<IProject>> Filtered { get; set; }
 
+        private ImagingLimit limit;
+
+        public ImagingLimit Limit {
+            get => limit;
+            set {
+                limit = value;
+                previousTargetExpert.Limit = value;
+            }
+        }
+
+        private TargetImagingExpert Expert() {
+            return new TargetImagingExpert(activeProfile, profilePreferences, isPreview) { Limit = limit };
+        }
+
         public Planner(DateTime atTime, IProfile profile, ProfilePreference profilePreferences, IWeatherDataMediator weatherDataMediator, bool checkCondition, bool isPreview)
             : this(atTime, profile, profilePreferences, weatherDataMediator, checkCondition, isPreview, null) {
         }
@@ -66,6 +80,10 @@ namespace NINA.Plugin.TargetScheduler.Planning {
                         projects = GetProjects();
                     }
 
+                    if (limit != null) {
+                        TSLogger.Info($"sequence end of imaging: {limit.End:yyyy-MM-dd HH:mm:ss} ({limit.Basis})");
+                    }
+
                     // If the previous target still has time in it's initial minimum time span and is still acceptable, then stick with it
                     if (previousTargetExpert.CanContinue(atTime, weatherDataMediator, previousTarget)) {
                         TSLogger.Info($"previous target still within permitted time span, continuing: {previousTarget.Project.Name}/{previousTarget.Name}: {previousTarget.BonusTimeSpanEnd} > {atTime} ");
@@ -87,6 +105,10 @@ namespace NINA.Plugin.TargetScheduler.Planning {
                     List<ITarget> readyTargets = GetTargetsReadyNow(projects);
                     if (readyTargets.Count > 0) {
                         SelectTargetExposures(readyTargets);
+                        FilterForSequenceEnd(readyTargets);
+                    }
+
+                    if (readyTargets.Count > 0) {
                         ITarget selectedTarget = readyTargets.Count == 1
                             ? readyTargets[0]
                             : SelectTargetByScore(readyTargets, new ScoringEngine(activeProfile, profilePreferences, atTime, previousTarget));
@@ -206,7 +228,7 @@ namespace NINA.Plugin.TargetScheduler.Planning {
         /// <returns></returns>
         public List<IProject> FilterForVisibility(List<IProject> projects) {
             if (NoProjects(projects)) { return null; }
-            TargetImagingExpert targetExpert = new TargetImagingExpert(activeProfile, profilePreferences, isPreview);
+            TargetImagingExpert targetExpert = Expert();
 
             foreach (IProject project in projects) {
                 if (project.Rejected) { continue; }
@@ -228,7 +250,7 @@ namespace NINA.Plugin.TargetScheduler.Planning {
         public List<IProject> FilterForMoonAvoidance(List<IProject> projects) {
             if (NoProjects(projects)) { return null; }
             IMoonAvoidanceExpert moonExpert = new MoonAvoidanceExpert(observerInfo);
-            TargetImagingExpert targetExpert = new TargetImagingExpert(activeProfile, profilePreferences, isPreview);
+            TargetImagingExpert targetExpert = Expert();
 
             foreach (IProject project in projects) {
                 if (project.Rejected) { continue; }
@@ -250,7 +272,7 @@ namespace NINA.Plugin.TargetScheduler.Planning {
             if (NoProjects(projects)) { return null; }
             TwilightCircumstances twilightCircumstances = TwilightCircumstances.AdjustTwilightCircumstances(observerInfo, atTime);
             TwilightLevel? currentTwilightLevel = twilightCircumstances.GetCurrentTwilightLevel(atTime);
-            TargetImagingExpert targetExpert = new TargetImagingExpert(activeProfile, profilePreferences, isPreview);
+            TargetImagingExpert targetExpert = Expert();
 
             foreach (IProject project in projects) {
                 if (project.Rejected) { continue; }
@@ -271,7 +293,7 @@ namespace NINA.Plugin.TargetScheduler.Planning {
         /// <returns></returns>
         public List<IProject> FilterForHumidity(List<IProject> projects, IWeatherDataMediator weatherDataMediator) {
             if (NoProjects(projects)) { return null; }
-            TargetImagingExpert targetExpert = new TargetImagingExpert(activeProfile, profilePreferences, isPreview);
+            TargetImagingExpert targetExpert = Expert();
 
             foreach (IProject project in projects) {
                 if (project.Rejected) { continue; }
@@ -324,7 +346,7 @@ namespace NINA.Plugin.TargetScheduler.Planning {
             }
 
             ITarget nextTarget = targets.OrderBy(t => t.StartTime).First();
-            TargetImagingExpert targetExpert = new TargetImagingExpert(activeProfile, profilePreferences, isPreview);
+            TargetImagingExpert targetExpert = Expert();
             return targetExpert.ReadyNow(atTime, nextTarget, false) ? nextTarget : null;
         }
 
@@ -337,7 +359,7 @@ namespace NINA.Plugin.TargetScheduler.Planning {
             List<ITarget> targets = new List<ITarget>();
 
             if (NoProjects(projects)) { return targets; }
-            TargetImagingExpert targetExpert = new TargetImagingExpert(activeProfile, profilePreferences, isPreview);
+            TargetImagingExpert targetExpert = Expert();
 
             foreach (IProject project in projects) {
                 if (project.Rejected) { continue; }
@@ -384,7 +406,7 @@ namespace NINA.Plugin.TargetScheduler.Planning {
             // present when visible.  For example, moon conditions later in the night could either reject or allow
             // certain exposures - and perhaps not until later in the target's visibility time span.
             List<ITarget> imagableTargets = new List<ITarget>();
-            TargetImagingExpert targetExpert = new TargetImagingExpert(activeProfile, profilePreferences, isPreview);
+            TargetImagingExpert targetExpert = Expert();
             IMoonAvoidanceExpert moonExpert = new MoonAvoidanceExpert(observerInfo);
 
             foreach (ITarget target in potentialTargets) {
@@ -423,6 +445,22 @@ namespace NINA.Plugin.TargetScheduler.Planning {
             }
 
             return nextAvailableTarget;
+        }
+
+        public void FilterForSequenceEnd(List<ITarget> readyTargets) {
+            if (limit == null || Common.IsEmpty(readyTargets)) {
+                return;
+            }
+
+            foreach (ITarget target in readyTargets) {
+                string reason = limit.FitReason(atTime, target.SelectedExposure.ExposureLength, target.CulminationTime);
+                if (reason != null) {
+                    TSLogger.Info($"not selecting {target.Project.Name}/{target.Name}: {reason}");
+                    SetRejected(target, Reasons.TargetSequenceEnd);
+                }
+            }
+
+            readyTargets.RemoveAll(t => t.Rejected && t.RejectedReason == Reasons.TargetSequenceEnd);
         }
 
         /// <summary>
@@ -603,6 +641,7 @@ namespace NINA.Plugin.TargetScheduler.Planning {
         public const string TargetHumidity = "all exposure plans rejected for humidity";
         public const string TargetLowerScore = "lower score";
         public const string TargetAllExposurePlans = "all exposure plans rejected";
+        public const string TargetSequenceEnd = "exposure ends after the sequence ends imaging";
 
         public const string FilterComplete = "complete";
         public const string FilterMoonAvoidance = "moon avoidance";

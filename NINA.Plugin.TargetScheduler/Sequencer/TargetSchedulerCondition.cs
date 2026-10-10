@@ -140,7 +140,7 @@ namespace NINA.Plugin.TargetScheduler.Sequencer {
 
         private bool HasRemainingTargets() {
             try {
-                Planner planner = new Planner(DateTime.Now, GetApplicableProfile(), GetProfilePreferences(), weatherDataMediator, true, false);
+                Planner planner = new Planner(DateTime.Now, GetApplicableProfile(), GetProfilePreferences(), weatherDataMediator, true, false) { Limit = SequenceLimits.Find(Parent, GetApplicableProfile(), DateTime.Now) };
                 bool result = planner.GetPlan(null) != null;
                 TSLogger.Info($"TargetSchedulerCondition check for remaining targets, continue={result}");
                 return result;
@@ -152,7 +152,7 @@ namespace NINA.Plugin.TargetScheduler.Sequencer {
 
         private bool HasActiveProjects() {
             try {
-                Planner planner = new Planner(DateTime.Now, GetApplicableProfile(), GetProfilePreferences(), weatherDataMediator, true, false);
+                Planner planner = new Planner(DateTime.Now, GetApplicableProfile(), GetProfilePreferences(), weatherDataMediator, true, false) { Limit = SequenceLimits.Find(Parent, GetApplicableProfile(), DateTime.Now) };
                 bool result = planner.HasActiveProjects(null);
                 TSLogger.Info($"TargetSchedulerCondition check for active projects, continue={result}");
                 return result;
