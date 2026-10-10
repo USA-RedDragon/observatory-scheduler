@@ -11,6 +11,10 @@ namespace NINA.Plugin.TargetScheduler.Planning.Test {
     public class DarkPlannerTest {
         private static readonly DateTime Now = new DateTime(2026, 10, 10, 7, 0, 0, DateTimeKind.Utc);
 
+        private static double? Night(DateTime t) => -40;
+
+        private static Func<DateTime, double?> Rising(double atNow, double degreesPerMinute) => t => atNow + (t - Now).TotalMinutes * degreesPerMinute;
+
         private static DarkNeed Need(string key, int priority, double setTemp, double exposure = 300, int have = 0, DateTime? newest = null) {
             return new DarkNeed { ComboKey = key, Priority = priority, Exposure = exposure, Gain = 100, Offset = 50, SetTemp = setTemp, FramesNeeded = 3, FramesHave = have, NewestDarkAt = newest, SessionGapHours = 36 };
         }
@@ -55,7 +59,7 @@ namespace NINA.Plugin.TargetScheduler.Planning.Test {
 
         [Test]
         public void BeforeWaitStopsWithoutAWaitATimedAfterWaitOrOnAReplan() {
-            var w = new DarkWindow { Placement = DarkPlacement.BeforeWait, Now = Now };
+            var w = new DarkWindow { Placement = DarkPlacement.BeforeWait, Now = Now, SunAltitudeAt = Night };
             DarkPlanner.StopReason(w).Should().Contain("not inside");
             w.WaitUntil = Now.AddHours(1);
             DarkPlanner.StopReason(w).Should().Contain("AfterWait");
@@ -70,7 +74,7 @@ namespace NINA.Plugin.TargetScheduler.Planning.Test {
 
         [Test]
         public void BeforeWaitStartsOnlyADarkThatEndsWithRoomForRestoreAndAfterWait() {
-            var w = new DarkWindow { Placement = DarkPlacement.BeforeWait, Now = Now, WaitUntil = Now.AddSeconds(450), AfterWait = TimeSpan.FromSeconds(40) };
+            var w = new DarkWindow { Placement = DarkPlacement.BeforeWait, Now = Now, WaitUntil = Now.AddSeconds(450), AfterWait = TimeSpan.FromSeconds(40), SunAltitudeAt = Night };
             var rates = new CoolerRates { CoolingSecondsPerC = 30, WarmingSecondsPerC = 10 };
             TimeSpan download = TimeSpan.FromSeconds(2);
 
@@ -83,7 +87,7 @@ namespace NINA.Plugin.TargetScheduler.Planning.Test {
 
         [Test]
         public void WhileUnsafeYieldsAsSoonAsItIsSafe() {
-            var w = new DarkWindow { Placement = DarkPlacement.WhileUnsafe, Now = Now };
+            var w = new DarkWindow { Placement = DarkPlacement.WhileUnsafe, Now = Now, SunAltitudeAt = Night };
             DarkPlanner.StopReason(w).Should().Contain("no safety monitor");
             w.Safe = false;
             DarkPlanner.StopReason(w).Should().BeNull();
@@ -94,10 +98,51 @@ namespace NINA.Plugin.TargetScheduler.Planning.Test {
 
         [Test]
         public void EndOfSequenceRunsUntilItsOptionalTimeLimit() {
-            var w = new DarkWindow { Placement = DarkPlacement.EndOfSequence, Now = Now };
+            var w = new DarkWindow { Placement = DarkPlacement.EndOfSequence, Now = Now, SunAltitudeAt = Night };
             DarkPlanner.StopReason(w).Should().BeNull();
             w.StopBy = Now;
             DarkPlanner.StopReason(w).Should().Contain("time limit");
+        }
+
+        [Test]
+        public void EveryPlacementStopsWhenTheSunIsAtTheLimitOrUnknown() {
+            foreach (DarkPlacement p in Enum.GetValues(typeof(DarkPlacement))) {
+                var w = new DarkWindow { Placement = p, Now = Now, WaitUntil = Now.AddHours(1), AfterWait = TimeSpan.Zero, Safe = false, SunAltitudeAt = t => DarkPlanner.SunLimitDegrees };
+                DarkPlanner.StopReason(w).Should().Contain("light-safe limit");
+                w.SunAltitudeAt = t => DarkPlanner.SunLimitDegrees + 10;
+                DarkPlanner.StopReason(w).Should().Contain("light-safe limit");
+                w.SunAltitudeAt = null;
+                DarkPlanner.StopReason(w).Should().Contain("not known");
+                w.SunAltitudeAt = t => null;
+                DarkPlanner.StopReason(w).Should().Contain("not known");
+                w.SunAltitudeAt = t => DarkPlanner.SunLimitDegrees - 0.1;
+                DarkPlanner.StopReason(w).Should().BeNull();
+            }
+        }
+
+        [Test]
+        public void EveryPlacementStartsOnlyADarkThatEndsBeforeTheSunReachesTheLimit() {
+            foreach (DarkPlacement p in Enum.GetValues(typeof(DarkPlacement))) {
+                var w = new DarkWindow { Placement = p, Now = Now, WaitUntil = Now.AddHours(10), AfterWait = TimeSpan.Zero, Safe = false, SunAltitudeAt = Rising(DarkPlanner.SunLimitDegrees - 2.1, 0.21) };
+                var rates = new CoolerRates { CoolingSecondsPerC = 30, WarmingSecondsPerC = 30 };
+                DarkPlanner.FitReason(w, Need("short", 1, -13, exposure: 300), -13, -13, rates, TimeSpan.FromSeconds(5)).Should().BeNull();
+                DarkPlanner.FitReason(w, Need("long", 1, -13, exposure: 600), -13, -13, rates, TimeSpan.FromSeconds(5)).Should().Contain("light-safe limit");
+                DarkPlanner.FitReason(w, Need("move", 1, -23, exposure: 300), -13, -13, rates, TimeSpan.FromSeconds(5)).Should().Contain("light-safe limit");
+                DarkPlanner.SunFitReason(w, TimeSpan.Zero, 600, TimeSpan.Zero).Should().Contain("light-safe limit");
+            }
+        }
+
+        [Test]
+        public void ADuskDarkFitsOnceTheSunIsBelowTheLimit() {
+            var w = new DarkWindow { Placement = DarkPlacement.EndOfSequence, Now = Now, SunAltitudeAt = Rising(DarkPlanner.SunLimitDegrees - 0.5, -0.2) };
+            DarkPlanner.StopReason(w).Should().BeNull();
+            DarkPlanner.SunFitReason(w, TimeSpan.Zero, 3600, TimeSpan.Zero).Should().BeNull();
+        }
+
+        [Test]
+        public void ThePeakDuringTheDarkCountsNotOnlyItsEnds() {
+            var w = new DarkWindow { Placement = DarkPlacement.EndOfSequence, Now = Now, SunAltitudeAt = t => Math.Abs((t - Now).TotalMinutes - 5) < 1 ? DarkPlanner.SunLimitDegrees + 1 : -40 };
+            DarkPlanner.SunFitReason(w, TimeSpan.Zero, 600, TimeSpan.Zero).Should().Contain("light-safe limit");
         }
 
         [Test]

@@ -1,4 +1,5 @@
 using Newtonsoft.Json;
+using NINA.Astrometry;
 using NINA.Core.Locale;
 using NINA.Core.Model;
 using NINA.Core.Model.Equipment;
@@ -26,7 +27,7 @@ using System.Threading.Tasks;
 namespace NINA.Plugin.TargetScheduler.Sequencer {
 
     [ExportMetadata("Name", "Target Scheduler Darks")]
-    [ExportMetadata("Description", "Takes the darks the stacker's dark backlog asks for, at each one's set temperature, while the cover is already closed. It uses only the camera.")]
+    [ExportMetadata("Description", "Takes the darks the stacker's dark backlog asks for, at each one's set temperature, while the cover is already closed and the sun is below the light-safe altitude. It uses only the camera.")]
     [ExportMetadata("Icon", "Scheduler.SchedulerSVG")]
     [ExportMetadata("Category", "Target Scheduler")]
     [Export(typeof(ISequenceItem))]
@@ -145,6 +146,10 @@ namespace NINA.Plugin.TargetScheduler.Sequencer {
                 i.Add("Camera cannot set its temperature, so darks cannot be matched to the lights' set temperature");
             }
 
+            if (SunAltitude() == null) {
+                i.Add("The profile has no observer location, so the sun's altitude is not known and no darks are taken");
+            }
+
             if (Placement == DarkPlacement.BeforeWait && FindContainer() == null) {
                 i.Add("Placement 'Before Wait' needs this instruction inside the Target Scheduler container's Before Wait instructions");
             }
@@ -165,7 +170,7 @@ namespace NINA.Plugin.TargetScheduler.Sequencer {
         }
 
         private DarkWindow Window() {
-            var w = new DarkWindow { Placement = Placement, Now = DateTime.UtcNow, StopBy = stopBy };
+            var w = new DarkWindow { Placement = Placement, Now = DateTime.UtcNow, StopBy = stopBy, SunAltitudeAt = SunAltitude() };
             if (Placement == DarkPlacement.BeforeWait) {
                 DateTime? until = FindContainer()?.CurrentWaitUntil;
                 w.WaitUntil = until?.ToUniversalTime();
@@ -177,6 +182,15 @@ namespace NINA.Plugin.TargetScheduler.Sequencer {
                 w.Safe = s.Connected ? s.IsSafe : (bool?)null;
             }
             return w;
+        }
+
+        private Func<DateTime, double?> SunAltitude() {
+            var a = profileService.ActiveProfile?.AstrometrySettings;
+            if (a == null || (a.Latitude == 0 && a.Longitude == 0)) {
+                return null;
+            }
+            var observer = new ObserverInfo { Latitude = a.Latitude, Longitude = a.Longitude, Elevation = a.Elevation };
+            return t => AstroUtil.GetSunAltitude(DateTime.SpecifyKind(t, DateTimeKind.Utc), observer);
         }
 
         private double? Ambient() {
@@ -216,6 +230,7 @@ namespace NINA.Plugin.TargetScheduler.Sequencer {
                 return;
             }
 
+            TSLogger.Info($"TS Darks: light-safe sun limit {DarkPlanner.SunLimitDegrees:0.0}°: {DarkPlanner.SunLimitBasis}");
             string stop = DarkPlanner.StopReason(Window());
             if (stop != null) {
                 TSLogger.Info($"TS Darks: not taking darks: {stop}");
@@ -292,6 +307,12 @@ namespace NINA.Plugin.TargetScheduler.Sequencer {
                         if (stop != null) {
                             TSLogger.Info($"TS Darks: stopping after {done} darks: {stop}");
                             return;
+                        }
+
+                        string sunSkip = DarkPlanner.SunFitReason(Window(), TimeSpan.Zero, need.Exposure, overhead);
+                        if (sunSkip != null) {
+                            TSLogger.Info($"TS Darks: skipping {need}: {sunSkip}");
+                            break;
                         }
 
                         (double deviation, DateTime takenAt, string path) = await TakeDark(need, watch, info.ReadoutModes?.ToList(), progress, token);
