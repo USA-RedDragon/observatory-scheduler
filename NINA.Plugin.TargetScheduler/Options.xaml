@@ -7,7 +7,7 @@
     xmlns:pp="clr-namespace:NINA.Plugin.TargetScheduler.Controls.PlanPreview"
     xmlns:rp="clr-namespace:NINA.Plugin.TargetScheduler.Controls.Reporting">
 
-    <DataTemplate x:Key="Target Scheduler_Options">
+    <DataTemplate x:Key="Observatory Scheduler_Options">
         <StackPanel DataContext="{Binding}" Orientation="Vertical">
 
             <Expander

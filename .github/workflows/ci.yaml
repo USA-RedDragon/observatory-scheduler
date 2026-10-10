@@ -1,0 +1,46 @@
+name: CI
+
+on:
+  push:
+    branches:
+      - "hotfix/**"
+    tags:
+      - "v*"
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    env:
+      DOTNET_CLI_TELEMETRY_OPTOUT: "1"
+      DOTNET_NOLOGO: "1"
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          global-json-file: global.json
+
+      - name: Build
+        run: dotnet build NINA.Plugin.TargetScheduler/NINA.Plugin.TargetScheduler.csproj -c Release -p:EnableWindowsTargeting=true
+
+      - name: Package
+        id: package
+        run: echo "zip=$(Utilities/package.sh)" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: observatory-scheduler
+          path: ${{ steps.package.outputs.zip }}
+
+      - name: Release
+        if: startsWith(github.ref, 'refs/tags/v')
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          if gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1; then
+            gh release upload "$GITHUB_REF_NAME" "${{ steps.package.outputs.zip }}" --clobber
+          else
+            gh release create "$GITHUB_REF_NAME" "${{ steps.package.outputs.zip }}" --title "Observatory Scheduler ${GITHUB_REF_NAME#v}" --notes-file RELEASE.md
+          fi
