@@ -128,7 +128,7 @@ namespace NINA.Plugin.TargetScheduler.Goals {
                 AchievedValue = Finite(row.AchievedValue),
                 Progress = Finite(row.Progress),
                 EffectiveHours = Finite(row.EffectiveHours),
-                HoursNeeded = Finite(row.HoursNeeded),
+                HoursNeeded = KnownHours(row.HoursNeeded),
                 GainPerHourPct = Finite(row.GainPerHourPct),
                 Plateau = row.Plateau,
                 LowConfidence = row.LowConfidence,
@@ -140,6 +140,11 @@ namespace NINA.Plugin.TargetScheduler.Goals {
                 MinSubs = row.MinSubs,
                 SubLimit = row.SubLimit
             };
+        }
+
+        private static double? KnownHours(double? value) {
+            if (!value.HasValue || double.IsNaN(value.Value) || double.IsInfinity(value.Value) || value.Value < 0) { return null; }
+            return value.Value;
         }
 
         private static double Finite(double? value) {

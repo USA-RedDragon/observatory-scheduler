@@ -8,6 +8,8 @@ namespace NINA.Plugin.TargetScheduler.Goals {
         public string Filter { get; set; }
         public GoalProgress Goal { get; set; }
         public double CountHours { get; set; }
+        public double ExposureSeconds { get; set; }
+        public int Acquired { get; set; }
     }
 
     public static class SeasonalRunway {
@@ -16,20 +18,60 @@ namespace NINA.Plugin.TargetScheduler.Goals {
 
         public static double HoursNeeded(IEnumerable<RunwayFilter> filters) {
             double total = 0;
-            HashSet<string> goalFilters = new HashSet<string>();
+            Dictionary<string, List<RunwayFilter>> goalFilters = new Dictionary<string, List<RunwayFilter>>();
             foreach (RunwayFilter f in filters ?? Enumerable.Empty<RunwayFilter>()) {
                 if (f == null) { continue; }
                 if (f.Goal != null) {
                     string key = SqliteGoalProgressSource.NormalizeFilter(f.Filter) ?? string.Empty;
-                    if (!goalFilters.Add(key) || f.Goal.Done) { continue; }
-                    if (f.Goal.HoursNeeded > 0 && !double.IsInfinity(f.Goal.HoursNeeded)) { total += f.Goal.HoursNeeded; }
+                    if (!goalFilters.TryGetValue(key, out List<RunwayFilter> plans)) {
+                        plans = new List<RunwayFilter>();
+                        goalFilters[key] = plans;
+                    }
+                    plans.Add(f);
                     continue;
                 }
 
-                if (f.CountHours > 0 && !double.IsInfinity(f.CountHours)) { total += f.CountHours; }
+                total += Positive(f.CountHours);
+            }
+
+            foreach (List<RunwayFilter> plans in goalFilters.Values) {
+                total += GoalHours(plans[0].Goal, plans);
             }
 
             return total;
+        }
+
+        public static double GoalHours(GoalProgress goal, IList<RunwayFilter> plans) {
+            if (goal == null || goal.Done) { return 0; }
+            plans ??= new List<RunwayFilter>();
+
+            if (goal.State == GoalState.Measured && KnownHours(goal)) {
+                return goal.HoursNeeded.Value;
+            }
+
+            int acquired = plans.Count == 0 ? 0 : plans.Max(p => p.Acquired);
+            double exposureSeconds = plans.Select(p => p.ExposureSeconds).Where(s => s > 0 && IsFinite(s)).DefaultIfEmpty(0).First();
+            double ruleHours = SubHours(GoalCompletion.RemainingExposures(goal, exposureSeconds, acquired), exposureSeconds);
+
+            if (goal.State == GoalState.Unmeasurable && goal.SubLimit.HasValue) { return ruleHours; }
+
+            return Math.Max(plans.Sum(p => Positive(p.CountHours)), ruleHours);
+        }
+
+        public static bool KnownHours(GoalProgress goal) {
+            return goal?.HoursNeeded != null && IsFinite(goal.HoursNeeded.Value) && goal.HoursNeeded.Value >= 0;
+        }
+
+        private static double SubHours(int subs, double exposureSeconds) {
+            return Math.Max(0, subs) * exposureSeconds / 3600;
+        }
+
+        private static double Positive(double hours) {
+            return hours > 0 && IsFinite(hours) ? hours : 0;
+        }
+
+        private static bool IsFinite(double value) {
+            return !double.IsNaN(value) && !double.IsInfinity(value);
         }
 
         public static double SeasonHours(SeasonResult season) {

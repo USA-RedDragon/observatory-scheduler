@@ -23,7 +23,7 @@ namespace NINA.Plugin.TargetScheduler.Goals {
         public double AchievedValue { get; set; }
         public double Progress { get; set; }
         public double EffectiveHours { get; set; }
-        public double HoursNeeded { get; set; }
+        public double? HoursNeeded { get; set; }
         public double GainPerHourPct { get; set; }
         public bool Plateau { get; set; }
         public bool LowConfidence { get; set; }

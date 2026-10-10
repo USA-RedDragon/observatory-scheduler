@@ -42,6 +42,17 @@ namespace NINA.Plugin.TargetScheduler.Planning.Test {
         }
 
         [Test]
+        public void MissingHoursNeededStaysUnknownInsteadOfZero() {
+            var rows = Sample();
+            rows.Progress.Add(new GoalProgressRow { TargetGuid = T1, Filter = "OIII", State = "collecting", Reason = "no master yet", StackSubs = 0, MinSubs = 8, SubLimit = 32 });
+            rows.Progress.Add(new GoalProgressRow { TargetGuid = T2, Filter = "L", HoursNeeded = -1, Progress = 0.2 });
+            var sut = new SqliteGoalProgressSource(rows);
+            sut.Get(T1, "OIII").HoursNeeded.Should().BeNull();
+            sut.Get(T2, "L").HoursNeeded.Should().BeNull();
+            sut.Get(T1, "Ha").HoursNeeded.Should().Be(2);
+        }
+
+        [Test]
         public void WithStackerReadinessAGoalWithoutProgressIsPending() {
             var rows = Sample();
             rows.Progress.Add(new GoalProgressRow { TargetGuid = "other", Filter = "Ha", State = "collecting", MinSubs = 8 });

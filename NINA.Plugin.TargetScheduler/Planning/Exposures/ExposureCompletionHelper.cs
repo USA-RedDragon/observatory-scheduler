@@ -113,6 +113,10 @@ namespace NINA.Plugin.TargetScheduler.Planning.Exposures {
                 return GoalCompletion.RemainingExposures(goal, ExposureSeconds(exposurePlan), exposurePlan.Acquired);
             }
 
+            return CountRemainingExposures(exposurePlan);
+        }
+
+        public int CountRemainingExposures(IExposureCounts exposurePlan) {
             if (imageGradingEnabled) {
                 return exposurePlan.Accepted >= exposurePlan.Desired ? 0 : exposurePlan.Desired - exposurePlan.Accepted;
             }

@@ -89,6 +89,20 @@ namespace NINA.Plugin.TargetScheduler.Test.Planning.Exposures {
         }
 
         [Test]
+        public void SeasonalRunwayUsesTheCountForAnUnmeasuredGoal() {
+            var (target, exposure) = Plan("t1", "Ha", 30, 4, 600);
+            source.Setup(m => m.Get("t1", "Ha")).Returns(new GoalProgress { State = GoalState.Collecting, StackSubs = 5, MinSubs = 8, SubLimit = 32 });
+            ExposureCompletionHelper sut = target.Object.Project.ExposureCompletionHelper;
+
+            sut.RemainingExposures(exposure.Object).Should().Be(3);
+            sut.CountRemainingExposures(exposure.Object).Should().Be(26);
+
+            List<RunwayFilter> filters = SeasonalRunwayRule.Filters(target.Object);
+            filters.Should().ContainSingle().Which.CountHours.Should().BeApproximately(26 * 600 / 3600.0, 1e-9);
+            SeasonalRunway.HoursNeeded(filters).Should().BeApproximately(26 * 600 / 3600.0, 1e-9);
+        }
+
+        [Test]
         public void UnmeasurableStopsAtTheBound() {
             var (target, exposure) = Plan("t1", "Ha", 1000, 0);
             GoalProgress goal = new GoalProgress { State = GoalState.Unmeasurable, StackSubs = 31, MinSubs = 8, SubLimit = 32 };

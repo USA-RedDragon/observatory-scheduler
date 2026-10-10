@@ -37,7 +37,9 @@ namespace NINA.Plugin.TargetScheduler.Planning.Scoring.Rules {
                 filters.Add(new RunwayFilter {
                     Filter = plan.FilterName,
                     Goal = helper?.GoalFor(plan),
-                    CountHours = helper == null ? 0 : helper.RemainingExposures(plan) * plan.ExposureLength / 3600
+                    CountHours = helper == null ? 0 : helper.CountRemainingExposures(plan) * plan.ExposureLength / 3600.0,
+                    ExposureSeconds = plan.ExposureLength,
+                    Acquired = plan.Acquired
                 });
             }
 

@@ -48,8 +48,8 @@ namespace NINA.Plugin.TargetScheduler.Goals {
                     return goal.SubLimit.HasValue ? Math.Max(1, goal.SubLimit.Value - Subs(goal, localSubs)) : 1;
             }
 
-            if (exposureSeconds > 0 && IsFinite(goal.HoursNeeded) && goal.HoursNeeded > 0) {
-                double n = Math.Ceiling(goal.HoursNeeded * 3600 / exposureSeconds);
+            if (exposureSeconds > 0 && goal.HoursNeeded.HasValue && IsFinite(goal.HoursNeeded.Value) && goal.HoursNeeded.Value > 0) {
+                double n = Math.Ceiling(goal.HoursNeeded.Value * 3600 / exposureSeconds);
                 if (n >= 100000) { return 100000; }
                 return Math.Max(1, (int)n);
             }
