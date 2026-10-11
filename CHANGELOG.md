@@ -1,6 +1,6 @@
 # Observatory Scheduler
 
-## Unreleased
+## 5.8.2.213 - 2026-10-11
 * New web command `exposure.abort` stops the running exposure at once. It cancels only the camera capture: NINA aborts the camera exposure, the partial frame is discarded and not saved, the sequence keeps running and the scheduler re-plans. The payload names the exposure by `plan_id` and `started_at`; when another exposure is running, it is left alone. A second abort of the same exposure returns "An abort of this exposure is already in progress." The command applies immediately and is never queued.
 * An aborted exposure does not advance the filter cadence or count toward the next dither, so the aborted filter is taken next. The cadence still advances when the shutter opens, so the web preview during an exposure is unchanged, and it is put back and saved to the database when the abort ends the capture. A dither that ran before the aborted frame still counts. Filter switch, override order, repeat-until-done, smart exposure rotation and filter steering are covered.
 * An aborted exposure does not count in the status exposure number, and the status does not show it as saving.
@@ -8,6 +8,7 @@
 * New status fields on `exposure`: `abort_blocked` gives the reason the exposure cannot be aborted from the web, and `sync_clients` is true when sync clients take the same exposure. On a sync client, exposures are started by the sync server, so `abort_blocked` is set and `exposure.abort` is rejected with that reason.
 * On a sync server, an abort stops only the server camera. The server then waits for the sync clients to finish their own exposures before it continues, as it does after a normal exposure. The sync protocol cannot cancel a client exposure, and skipping the wait would make the clients' late completion count for the next exposure.
 * The After Each Exposure instructions still run after an aborted exposure, because they run when the plan ends and not per saved frame.
+* What-if previews can now override rule weights. An override with entity `ruleweight`, the rule name as its field and a weight from 0 to 100 applies to one project, or to every project with id 0; a project's own override wins over the one for every project. A rule the project has no weight for is added. Weights outside 0 to 100, NaN or without a rule name are ignored. The preview result lists the override kinds it accepts in `override_kinds`. Before this, a what-if preview could only override project fields.
 
 ## 5.8.2.212 - 2026-10-11
 * The status exposure number now counts each target's exposures for the whole night. The count is kept per target and resets at local noon. Before this, the number went back to 1 every time the planner re-planned, even when it picked the same target again, so it showed the position inside the current plan and not the target's count for the night.
