@@ -4,6 +4,7 @@
              xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
              xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
              xmlns:ninactrl="clr-namespace:NINA.CustomControlLibrary;assembly=NINA.CustomControlLibrary"
+             xmlns:remote="clr-namespace:NINA.Plugin.TargetScheduler.Remote.Plugin"
              d:DesignHeight="450"
              d:DesignWidth="800"
              mc:Ignorable="d">
@@ -13,6 +14,11 @@
     </UserControl.Resources>
 
     <StackPanel>
+        <TextBlock Margin="0,10,0,0"
+                   Foreground="Orange"
+                   TextWrapping="Wrap"
+                   Text="{Binding Source={x:Static remote:LocalEditing.Instance}, Path=Banner}"
+                   Visibility="{Binding Source={x:Static remote:LocalEditing.Instance}, Path=BannerVisibility}" />
         <Border Margin="0,10,0,10"
                 BorderBrush="{StaticResource BorderBrush}"
                 BorderThickness="1">
@@ -184,7 +190,8 @@
                                        TextWrapping="Wrap" />
                             <Grid Width="600"
                                   Margin="15,10,5,12"
-                                  HorizontalAlignment="Left">
+                                  HorizontalAlignment="Left"
+                                  IsEnabled="{Binding Source={x:Static remote:LocalEditing.Instance}, Path=Allowed}">
                                 <Grid.ColumnDefinitions>
                                     <ColumnDefinition Width="130" />
                                     <ColumnDefinition Width="260" />

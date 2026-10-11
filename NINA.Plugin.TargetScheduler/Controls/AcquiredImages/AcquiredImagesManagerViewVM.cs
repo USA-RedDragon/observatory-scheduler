@@ -8,6 +8,7 @@ using NINA.Core.Utility;
 using NINA.Plugin.TargetScheduler.Database;
 using NINA.Plugin.TargetScheduler.Database.Schema;
 using NINA.Plugin.TargetScheduler.Grading;
+using NINA.Plugin.TargetScheduler.Remote.Plugin;
 using NINA.Plugin.TargetScheduler.Shared.Utility;
 using NINA.Plugin.TargetScheduler.Util;
 using NINA.Profile;
@@ -42,7 +43,7 @@ namespace NINA.Plugin.TargetScheduler.Controls.AcquiredImages {
 
             RefreshTableCommand = new AsyncRelayCommand(RefreshTable);
             CsvOutputCommand = new AsyncRelayCommand(CsvOutput);
-            PurgeCommand = new AsyncRelayCommand(PurgeRecords);
+            PurgeCommand = LocalEditing.Gate(new AsyncRelayCommand(PurgeRecords));
             PurgeTargetChoices = GetPurgeTargetChoices();
 
             InitializeCriteria();
@@ -398,6 +399,10 @@ namespace NINA.Plugin.TargetScheduler.Controls.AcquiredImages {
         public ICommand PurgeCommand { get; private set; }
 
         private async Task<bool> PurgeRecords() {
+            if (!LocalEditing.CanEdit) {
+                return false;
+            }
+
             using (var context = database.GetContext()) {
                 int count = context.GetAcquiredImagesCount(PurgeOlderThanDate, PurgeSelectedTargetId);
                 if (count == 0) {
@@ -568,7 +573,7 @@ namespace NINA.Plugin.TargetScheduler.Controls.AcquiredImages {
             string profileName;
 
             database = new SchedulerDatabaseInteraction();
-            UpdateGradingCommand = new RelayCommandParam(UpdateGrading, CanCmdExec);
+            UpdateGradingCommand = LocalEditing.Gate(new RelayCommandParam(UpdateGrading, CanCmdExec));
 
             NamesItem names = ProjectTargetNameCache.GetNames(acquiredImage.ProjectId, acquiredImage.TargetId);
             if (names == null) {
@@ -692,6 +697,10 @@ namespace NINA.Plugin.TargetScheduler.Controls.AcquiredImages {
         public ICommand UpdateGradingCommand { get; private set; }
 
         private void UpdateGrading(object obj) {
+            if (!LocalEditing.CanEdit) {
+                return;
+            }
+
             GradingStatus oldStatus = acquiredImage.GradingStatus;
             GradingStatus newStatus;
             Enum.TryParse(obj.ToString(), out newStatus);
