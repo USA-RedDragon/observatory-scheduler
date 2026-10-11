@@ -408,6 +408,18 @@ namespace NINA.Plugin.TargetScheduler.Darks {
                 setTemp, drop, ambient.Value, capacity.DropC, capacity, setTemp + capacity.DropC);
         }
 
+        public static List<DarkNeed> TonightFirst(IEnumerable<DarkNeed> queue, double imagingSetpoint) {
+            return (queue ?? Enumerable.Empty<DarkNeed>())
+                .OrderBy(n => Tonight(n, imagingSetpoint) ? 0 : 1)
+                .ThenBy(n => n.Priority)
+                .ThenBy(n => n.ComboKey, StringComparer.Ordinal)
+                .ToList();
+        }
+
+        public static bool Tonight(DarkNeed need, double imagingSetpoint) {
+            return double.IsNaN(imagingSetpoint) || need.SetTemp >= imagingSetpoint - AtTargetToleranceC - 0.05;
+        }
+
         public static double? SecondsPerC(double from, double to, TimeSpan took) {
             double delta = Math.Abs(to - from);
             if (delta < 1 || took <= TimeSpan.Zero) {

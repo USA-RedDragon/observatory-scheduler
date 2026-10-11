@@ -282,6 +282,7 @@ namespace NINA.Plugin.TargetScheduler.Sequencer {
             TSLogger.Info($"TS Darks: placement {Placement}, imaging setpoint {imagingSetpoint} °C, sensor {cam.Temperature} °C, cooler {cam.CoolerPower}%");
             if (queue.Count > 0) {
                 RecordImagingHold(cam, imagingPower);
+                queue = Order(queue, imagingSetpoint);
             }
 
             using var watch = new TemperatureWatch(cameraMediator);
@@ -409,6 +410,16 @@ namespace NINA.Plugin.TargetScheduler.Sequencer {
             if (DarkRuntime.State.LearningUsed(night) == null) {
                 DarkRuntime.State.RecordLearning(night, now, ambient);
             }
+        }
+
+        private List<DarkNeed> Order(List<DarkNeed> queue, double imagingSetpoint) {
+            if (Placement == DarkPlacement.WhileUnsafe) {
+                return queue;
+            }
+            List<DarkNeed> ordered = DarkPlanner.TonightFirst(queue, imagingSetpoint);
+            int tonight = ordered.Count(n => DarkPlanner.Tonight(n, imagingSetpoint));
+            TSLogger.Info($"TS Darks: {tonight} combos at or above {imagingSetpoint - DarkPlanner.AtTargetToleranceC} °C ({DarkPlanner.AtTargetToleranceC} °C below the imaging setpoint, which the sequence sets from the ambient temperature) come first, then {ordered.Count - tonight} colder ones, each group in the stacker's priority order");
+            return ordered;
         }
 
         private void RecordImagingHold(CameraInfo cam, double? imagingPower) {

@@ -240,6 +240,29 @@ namespace NINA.Plugin.TargetScheduler.Planning.Test {
         }
 
         [Test]
+        public void TonightFirstPutsSetpointsTheImagingCoolerHoldsAheadOfColderOnes() {
+            var queue = new List<DarkNeed> {
+                Need("300|0|240|1|-15", 1, -15),
+                Need("300|0|50|1|-20", 2, -20),
+                Need("300|0|50|1|-3", 3, -3),
+                Need("300|0|50|1|6", 4, 6),
+                Need("600|0|50|1|-6", 5, -6),
+                Need("600|0|50|1|-7", 6, -7)
+            };
+            DarkPlanner.TonightFirst(queue, -4.24).Select(n => n.ComboKey).Should().Equal(
+                "300|0|50|1|-3", "300|0|50|1|6", "600|0|50|1|-6", "300|0|240|1|-15", "300|0|50|1|-20", "600|0|50|1|-7");
+            DarkPlanner.TonightFirst(queue, double.NaN).Select(n => n.Priority).Should().Equal(1, 2, 3, 4, 5, 6);
+        }
+
+        [Test]
+        public void CoolerLimitFallsBackToCoolerPowerAtTheImagingSetpoint() {
+            var limits = new List<CoolerLimit> { new CoolerLimit { SetTemp = -15, ImagingPower = 91, ImagingSetpoint = -13, Reason = "r" } };
+            DarkPlanner.LimitReason(limits, -15, null, -13, 91).Should().Contain("91%");
+            DarkPlanner.LimitReason(limits, -15, null, -13, 80).Should().BeNull();
+            DarkPlanner.LimitReason(limits, -15, null, -10, 50).Should().Contain("earlier this run");
+        }
+
+        [Test]
         public void ReadoutModeIsFoundByName() {
             var modes = new List<string> { "Default", "High Gain" };
             DarkPlanner.ReadoutIndex("high gain", modes).Should().Be((short)1);
