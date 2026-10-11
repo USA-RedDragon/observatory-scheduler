@@ -122,6 +122,26 @@ namespace NINA.Plugin.TargetScheduler.Remote.Test {
         }
 
         [Test]
+        public void ProjectMaximumAltitudeMustStayAboveTheMinimum() {
+            db.WithPlanning();
+            db.Exec("UPDATE project SET minimumaltitude = 30, maximumAltitude = 70 WHERE Id = 5");
+            var r = EditHandler.Project().Apply(Cmd.Of(CommandKinds.ProjectEdit, @"{""id"":5,""changes"":[{""field"":""maximumaltitude"",""before"":70,""after"":25}]}"), ctx);
+            r.Status.Should().Be(CommandStatus.Rejected);
+            r.Message.Should().Contain(EditHandler.MaximumAboveMinimum);
+            r = EditHandler.Project().Apply(Cmd.Of(CommandKinds.ProjectEdit, @"{""id"":5,""changes"":[{""field"":""minimumaltitude"",""before"":30,""after"":75}]}"), ctx);
+            r.Status.Should().Be(CommandStatus.Rejected);
+            db.Scalar("SELECT minimumaltitude FROM project WHERE Id = 5").Should().Be(30.0);
+            db.Scalar("SELECT maximumAltitude FROM project WHERE Id = 5").Should().Be(70.0);
+            EditHandler.Project().Validate(Cmd.Of(CommandKinds.ProjectEdit, @"{""id"":5,""changes"":[{""field"":""minimumaltitude"",""before"":30,""after"":50},{""field"":""maximumaltitude"",""before"":70,""after"":45}]}"))
+                .Should().Contain(EditHandler.MaximumAboveMinimum);
+            r = EditHandler.Project().Apply(Cmd.Of(CommandKinds.ProjectEdit, @"{""id"":5,""changes"":[{""field"":""maximumaltitude"",""before"":70,""after"":0}]}"), ctx);
+            r.Status.Should().Be(CommandStatus.Applied);
+            r = BatchEditHandler.Projects().Apply(Cmd.Of(CommandKinds.ProjectBatchEdit, @"{""items"":[{""id"":5,""name"":""Cygnis Loop"",""changes"":[{""field"":""maximumaltitude"",""before"":0,""after"":20}]}]}"), ctx);
+            r.Status.Should().Be(CommandStatus.Rejected);
+            db.Scalar("SELECT maximumAltitude FROM project WHERE Id = 5").Should().Be(0.0);
+        }
+
+        [Test]
         public void ProjectSettingWithNoValueTakesANullBefore() {
             db.WithPlanning();
             db.Exec("UPDATE project SET ditherevery = NULL, usecustomhorizon = NULL WHERE Id = 5");

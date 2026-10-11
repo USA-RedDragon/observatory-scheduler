@@ -65,6 +65,10 @@ namespace NINA.Plugin.TargetScheduler.Remote.Commands {
             if (missing.Count > 0) {
                 return CommandResult.Of(command.Id, CommandStatus.Rejected, $"{string.Join(", ", missing)} no longer {(missing.Count == 1 ? "exists" : "exist")}. Nothing was applied.");
             }
+            var invalid = items.Select((it, i) => (it, outcomes[i].Invalid)).Where(x => x.Invalid != null).Select(x => $"{x.it.Label}: {x.Invalid}").ToList();
+            if (invalid.Count > 0) {
+                return CommandResult.Of(command.Id, CommandStatus.Rejected, $"{string.Join("; ", invalid)}. Nothing was applied.");
+            }
             var conflicts = items.SelectMany((it, i) => outcomes[i].Conflicts.Select(c => (it, c))).ToList();
             if (conflicts.Count > 0) {
                 var parts = conflicts.Select(x => $"{x.it.Label} {x.c.Field} is {EditHandler.Show(x.c.Actual)}, not {EditHandler.Show(x.c.Expected)}");

@@ -88,7 +88,25 @@ namespace NINA.Plugin.TargetScheduler.Remote.Commands {
                     }
                 }
             }
-            return null;
+            return Table.Table == "project" ? AltitudeError(p) : null;
+        }
+
+        public const string MaximumAboveMinimum = "maximum altitude must be above the minimum altitude, or 0 for off";
+
+        public static string AltitudeError(double minimum, double maximum) {
+            return maximum > 0 && maximum <= minimum ? MaximumAboveMinimum : null;
+        }
+
+        private string AltitudeError(EditPayload p) {
+            double? minimum = null, maximum = null;
+            foreach (var c in p.Changes) {
+                if (c.Field == "minimumaltitude" && c.After.ValueKind == JsonValueKind.Number) {
+                    minimum = c.After.GetDouble();
+                } else if (c.Field == ProjectSettings.MaximumAltitude && c.After.ValueKind == JsonValueKind.Number) {
+                    maximum = c.After.GetDouble();
+                }
+            }
+            return minimum.HasValue && maximum.HasValue ? AltitudeError(minimum.Value, maximum.Value) : null;
         }
 
         public CommandResult Apply(CommandEnvelope command, ICommandContext context) {
@@ -102,6 +120,9 @@ namespace NINA.Plugin.TargetScheduler.Remote.Commands {
             var outcome = context.Database.ApplyEdit(Table, p.Id, changes);
             if (!outcome.Found) {
                 return CommandResult.Of(command.Id, CommandStatus.Rejected, $"{Table.Entity} {p.Id} no longer exists");
+            }
+            if (outcome.Invalid != null) {
+                return CommandResult.Of(command.Id, CommandStatus.Rejected, $"{Label(p)}: {outcome.Invalid}. Nothing was applied.");
             }
             if (outcome.Conflicts.Count > 0) {
                 var parts = outcome.Conflicts.Select(c => $"{c.Field} is {Show(c.Actual)}, not {Show(c.Expected)}");

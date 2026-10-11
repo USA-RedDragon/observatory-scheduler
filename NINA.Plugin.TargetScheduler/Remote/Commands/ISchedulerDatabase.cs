@@ -79,6 +79,7 @@ namespace NINA.Plugin.TargetScheduler.Remote.Commands {
         public bool Found { get; set; }
         public bool Applied { get; set; }
         public List<EditConflict> Conflicts { get; set; } = new List<EditConflict>();
+        public string Invalid { get; set; }
         public int? ProjectId { get; set; }
         public int? TargetId { get; set; }
     }

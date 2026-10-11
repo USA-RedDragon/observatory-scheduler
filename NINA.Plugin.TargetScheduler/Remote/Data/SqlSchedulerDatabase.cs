@@ -22,7 +22,7 @@ namespace NINA.Plugin.TargetScheduler.Remote.Data {
             using var conn = connect();
             using var tx = conn.BeginTransaction();
             var outcomes = items.Select(item => CheckEdit(conn, tx, table, item.Id, item.Changes)).ToList();
-            if (outcomes.Any(o => !o.Found || o.Conflicts.Count > 0)) {
+            if (outcomes.Any(o => !o.Found || o.Conflicts.Count > 0 || o.Invalid != null)) {
                 tx.Rollback();
                 return outcomes;
             }
@@ -84,6 +84,9 @@ namespace NINA.Plugin.TargetScheduler.Remote.Data {
                         break;
                 }
             }
+            if (outcome.Conflicts.Count == 0 && table.Table == "project") {
+                outcome.Invalid = CheckAltitudes(conn, tx, id, changes);
+            }
             if (outcome.Conflicts.Count == 0 && table.Table == "exposureplan" && outcome.TargetId.HasValue) {
                 using var q = conn.CreateCommand();
                 q.Transaction = tx;
@@ -92,6 +95,41 @@ namespace NINA.Plugin.TargetScheduler.Remote.Data {
                 outcome.ProjectId = ToInt(q.ExecuteScalar());
             }
             return outcome;
+        }
+
+        private static string CheckAltitudes(DbConnection conn, DbTransaction tx, int id, IList<ColumnChange> changes) {
+            var min = changes.FirstOrDefault(c => c.Column.Field == "minimumaltitude");
+            var max = changes.FirstOrDefault(c => c.Column.Field == ProjectSettings.MaximumAltitude);
+            if (min == null && max == null) {
+                return null;
+            }
+            double? minimum = min == null ? null : AsDouble(min.After);
+            double? maximum = max == null ? null : AsDouble(max.After);
+            if (min == null || max == null) {
+                using var q = conn.CreateCommand();
+                q.Transaction = tx;
+                q.CommandText = $"SELECT p.{(min == null ? "minimumaltitude" : "maximumAltitude")} FROM project p WHERE p.Id = @id";
+                SqlCommandStore.Add(q, "@id", id);
+                object current;
+                try {
+                    current = q.ExecuteScalar();
+                } catch (DbException) {
+                    return null;
+                }
+                if (min == null) {
+                    minimum = AsDouble(current);
+                } else {
+                    maximum = AsDouble(current);
+                }
+            }
+            return EditHandler.AltitudeError(minimum ?? 0, maximum ?? 0);
+        }
+
+        private static double? AsDouble(object v) {
+            if (v == null || v is DBNull) {
+                return null;
+            }
+            return Convert.ToDouble(v, CultureInfo.InvariantCulture);
         }
 
         public TargetSnapshot ReadSnapshot(int targetId) {
