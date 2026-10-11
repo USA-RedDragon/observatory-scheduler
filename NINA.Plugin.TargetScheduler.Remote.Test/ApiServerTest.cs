@@ -51,6 +51,10 @@ namespace NINA.Plugin.TargetScheduler.Remote.Test {
                 return targetId == 404 ? null : new GraderReport { TargetId = targetId ?? 7, Hfr = new GraderHfrSettings { Enabled = true, SigmaFactor = 4 } };
             }
 
+            public HorizonProfile HorizonAnswer { get; set; } = HorizonProfile.Sample("p1", az => az < 90 ? 30 : 10);
+
+            public HorizonProfile Horizon() => HorizonAnswer;
+
             public void Push(string type, object data) => Pushed?.Invoke(type, data);
         }
 
@@ -126,6 +130,24 @@ namespace NINA.Plugin.TargetScheduler.Remote.Test {
             backend.LastPreview.Start.Should().Be(new DateTime(2026, 10, 10, 1, 0, 0, DateTimeKind.Utc));
             (await http.GetAsync("/os/v1/preview?start=2026-10-10T02:00:00Z")).StatusCode.Should().Be(HttpStatusCode.OK);
             backend.LastPreview.Start.Should().Be(new DateTime(2026, 10, 10, 2, 0, 0, DateTimeKind.Utc));
+        }
+
+        [Test]
+        public async Task ServesTheProfileHorizonSampledEachDegree() {
+            using var doc = JsonDocument.Parse(await http.GetStringAsync("/os/v1/horizon"));
+            doc.RootElement.GetProperty("custom").GetBoolean().Should().BeTrue();
+            doc.RootElement.GetProperty("profile_id").GetString().Should().Be("p1");
+            doc.RootElement.GetProperty("azimuth_step").GetInt32().Should().Be(1);
+            var alts = doc.RootElement.GetProperty("altitudes");
+            alts.GetArrayLength().Should().Be(360);
+            alts[0].GetDouble().Should().Be(30);
+            alts[89].GetDouble().Should().Be(30);
+            alts[90].GetDouble().Should().Be(10);
+            alts[359].GetDouble().Should().Be(10);
+
+            backend.HorizonAnswer = HorizonProfile.Sample("p1", null);
+            var flat = await http.GetStringAsync("/os/v1/horizon");
+            flat.Should().Contain("\"custom\":false").And.Contain("\"profile_id\":\"p1\"").And.NotContain("altitudes");
         }
 
         [Test]

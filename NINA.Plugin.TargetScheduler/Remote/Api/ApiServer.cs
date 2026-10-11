@@ -189,6 +189,8 @@ namespace NINA.Plugin.TargetScheduler.Remote.Api {
                         } else {
                             await Send(context, 200, report);
                         }
+                    } else if (path == "/horizon" && method == HttpVerbs.Get) {
+                        await Send(context, 200, backend.Horizon());
                     } else if (path == "/preview" && method == HttpVerbs.Post) {
                         var body = await context.GetRequestBodyAsStringAsync();
                         var req = string.IsNullOrWhiteSpace(body) ? new PreviewRequest() : JsonSerializer.Deserialize<PreviewRequest>(body, CommandJson.Options);

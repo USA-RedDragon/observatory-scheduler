@@ -517,6 +517,12 @@ namespace NINA.Plugin.TargetScheduler.Remote.Plugin {
 
         public Preview Preview(PreviewRequest request) => new PreviewRunner(profileService, this).Run(request);
 
+        public HorizonProfile Horizon() {
+            var profile = profileService.ActiveProfile;
+            var horizon = profile.AstrometrySettings.Horizon;
+            return HorizonProfile.Sample(profile.Id.ToString(), horizon == null ? null : az => horizon.GetAltitude(az));
+        }
+
         public GraderReport Grader(int? targetId) {
             int? id = targetId;
             if (id == null) {

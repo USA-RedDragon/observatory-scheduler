@@ -559,6 +559,34 @@ namespace NINA.Plugin.TargetScheduler.Remote.Api {
         public string EndReason { get; set; }
     }
 
+    public class HorizonProfile {
+        public const int AzimuthStep = 1;
+
+        [JsonPropertyName("custom")]
+        public bool Custom { get; set; }
+
+        [JsonPropertyName("profile_id")]
+        public string ProfileId { get; set; }
+
+        [JsonPropertyName("azimuth_step")]
+        public int? Step { get; set; }
+
+        [JsonPropertyName("altitudes")]
+        public List<double> Altitudes { get; set; }
+
+        public static HorizonProfile Sample(string profileId, Func<double, double> altitudeAt) {
+            if (altitudeAt == null) {
+                return new HorizonProfile { Custom = false, ProfileId = profileId };
+            }
+            var altitudes = new List<double>(360 / AzimuthStep);
+            for (int az = 0; az < 360; az += AzimuthStep) {
+                double alt = altitudeAt(az);
+                altitudes.Add(double.IsNaN(alt) || double.IsInfinity(alt) ? 0 : Math.Round(alt, 2));
+            }
+            return new HorizonProfile { Custom = true, ProfileId = profileId, Step = AzimuthStep, Altitudes = altitudes };
+        }
+    }
+
     public interface IRemoteBackend {
 
         Status Status();
@@ -572,6 +600,8 @@ namespace NINA.Plugin.TargetScheduler.Remote.Api {
         Preview Preview(PreviewRequest request);
 
         GraderReport Grader(int? targetId);
+
+        HorizonProfile Horizon();
 
         event Action<string, object> Pushed;
     }
