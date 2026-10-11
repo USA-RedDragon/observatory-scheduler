@@ -25,6 +25,9 @@
     <Compile Include="..\NINA.Plugin.TargetScheduler\Goals\PanelConditions.cs" Link="Linked\Goals\PanelConditions.cs" />
     <Compile Include="..\NINA.Plugin.TargetScheduler\Darks\DarkPlanner.cs" Link="Linked\Darks\DarkPlanner.cs" />
     <Compile Include="..\NINA.Plugin.TargetScheduler\Darks\DarkStore.cs" Link="Linked\Darks\DarkStore.cs" />
+    <Compile Include="..\NINA.Plugin.TargetScheduler\Darks\SqliteRows.cs" Link="Linked\Darks\SqliteRows.cs" />
+    <Compile Include="..\NINA.Plugin.TargetScheduler\Darks\BiasPlanner.cs" Link="Linked\Darks\BiasPlanner.cs" />
+    <Compile Include="..\NINA.Plugin.TargetScheduler\Darks\BiasStore.cs" Link="Linked\Darks\BiasStore.cs" />
   </ItemGroup>
 
   <ItemGroup>

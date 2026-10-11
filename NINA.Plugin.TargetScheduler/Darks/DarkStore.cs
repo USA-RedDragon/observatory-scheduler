@@ -2,7 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Data;
 using System.Data.Common;
-using System.Globalization;
+using static NINA.Plugin.TargetScheduler.Darks.SqliteRows;
 
 namespace NINA.Plugin.TargetScheduler.Darks {
 
@@ -48,21 +48,7 @@ namespace NINA.Plugin.TargetScheduler.Darks {
         }
 
         public static void Ensure(DbConnection connection) {
-            bool opened = false;
-            if (connection.State != ConnectionState.Open) {
-                connection.Open();
-                opened = true;
-            }
-
-            try {
-                foreach (string sql in new[] { CreateNeedTable, CreateTakenTable }) {
-                    using DbCommand cmd = connection.CreateCommand();
-                    cmd.CommandText = sql;
-                    cmd.ExecuteNonQuery();
-                }
-            } finally {
-                if (opened) { connection.Close(); }
-            }
+            SqliteRows.Ensure(connection, CreateNeedTable, CreateTakenTable);
         }
 
         public void Ensure() {
@@ -138,55 +124,7 @@ namespace NINA.Plugin.TargetScheduler.Darks {
         }
 
         public static string Format(DateTime utc) {
-            return DateTime.SpecifyKind(utc, DateTimeKind.Utc).ToString("yyyy-MM-dd HH:mm:ss.fff", CultureInfo.InvariantCulture);
-        }
-
-        private static bool TableExists(DbConnection connection, string table) {
-            using DbCommand cmd = connection.CreateCommand();
-            cmd.CommandText = "SELECT COUNT(*) FROM sqlite_master WHERE type = 'table' AND name = @name";
-            Add(cmd, "@name", table);
-            return Convert.ToInt64(cmd.ExecuteScalar(), CultureInfo.InvariantCulture) > 0;
-        }
-
-        private static void Add(DbCommand cmd, string name, object value) {
-            DbParameter p = cmd.CreateParameter();
-            p.ParameterName = name;
-            p.Value = value ?? DBNull.Value;
-            cmd.Parameters.Add(p);
-        }
-
-        private static string Text(DbDataReader r, int i) {
-            if (r.IsDBNull(i)) { return null; }
-            return Convert.ToString(r.GetValue(i), CultureInfo.InvariantCulture);
-        }
-
-        private static double? Real(DbDataReader r, int i) {
-            if (r.IsDBNull(i)) { return null; }
-            object v = r.GetValue(i);
-            if (v is string s) {
-                return double.TryParse(s, NumberStyles.Float, CultureInfo.InvariantCulture, out double d) ? d : (double?)null;
-            }
-
-            try {
-                return Convert.ToDouble(v, CultureInfo.InvariantCulture);
-            } catch (Exception) {
-                return null;
-            }
-        }
-
-        private static DateTime? Time(DbDataReader r, int i) {
-            if (r.IsDBNull(i)) { return null; }
-            object v = r.GetValue(i);
-            if (v is DateTime dt) {
-                return DateTime.SpecifyKind(dt, DateTimeKind.Utc);
-            }
-
-            string s = Convert.ToString(v, CultureInfo.InvariantCulture);
-            if (s != null && DateTime.TryParse(s, CultureInfo.InvariantCulture, DateTimeStyles.AdjustToUniversal | DateTimeStyles.AssumeUniversal, out DateTime t)) {
-                return t;
-            }
-
-            return null;
+            return SqliteRows.Format(utc);
         }
     }
 }
