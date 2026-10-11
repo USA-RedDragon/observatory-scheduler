@@ -39,7 +39,18 @@ namespace NINA.Plugin.TargetScheduler.Database {
             (SqliteGoalProgressSource source, PlannerSignals signals) = Load(context);
             PlannerSignals.Current = signals;
             MosaicCompletion.GoalSource = source.Count == 0 ? null : source;
+            RefreshPanelHistory(context);
             return MosaicCompletion.GoalSource;
+        }
+
+        public static void RefreshPanelHistory(SchedulerDatabaseContext context) {
+            try {
+                Stopwatch sw = Stopwatch.StartNew();
+                PanelHistory.Current = new SqlPanelHistoryReader(context.Database.Connection).Load();
+                TSLogger.Debug($"loaded mosaic panel history: {PanelHistory.Current.Count} subs in {sw.ElapsedMilliseconds}ms");
+            } catch (Exception ex) {
+                TSLogger.Warning($"failed to load mosaic panel history, panel matching and even shares see no history: {ex.Message}");
+            }
         }
 
         private static (SqliteGoalProgressSource, PlannerSignals) Load(SchedulerDatabaseContext context) {

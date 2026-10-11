@@ -4,6 +4,7 @@ using NINA.Plugin.TargetScheduler.Planning.Interfaces;
 using NINA.Plugin.TargetScheduler.Shared.Utility;
 using System;
 using System.Collections.Generic;
+using System.Linq;
 
 namespace NINA.Plugin.TargetScheduler.Planning.Exposures {
 
@@ -51,13 +52,14 @@ namespace NINA.Plugin.TargetScheduler.Planning.Exposures {
                     Goal = helper.GoalFor(plan),
                     PercentComplete = helper.PercentComplete(plan),
                     Narrowband = FilterKind.IsNarrowband(plan.FilterName),
-                    MoonGlare = glare
+                    MoonGlare = glare,
+                    PanelMatch = PanelBalance.ConditionFactor(target, plan.FilterName, glare, observer)
                 });
             }
 
             double? quality = SkyConditions.NightQuality(atTime);
             int chosen = FilterSteering.Choose(candidates, currentIndex, quality);
-            TSLogger.Debug($"filter steering conditions for {target.Name}: glare {glare:0.00}, quality {(quality.HasValue ? quality.Value.ToString("0.00") : "unknown")}, favors {(ConditionMatch.NarrowbandFavored(glare, quality) ? "narrowband" : "broadband")}");
+            TSLogger.Debug($"filter steering conditions for {target.Name}: glare {glare:0.00}, quality {(quality.HasValue ? quality.Value.ToString("0.00") : "unknown")}, favors {(ConditionMatch.NarrowbandFavored(glare, quality) ? "narrowband" : "broadband")}, sibling panel match {string.Join(", ", candidates.Select(c => $"{c.Filter} {c.PanelMatch:0.00}"))}");
             return chosen < 0 ? null : target.ExposurePlans[chosen];
         }
 

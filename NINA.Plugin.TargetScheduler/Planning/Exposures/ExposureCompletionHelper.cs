@@ -20,6 +20,8 @@ namespace NINA.Plugin.TargetScheduler.Planning.Exposures {
 
         public SimulatedStackSubs PreviewSubs { get; set; }
 
+        public PanelHistory PreviewHistory { get; set; }
+
         public GoalProgress GoalFor(IExposureCounts exposurePlan) {
             return GoalFor(exposurePlan, null);
         }
