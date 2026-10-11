@@ -77,7 +77,8 @@ namespace NINA.Plugin.TargetScheduler.Remote.Commands {
                 if (!seen.Add(c.Field)) {
                     return $"{c.Field} changed twice";
                 }
-                if (!TryConvert(col, c.Before, out _, out var err) || !TryConvert(col, c.After, out var after, out err)) {
+                string err = null;
+                if ((c.Before.ValueKind != JsonValueKind.Null && !TryConvert(col, c.Before, out _, out err)) || !TryConvert(col, c.After, out var after, out err)) {
                     return $"{c.Field}: {err}";
                 }
                 if (col.Type == ColumnType.Integer || col.Type == ColumnType.Real) {

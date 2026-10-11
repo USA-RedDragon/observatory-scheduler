@@ -122,6 +122,18 @@ namespace NINA.Plugin.TargetScheduler.Remote.Test {
         }
 
         [Test]
+        public void ProjectSettingWithNoValueTakesANullBefore() {
+            db.WithPlanning();
+            db.Exec("UPDATE project SET ditherevery = NULL, usecustomhorizon = NULL WHERE Id = 5");
+            var r = EditHandler.Project().Apply(Cmd.Of(CommandKinds.ProjectEdit, @"{""id"":5,""changes"":[{""field"":""ditherevery"",""before"":null,""after"":2},{""field"":""usecustomhorizon"",""before"":null,""after"":true}]}"), ctx);
+            r.Status.Should().Be(CommandStatus.Applied);
+            db.Scalar("SELECT ditherevery FROM project WHERE Id = 5").Should().Be(2L);
+            r = EditHandler.Project().Apply(Cmd.Of(CommandKinds.ProjectEdit, @"{""id"":5,""changes"":[{""field"":""ditherevery"",""before"":null,""after"":4}]}"), ctx);
+            r.Status.Should().Be(CommandStatus.Conflict);
+            EditHandler.Project().Validate(Cmd.Of(CommandKinds.ProjectEdit, @"{""id"":5,""changes"":[{""field"":""ditherevery"",""before"":0,""after"":null}]}")).Should().Contain("whole number");
+        }
+
+        [Test]
         public void MissingRowIsRejected() {
             var r = EditHandler.Target().Apply(Cmd.Of(CommandKinds.TargetEdit, @"{""id"":999,""changes"":[{""field"":""active"",""before"":true,""after"":false}]}"), ctx);
             r.Status.Should().Be(CommandStatus.Rejected);
