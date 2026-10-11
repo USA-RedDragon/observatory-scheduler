@@ -70,6 +70,8 @@ namespace NINA.Plugin.TargetScheduler.Goals {
         public static double Score(double altitude, double peakAltitude, IEnumerable<FilterCondition> filters, double? quality) {
             List<FilterCondition> list = filters?.Where(f => f != null).ToList() ?? new List<FilterCondition>();
             if (list.Count == 0) { return 0; }
+            List<FilterCondition> favored = list.Where(f => Favored(f, quality)).ToList();
+            if (favored.Count > 0) { list = favored; }
             return AltitudeScore(altitude, peakAltitude) * list.Max(f => FilterScore(f, quality));
         }
     }

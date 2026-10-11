@@ -104,5 +104,20 @@ namespace NINA.Plugin.TargetScheduler.Planning.Test {
             ConditionMatch.Score(60, 60, narrow, 1).Should().BeApproximately(1, 1e-9);
             ConditionMatch.Score(60, 60, broad, 0.3).Should().BeLessThan(ConditionMatch.Score(60, 60, narrow, 0.3));
         }
+
+        [Test]
+        public void AMixedTargetIsCreditedForTheKindFilterSteeringShoots() {
+            var mixed = new List<FilterCondition> {
+                new FilterCondition { Filter = "R" },
+                new FilterCondition { Filter = "Ha", Narrowband = true }
+            };
+
+            ConditionMatch.Score(60, 60, mixed, 0.8).Should().BeApproximately(0.8, 1e-9);
+            ConditionMatch.Score(60, 60, mixed, 0.3).Should().BeApproximately(0.65, 1e-9);
+            ConditionMatch.Score(60, 60, mixed, null).Should().BeApproximately(1, 1e-9);
+
+            var narrowOnly = new List<FilterCondition> { new FilterCondition { Filter = "Ha", Narrowband = true } };
+            ConditionMatch.Score(60, 60, narrowOnly, 0.8).Should().BeApproximately(0.9, 1e-9);
+        }
     }
 }
