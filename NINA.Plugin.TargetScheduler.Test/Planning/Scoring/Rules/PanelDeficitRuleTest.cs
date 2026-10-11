@@ -7,6 +7,8 @@ using NINA.Plugin.TargetScheduler.Planning.Interfaces;
 using NINA.Plugin.TargetScheduler.Planning.Scoring.Rules;
 using NINA.Plugin.TargetScheduler.Test.Astrometry;
 using NUnit.Framework;
+using System;
+using System.Collections.Generic;
 
 namespace NINA.Plugin.TargetScheduler.Test.Planning.Scoring.Rules {
 
@@ -61,6 +63,38 @@ namespace NINA.Plugin.TargetScheduler.Test.Planning.Scoring.Rules {
             s3.Should().BeApproximately(0.01 / 0.8, 0.00001);
             s1.Should().BeGreaterThan(s2);
             s2.Should().BeGreaterThan(s3);
+        }
+
+        [TestCase(2, false)]
+        [TestCase(3, false)]
+        [TestCase(4, true)]
+        [TestCase(5, true)]
+        public void testEvenPanelsSpreadsOnlyFourOrMorePanels(int panels, bool even) {
+            Mock<IProject> projectMock = GetProject(true);
+            projectMock.Object.RuleWeights = new Dictionary<string, double> { { PanelDeficitRule.RULE_NAME, 25 }, { EvenPanelsRule.RULE_NAME, 100 } };
+            List<Mock<ITarget>> targets = new List<Mock<ITarget>>();
+            for (int i = 0; i < panels; i++) {
+                targets.Add(AddPanel(projectMock, $"p{i + 1}", i + 1, ("L", 10, i == 0 ? 2 : 5)));
+            }
+
+            Mock<IScoringEngine> engine = PlanMocks.GetMockScoringEnging();
+            engine.SetupProperty(m => m.AtTime, new DateTime(2026, 10, 11, 6, 0, 0, DateTimeKind.Utc));
+            PanelDeficitRule sut = new PanelDeficitRule();
+            double weakest = sut.Score(engine.Object, targets[0].Object);
+            double other = sut.Score(engine.Object, targets[1].Object);
+
+            MosaicCompletion.PanelCount(projectMock.Object).Should().Be(panels);
+            if (even) {
+                weakest.Should().Be(1);
+                other.Should().Be(1);
+            } else {
+                weakest.Should().BeApproximately(0.8, 0.00001);
+                other.Should().BeApproximately(0.25 / 0.8, 0.00001);
+            }
+
+            projectMock.Object.RuleWeights[EvenPanelsRule.RULE_NAME] = 0;
+            sut.Score(engine.Object, targets[0].Object).Should().BeApproximately(0.8, 0.00001);
+            sut.Score(engine.Object, targets[1].Object).Should().BeApproximately(0.25 / 0.8, 0.00001);
         }
 
         [Test]

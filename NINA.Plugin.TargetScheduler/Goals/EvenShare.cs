@@ -6,6 +6,11 @@ namespace NINA.Plugin.TargetScheduler.Goals {
 
     public static class EvenShare {
         public const double DaysPerDegree = 365.2422 / 360;
+        public const int MinPanels = 4;
+
+        public static bool Spreads(bool evenPanelsOn, int panels) {
+            return evenPanelsOn && panels >= MinPanels;
+        }
 
         public static double Score(double panelHours, double totalHours, int panelUnfinished, int totalUnfinished) {
             if (panelUnfinished <= 0 || totalUnfinished <= 0) { return 0; }

@@ -1,3 +1,4 @@
+using NINA.Plugin.TargetScheduler.Goals;
 using NINA.Plugin.TargetScheduler.Planning.Exposures;
 using NINA.Plugin.TargetScheduler.Planning.Interfaces;
 
@@ -11,7 +12,8 @@ namespace NINA.Plugin.TargetScheduler.Planning.Scoring.Rules {
         public override double DefaultWeight { get { return DEFAULT_WEIGHT; } }
 
         public override double Score(IScoringEngine scoringEngine, ITarget potentialTarget) {
-            return EvenPanelsRule.IsOn(potentialTarget?.Project)
+            IProject project = potentialTarget?.Project;
+            return EvenShare.Spreads(EvenPanelsRule.IsOn(project), MosaicCompletion.PanelCount(project))
                 ? MosaicCompletion.EvenScore(potentialTarget, scoringEngine.AtTime)
                 : MosaicCompletion.DeficitScore(potentialTarget);
         }

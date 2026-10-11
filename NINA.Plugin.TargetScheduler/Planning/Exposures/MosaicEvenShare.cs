@@ -18,6 +18,10 @@ namespace NINA.Plugin.TargetScheduler.Planning.Exposures {
             return EvenShare.SeasonStart(atUtc, EvenShare.MeanRightAscension(ras));
         }
 
+        public static int PanelCount(IProject project) {
+            return project?.Targets?.Count(t => t != null) ?? 0;
+        }
+
         public static double EvenScore(ITarget target, DateTime atTime) {
             if (!IsMosaicPanel(target)) {
                 return 0;

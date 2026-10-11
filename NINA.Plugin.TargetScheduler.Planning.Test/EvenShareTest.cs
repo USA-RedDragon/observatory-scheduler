@@ -1,7 +1,9 @@
 using FluentAssertions;
 using NINA.Plugin.TargetScheduler.Goals;
+using NINA.Plugin.TargetScheduler.Planning.Exposures;
 using NUnit.Framework;
 using System;
+using System.Linq;
 
 namespace NINA.Plugin.TargetScheduler.Planning.Test {
 
@@ -22,6 +24,39 @@ namespace NINA.Plugin.TargetScheduler.Planning.Test {
             EvenShare.Score(7, 10, 1, 3).Should().Be(0);
             EvenShare.Score(1, 10, 1, 3).Should().BeApproximately(0.85, 1e-9);
             EvenShare.Score(0, 10, 0, 3).Should().Be(0);
+        }
+
+        [TestCase(2, false)]
+        [TestCase(3, false)]
+        [TestCase(4, true)]
+        [TestCase(5, true)]
+        [TestCase(15, true)]
+        public void EvenPanelsSpreadsOnlyFourOrMorePanels(int panels, bool spreads) {
+            EvenShare.Spreads(true, panels).Should().Be(spreads);
+            EvenShare.Spreads(false, panels).Should().BeFalse();
+        }
+
+        [Test]
+        public void TwoPanelMosaicKeepsWeakestFirstWithEvenPanelsOn() {
+            EvenShare.Spreads(true, 2).Should().BeFalse();
+            double behind = MosaicCompletion.DeficitScore(0.2, 0.2);
+            double ahead = MosaicCompletion.DeficitScore(0.5, 0.2);
+            behind.Should().BeApproximately(0.8, 1e-9);
+            ahead.Should().BeApproximately(0.25 / 0.8, 1e-9);
+            double evenBehind = EvenShare.PanelScore(new[] { (true, 1, 10.0), (false, 1, 2.0) });
+            evenBehind.Should().BeApproximately(1 - 10.0 / 12, 1e-9);
+            behind.Should().BeGreaterThan(evenBehind);
+        }
+
+        [Test]
+        public void FivePanelMosaicSpreadsWithEvenPanelsOn() {
+            EvenShare.Spreads(true, 5).Should().BeTrue();
+            var panels = new[] { 10.0, 2.0, 2.0, 2.0, 2.0 };
+            double weakestButMostHours = EvenShare.PanelScore(panels.Select((h, i) => (i == 0, 1, h)));
+            double behindItsShare = EvenShare.PanelScore(panels.Select((h, i) => (i == 1, 1, h)));
+            weakestButMostHours.Should().Be(0);
+            behindItsShare.Should().BeApproximately(1 - (2.0 / 18) / (2 * 0.2), 1e-9);
+            behindItsShare.Should().BeGreaterThan(weakestButMostHours);
         }
 
         [Test]
