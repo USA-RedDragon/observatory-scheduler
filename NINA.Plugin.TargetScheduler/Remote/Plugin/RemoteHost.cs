@@ -36,7 +36,7 @@ namespace NINA.Plugin.TargetScheduler.Remote.Plugin {
         private volatile bool containerRunning;
         private volatile bool containerPaused;
         private StatusTarget target;
-        private readonly ExposureTracker tracker = new ExposureTracker();
+        private readonly ExposureTracker tracker;
         private ISequenceContainer currentPlan;
         private string lastActivity;
         private StatusWait wait;
@@ -86,6 +86,7 @@ namespace NINA.Plugin.TargetScheduler.Remote.Plugin {
             this.profileService = profileService;
             connectionString = $"Data Source={Path.Combine(Common.PLUGIN_HOME, "schedulerdb.sqlite")};";
             database = new SqlSchedulerDatabase(Connect);
+            tracker = new ExposureTracker(null, (t, since) => database.CountAcquired(t, since));
             store = new SqlCommandStore(Connect);
             Settings = new RemoteSettings(Path.Combine(Common.PLUGIN_HOME, "observatory-scheduler.json"));
             Control = new SchedulerControl {

@@ -129,7 +129,7 @@ namespace NINA.Plugin.TargetScheduler.Remote.Test {
             t.ShutterOpened(40, "Ha", 300, Shutter.AddMinutes(40)).Number.Should().Be(2);
         }
 
-        private static DateTime CentralNight(DateTime utc) => utc.AddHours(-17).Date;
+        private static DateTime CentralNight(DateTime utc) => DateTime.SpecifyKind(utc.AddHours(-17).Date.AddHours(17), DateTimeKind.Utc);
 
         [Test]
         public void TheNumberCountsEachTargetsExposuresForTheWholeNight() {
@@ -171,8 +171,51 @@ namespace NINA.Plugin.TargetScheduler.Remote.Test {
         public void TheLocalNightTurnsAtNoon() {
             var morning = new DateTime(2026, 10, 11, 9, 0, 0, DateTimeKind.Local).ToUniversalTime();
             var evening = new DateTime(2026, 10, 11, 21, 0, 0, DateTimeKind.Local).ToUniversalTime();
-            ExposureTracker.LocalNight(morning).Should().Be(new DateTime(2026, 10, 10));
-            ExposureTracker.LocalNight(evening).Should().Be(new DateTime(2026, 10, 11));
+            var noon10 = new DateTime(2026, 10, 10, 12, 0, 0, DateTimeKind.Local).ToUniversalTime();
+            var noon11 = new DateTime(2026, 10, 11, 12, 0, 0, DateTimeKind.Local).ToUniversalTime();
+            ExposureTracker.LocalNight(morning).Should().Be(noon10);
+            ExposureTracker.LocalNight(evening).Should().Be(noon11);
+        }
+
+        [Test]
+        public void TheNumberContinuesFromTheSubsAlreadyTakenTonightAfterARestart() {
+            var asked = new List<(int, DateTime)>();
+            var t = new ExposureTracker(CentralNight, (target, since) => {
+                asked.Add((target, since));
+                return target == 130 ? 5 : 0;
+            });
+            t.PlanStarted(130);
+            t.ShutterOpened(774, "Green", 600, Shutter).Number.Should().Be(6);
+            t.CaptureEnded();
+            t.PlanStarted(130);
+            t.ShutterOpened(775, "Blue", 600, Shutter.AddMinutes(11)).Number.Should().Be(7);
+            t.CaptureEnded();
+            t.PlanStarted(128);
+            t.ShutterOpened(800, "Lum", 300, Shutter.AddMinutes(22)).Number.Should().Be(1);
+            asked.Should().Equal((130, CentralNight(Shutter)), (128, CentralNight(Shutter)));
+        }
+
+        [Test]
+        public void ASeedThatFailsStartsTheCountAtOne() {
+            var t = new ExposureTracker(CentralNight, (_, _) => throw new InvalidOperationException("locked"));
+            t.PlanStarted(130);
+            t.ShutterOpened(774, "Green", 600, Shutter).Number.Should().Be(1);
+        }
+
+        [Test]
+        public void TheDatabaseCountsTheTargetsSubsSinceTheNightStarted() {
+            using var db = new TestDb().WithPlanning();
+            var since = new DateTime(2026, 10, 10, 17, 0, 0, DateTimeKind.Utc);
+            long at(DateTime d) => new DateTimeOffset(d).ToUnixTimeSeconds();
+            db.Exec($@"INSERT INTO acquiredimage (Id, projectId, targetId, acquireddate, filtername, gradingStatus, metadata) VALUES
+  (9001, 58, 130, {at(since.AddMinutes(-1))}, 'Red', 0, '{{}}'),
+  (9002, 58, 130, {at(since)}, 'Red', 0, '{{}}'),
+  (9003, 58, 130, {at(since.AddHours(12))}, 'Green', 1, '{{}}'),
+  (9004, 58, 128, {at(since.AddHours(12))}, 'Lum', 0, '{{}}')");
+            var sql = new SqlSchedulerDatabase(db.Connect);
+            sql.CountAcquired(130, since).Should().Be(2);
+            sql.CountAcquired(128, since).Should().Be(1);
+            sql.CountAcquired(77, since).Should().Be(0);
         }
 
         [Test]

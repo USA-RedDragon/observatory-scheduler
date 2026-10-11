@@ -135,5 +135,7 @@ namespace NINA.Plugin.TargetScheduler.Remote.Commands {
         ChangeOutcome DeleteProject(ProjectCreatePayload payload);
 
         TargetSnapshot ReadSnapshot(int targetId);
+
+        int CountAcquired(int targetId, DateTime sinceUtc);
     }
 }

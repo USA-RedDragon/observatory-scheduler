@@ -94,6 +94,7 @@ namespace NINA.Plugin.TargetScheduler.Remote.Api {
     public class ExposureTracker {
         private readonly object sync = new object();
         private readonly Func<DateTime, DateTime> nightOf;
+        private readonly Func<int, DateTime, int> taken;
         private readonly Dictionary<int, int> counts = new Dictionary<int, int>();
         private DateTime? night;
         private bool inPlan;
@@ -103,13 +104,15 @@ namespace NINA.Plugin.TargetScheduler.Remote.Api {
         private string lastActivity;
         private DateTime? since;
 
-        public ExposureTracker(Func<DateTime, DateTime> nightOf = null) {
+        public ExposureTracker(Func<DateTime, DateTime> nightOf = null, Func<int, DateTime, int> taken = null) {
             this.nightOf = nightOf ?? LocalNight;
+            this.taken = taken;
         }
 
         public static DateTime LocalNight(DateTime utc) {
             var local = utc.ToLocalTime();
-            return local.Hour < 12 ? local.Date.AddDays(-1) : local.Date;
+            var noon = DateTime.SpecifyKind(local.Date.AddHours(12), DateTimeKind.Local);
+            return (local.Hour < 12 ? noon.AddDays(-1) : noon).ToUniversalTime();
         }
 
         public bool InPlan {
@@ -158,7 +161,13 @@ namespace NINA.Plugin.TargetScheduler.Remote.Api {
                     night = n;
                 }
                 var key = targetId ?? -1;
-                counts.TryGetValue(key, out var number);
+                if (!counts.TryGetValue(key, out var number) && targetId != null && taken != null) {
+                    try {
+                        number = taken(key, n);
+                    } catch (Exception) {
+                        number = 0;
+                    }
+                }
                 number++;
                 counts[key] = number;
                 afterShutter = false;

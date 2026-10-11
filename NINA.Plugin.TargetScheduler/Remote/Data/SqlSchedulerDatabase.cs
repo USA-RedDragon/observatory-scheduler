@@ -132,6 +132,15 @@ namespace NINA.Plugin.TargetScheduler.Remote.Data {
             return Convert.ToDouble(v, CultureInfo.InvariantCulture);
         }
 
+        public int CountAcquired(int targetId, DateTime sinceUtc) {
+            using var conn = connect();
+            using var cmd = conn.CreateCommand();
+            cmd.CommandText = "SELECT COUNT(*) FROM acquiredimage WHERE targetId = @t AND acquireddate >= @s";
+            SqlCommandStore.Add(cmd, "@t", targetId);
+            SqlCommandStore.Add(cmd, "@s", new DateTimeOffset(DateTime.SpecifyKind(sinceUtc, DateTimeKind.Utc)).ToUnixTimeSeconds());
+            return Convert.ToInt32(cmd.ExecuteScalar(), CultureInfo.InvariantCulture);
+        }
+
         public TargetSnapshot ReadSnapshot(int targetId) {
             using var conn = connect();
             TargetSnapshot snap;
