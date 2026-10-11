@@ -314,6 +314,10 @@ namespace NINA.Plugin.TargetScheduler.Remote.Commands {
             if (p.Project.Priority < 0 || p.Project.Priority > 2 || p.Project.State < 0 || p.Project.State > 3) {
                 return "priority or state out of range";
             }
+            var settingsError = ProjectSettings.Check(p.Project);
+            if (settingsError != null) {
+                return settingsError;
+            }
             if (p.Targets == null || p.Targets.Count == 0) {
                 return "at least one target";
             }

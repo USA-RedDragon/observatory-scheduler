@@ -510,6 +510,52 @@ namespace NINA.Plugin.TargetScheduler.Remote.Test {
         }
 
         [Test]
+        public void ProjectCreateFillsMissingSettingsWithTheProfilesMostCommonValues() {
+            db.Exec(@"UPDATE project SET ditherevery = 2, filterswitchfrequency = 1, flatsHandling = 1, meridianwindow = 60, enablegrader = 1 WHERE Id = 5;
+UPDATE project SET ditherevery = 2, filterswitchfrequency = 1, flatsHandling = 1, meridianwindow = 30, enablegrader = 1 WHERE Id = 7;
+UPDATE project SET ditherevery = 1, filterswitchfrequency = 0, flatsHandling = 0, enablegrader = 0 WHERE Id = 9;
+INSERT INTO project (Id, profileId, name, state, priority, minimumtime, ditherevery, filterswitchfrequency, flatsHandling, meridianwindow) VALUES (20, 'other', 'Elsewhere', 1, 1, 60, 5, 5, 7, 5), (21, 'other', 'Elsewhere 2', 1, 1, 60, 5, 5, 7, 5);");
+            var r = Run("project.create", Samples.ProjectCreate);
+            r.Status.Should().Be(CommandStatus.Applied);
+            db.Dump("project WHERE guid = 'pg'", "Id").Should().Contain("|flatsHandling=1|").And.Contain("|filterswitchfrequency=1|").And.Contain("|ditherevery=2|")
+                .And.Contain("|meridianwindow=30|").And.Contain("|enablegrader=1|").And.Contain("|maximumAltitude=0|").And.Contain("|usecustomhorizon=0|");
+            r.Message.Should().Be("Most common in the profile's 3 projects: ditherevery 2, filterswitchfrequency 1, flatshandling 1, smartexposureorder 0, meridianwindow 30, usecustomhorizon 0, horizonoffset 0, maximumaltitude 0, enablegrader 1.");
+        }
+
+        [Test]
+        public void ProjectCreateKeepsTheSettingsItIsGiven() {
+            db.Exec("UPDATE project SET ditherevery = 2, flatsHandling = 1");
+            var payload = JsonNode.Parse(Samples.ProjectCreate);
+            payload["project"]["ditherevery"] = 3;
+            payload["project"]["filterswitchfrequency"] = 4;
+            payload["project"]["flatshandling"] = 200;
+            payload["project"]["smartexposureorder"] = true;
+            payload["project"]["meridianwindow"] = 120;
+            payload["project"]["usecustomhorizon"] = true;
+            payload["project"]["horizonoffset"] = 2.5;
+            payload["project"]["maximumaltitude"] = 80;
+            payload["project"]["enablegrader"] = false;
+            var r = Run("project.create", payload.ToJsonString());
+            r.Status.Should().Be(CommandStatus.Applied);
+            r.Message.Should().BeNull();
+            db.Dump("project WHERE guid = 'pg'", "Id").Should().Be(
+                "profileId=p|name=Gecko Nebula|state=1|priority=1|minimumtime=60|isMosaic=0|flatsHandling=200|description=null|createdate=1791615120|activedate=null|inactivedate=null|minimumaltitude=15|usecustomhorizon=1|horizonoffset=2.5|meridianwindow=120|filterswitchfrequency=4|ditherevery=3|enablegrader=0|maximumAltitude=80|smartexposureorder=1|guid=pg");
+        }
+
+        [TestCase("ditherevery", "1000")]
+        [TestCase("ditherevery", "-1")]
+        [TestCase("filterswitchfrequency", "1000")]
+        [TestCase("flatshandling", "150")]
+        [TestCase("meridianwindow", "721")]
+        [TestCase("horizonoffset", "91")]
+        [TestCase("maximumaltitude", "95")]
+        public void ProjectCreateRejectsSettingsOutOfRange(string field, string value) {
+            var payload = JsonNode.Parse(Samples.ProjectCreate);
+            payload["project"][field] = JsonNode.Parse(value);
+            registry.Get("project.create").Validate(Cmd.Of("project.create", payload.ToJsonString())).Should().Contain(field);
+        }
+
+        [Test]
         public void ProjectCreateUsesThePayloadRuleWeightsAndFillsBuiltIns() {
             var payload = JsonNode.Parse(Samples.ProjectCreate);
             payload["rule_weights"] = JsonNode.Parse(@"{""Novelty"":10,""Rarity"":20,""Target Switch Penalty"":40}");
@@ -558,7 +604,10 @@ namespace NINA.Plugin.TargetScheduler.Remote.Test {
         public void ProjectCreateOnAnEmptyDatabaseTakesTheTemplateProfile() {
             ctx.ProfileId = null;
             db.Exec("DELETE FROM exposureplan; DELETE FROM target; DELETE FROM ruleweight; DELETE FROM project; UPDATE exposuretemplate SET profileId = 'q'");
-            Run("project.create", Samples.ProjectCreate).Status.Should().Be(CommandStatus.Applied);
+            var r = Run("project.create", Samples.ProjectCreate);
+            r.Status.Should().Be(CommandStatus.Applied);
+            r.Message.Should().StartWith("Target Scheduler defaults, as the profile has no projects: ditherevery 0, filterswitchfrequency 0, flatshandling 0,");
+            db.Scalar("SELECT enablegrader FROM project WHERE guid = 'pg'").Should().Be(1L);
             db.Scalar("SELECT profileId FROM project WHERE guid = 'pg'").Should().Be("q");
             db.Scalar("SELECT profileId FROM exposureplan WHERE guid = 'pp'").Should().Be("q");
         }

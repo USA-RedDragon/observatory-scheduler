@@ -1,5 +1,7 @@
 using System;
 using System.Collections.Generic;
+using System.Globalization;
+using System.Linq;
 
 namespace NINA.Plugin.TargetScheduler.Remote.Commands {
 
@@ -16,13 +18,32 @@ namespace NINA.Plugin.TargetScheduler.Remote.Commands {
         public ColumnType Type { get; }
         public double? Min { get; }
         public double? Max { get; }
+        public IReadOnlyList<double> Also { get; }
 
-        public EditableColumn(string field, string column, ColumnType type, double? min = null, double? max = null) {
+        public EditableColumn(string field, string column, ColumnType type, double? min = null, double? max = null, params double[] also) {
             Field = field;
             Column = column;
             Type = type;
             Min = min;
             Max = max;
+            Also = also ?? Array.Empty<double>();
+        }
+
+        public string Check(double v) {
+            if (Type == ColumnType.Boolean) {
+                return v == 0 || v == 1 ? null : $"{Field} must be true or false";
+            }
+            if (Type == ColumnType.Integer && v != Math.Floor(v)) {
+                return $"{Field} must be a whole number";
+            }
+            if (Also.Contains(v)) {
+                return null;
+            }
+            if ((Min.HasValue && v < Min.Value) || (Max.HasValue && v > Max.Value)) {
+                var also = Also.Count == 0 ? "" : " or " + string.Join(" or ", Also.Select(a => a.ToString(CultureInfo.InvariantCulture)));
+                return $"{Field} must be between {Min} and {Max}{also}";
+            }
+            return null;
         }
     }
 

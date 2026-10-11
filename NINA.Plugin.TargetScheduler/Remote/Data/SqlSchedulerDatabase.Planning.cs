@@ -467,13 +467,22 @@ namespace NINA.Plugin.TargetScheduler.Remote.Data {
             if (p.Goals.Count > 0 && !s.TableExists("ts_goal")) {
                 return o.Reject("Goals are not set up on the observatory yet.");
             }
+            var settings = ProjectSettingValues(s, profile, p.Project, out var filled);
+            object Setting(string field) {
+                var col = ProjectSettings.Column(field);
+                return col.Type == ColumnType.Real ? settings[field] : (object)(long)settings[field];
+            }
             var created = new DateTimeOffset(now.ToUniversalTime()).ToUnixTimeSeconds();
             var projectId = s.Insert(@"INSERT INTO project (profileId, name, description, state, priority, createdate, activedate, inactivedate, minimumtime, minimumaltitude, maximumAltitude,
 usecustomhorizon, horizonoffset, meridianwindow, filterswitchfrequency, ditherevery, smartexposureorder, enablegrader, isMosaic, flatsHandling, guid)
-VALUES (@pr, @name, @desc, @state, @prio, @created, NULL, NULL, @mintime, @minalt, 0, 0, 0, 0, 0, 0, 0, 1, @mosaic, 0, @g)",
+VALUES (@pr, @name, @desc, @state, @prio, @created, NULL, NULL, @mintime, @minalt, @maxalt, @horizon, @hoffset, @meridian, @switch, @dither, @smart, @grader, @mosaic, @flats, @g)",
                 ("@pr", profile), ("@name", p.Project.Name), ("@desc", Db(string.IsNullOrEmpty(p.Project.Description) ? null : p.Project.Description)),
                 ("@state", p.Project.State), ("@prio", p.Project.Priority), ("@created", created), ("@mintime", p.Project.MinimumTime),
-                ("@minalt", p.Project.MinimumAltitude), ("@mosaic", p.Project.IsMosaic ? 1 : 0), ("@g", p.Project.Guid));
+                ("@minalt", p.Project.MinimumAltitude), ("@maxalt", Setting(ProjectSettings.MaximumAltitude)), ("@horizon", Setting(ProjectSettings.UseCustomHorizon)),
+                ("@hoffset", Setting(ProjectSettings.HorizonOffset)), ("@meridian", Setting(ProjectSettings.MeridianWindow)),
+                ("@switch", Setting(ProjectSettings.FilterSwitchFrequency)), ("@dither", Setting(ProjectSettings.DitherEvery)),
+                ("@smart", Setting(ProjectSettings.SmartExposureOrder)), ("@grader", Setting(ProjectSettings.EnableGrader)),
+                ("@mosaic", p.Project.IsMosaic ? 1 : 0), ("@flats", Setting(ProjectSettings.FlatsHandling)), ("@g", p.Project.Guid));
             foreach (var t in p.Targets) {
                 var targetId = s.Insert("INSERT INTO target (name, active, ra, dec, epochcode, rotation, roi, projectid, guid) VALUES (@n, 1, @ra, @dec, 2, @rot, 100, @p, @g)",
                     ("@n", t.Name), ("@ra", t.RaHours), ("@dec", t.Dec), ("@rot", t.Rotation), ("@p", projectId), ("@g", t.Guid));
@@ -498,7 +507,28 @@ VALUES (@pr, @name, @desc, @state, @prio, @created, NULL, NULL, @mintime, @minal
             s.Commit();
             o.Touch((int)projectId, null);
             o.Changed = true;
+            o.Message = filled;
             return o;
+        }
+
+        private static Dictionary<string, double> ProjectSettingValues(Session s, string profile, NewProject p, out string filled) {
+            var values = ProjectSettings.Given(p);
+            var projects = s.Count("SELECT COUNT(*) FROM project WHERE profileId = @p", ("@p", profile));
+            var used = new List<string>();
+            foreach (var col in ProjectSettings.Columns) {
+                if (values.ContainsKey(col.Field)) {
+                    continue;
+                }
+                var q = Quote(col.Column);
+                var row = projects == 0 ? null : s.Row($"SELECT {q} AS v, COUNT(*) AS n, MAX(Id) AS m FROM project WHERE profileId = @p AND {q} IS NOT NULL GROUP BY {q} ORDER BY n DESC, m DESC LIMIT 1", ("@p", profile));
+                var v = row == null ? null : Double(row["v"]);
+                values[col.Field] = v ?? ProjectSettings.TargetSchedulerDefaults[col.Field];
+                used.Add($"{col.Field} {values[col.Field].ToString(CultureInfo.InvariantCulture)}");
+            }
+            filled = used.Count == 0 ? null
+                : projects == 0 ? $"Target Scheduler defaults, as the profile has no projects: {string.Join(", ", used)}."
+                : $"Most common in the profile's {projects} {(projects == 1 ? "project" : "projects")}: {string.Join(", ", used)}.";
+            return values;
         }
 
         public ChangeOutcome DeleteProject(ProjectCreatePayload p) {

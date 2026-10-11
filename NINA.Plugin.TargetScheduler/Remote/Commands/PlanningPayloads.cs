@@ -216,6 +216,33 @@ namespace NINA.Plugin.TargetScheduler.Remote.Commands {
 
         [JsonPropertyName("is_mosaic")]
         public bool IsMosaic { get; set; }
+
+        [JsonPropertyName("ditherevery")]
+        public int? DitherEvery { get; set; }
+
+        [JsonPropertyName("filterswitchfrequency")]
+        public int? FilterSwitchFrequency { get; set; }
+
+        [JsonPropertyName("flatshandling")]
+        public int? FlatsHandling { get; set; }
+
+        [JsonPropertyName("smartexposureorder")]
+        public bool? SmartExposureOrder { get; set; }
+
+        [JsonPropertyName("meridianwindow")]
+        public int? MeridianWindow { get; set; }
+
+        [JsonPropertyName("usecustomhorizon")]
+        public bool? UseCustomHorizon { get; set; }
+
+        [JsonPropertyName("horizonoffset")]
+        public double? HorizonOffset { get; set; }
+
+        [JsonPropertyName("maximumaltitude")]
+        public double? MaximumAltitude { get; set; }
+
+        [JsonPropertyName("enablegrader")]
+        public bool? EnableGrader { get; set; }
     }
 
     public class NewTarget {
