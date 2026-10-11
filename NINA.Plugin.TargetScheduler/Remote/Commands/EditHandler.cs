@@ -18,11 +18,12 @@ namespace NINA.Plugin.TargetScheduler.Remote.Commands {
         }
 
         public static EditHandler Project() {
-            return new EditHandler(CommandKinds.ProjectEdit, new EditableTable("project", "project",
+            return new EditHandler(CommandKinds.ProjectEdit, new EditableTable("project", "project", new[] {
                 new EditableColumn("state", "state", ColumnType.Integer, 0, 3),
                 new EditableColumn("priority", "priority", ColumnType.Integer, 0, 2),
                 new EditableColumn("minimumtime", "minimumtime", ColumnType.Integer, 1, 1440),
-                new EditableColumn("minimumaltitude", "minimumaltitude", ColumnType.Real, 0, 90)));
+                new EditableColumn("minimumaltitude", "minimumaltitude", ColumnType.Real, 0, 90)
+            }.Concat(ProjectSettings.Columns).ToArray()));
         }
 
         public static EditHandler Target() {
@@ -80,9 +81,9 @@ namespace NINA.Plugin.TargetScheduler.Remote.Commands {
                     return $"{c.Field}: {err}";
                 }
                 if (col.Type == ColumnType.Integer || col.Type == ColumnType.Real) {
-                    double v = Convert.ToDouble(after, CultureInfo.InvariantCulture);
-                    if ((col.Min.HasValue && v < col.Min.Value) || (col.Max.HasValue && v > col.Max.Value)) {
-                        return $"{c.Field} must be between {col.Min} and {col.Max}";
+                    var rangeError = col.Check(Convert.ToDouble(after, CultureInfo.InvariantCulture));
+                    if (rangeError != null) {
+                        return rangeError;
                     }
                 }
             }
