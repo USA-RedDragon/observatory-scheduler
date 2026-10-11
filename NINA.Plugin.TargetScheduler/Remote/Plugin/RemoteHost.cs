@@ -252,7 +252,7 @@ namespace NINA.Plugin.TargetScheduler.Remote.Plugin {
             lock (sync) {
                 currentPlan = plan;
             }
-            tracker.PlanStarted(planTarget.DatabaseId, !ReferenceEquals(planTarget, previous));
+            tracker.PlanStarted(planTarget.DatabaseId);
             inPlan = true;
         }
 
@@ -399,7 +399,7 @@ namespace NINA.Plugin.TargetScheduler.Remote.Plugin {
 
         private void OnExposureStarting(ExposureStartingEventArgs e) {
             var t = e.Target;
-            tracker.PlanStarted(t.DatabaseId, e.IsNewTarget);
+            tracker.PlanStarted(t.DatabaseId);
             lock (sync) {
                 wait = null;
                 target = new StatusTarget {

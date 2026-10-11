@@ -32,7 +32,7 @@ namespace NINA.Plugin.TargetScheduler.Remote.Test {
         [Test]
         public void TheExposureIsNullUntilTheShutterOpens() {
             var t = new ExposureTracker();
-            t.PlanStarted(7, true);
+            t.PlanStarted(7);
 
             var v = t.View(Picked.AddSeconds(5), Slew);
             v.Exposure.Should().BeNull();
@@ -51,7 +51,7 @@ namespace NINA.Plugin.TargetScheduler.Remote.Test {
         [Test]
         public void TheExposureTimesComeFromTheShutterNotThePick() {
             var t = new ExposureTracker();
-            t.PlanStarted(7, true);
+            t.PlanStarted(7);
             t.View(Picked, Focus);
 
             t.ShutterOpened(31, "Ha", 300, Shutter);
@@ -70,7 +70,7 @@ namespace NINA.Plugin.TargetScheduler.Remote.Test {
         [Test]
         public void AfterTheEndTimeTheCameraIsDownloadingNotExposing() {
             var t = new ExposureTracker();
-            t.PlanStarted(7, true);
+            t.PlanStarted(7);
             t.ShutterOpened(31, "Ha", 300, Shutter);
 
             var v = t.View(Shutter.AddSeconds(302), Take);
@@ -89,7 +89,7 @@ namespace NINA.Plugin.TargetScheduler.Remote.Test {
             var t = new ExposureTracker();
             t.View(Picked, Slew).Activity.Should().BeNull();
 
-            t.PlanStarted(7, true);
+            t.PlanStarted(7);
             t.ShutterOpened(31, "Ha", 300, Shutter);
             t.PlanEnded();
 
@@ -102,43 +102,89 @@ namespace NINA.Plugin.TargetScheduler.Remote.Test {
         [Test]
         public void TheNumberCountsRealExposuresOnTheSameTarget() {
             var t = new ExposureTracker();
-            t.PlanStarted(7, true);
+            t.PlanStarted(7);
             t.ShutterOpened(31, "Ha", 300, Shutter).Number.Should().Be(1);
             t.CaptureEnded();
             t.PlanEnded();
 
-            t.PlanStarted(7, false);
+            t.PlanStarted(7);
             t.PlanEnded();
 
-            t.PlanStarted(7, false);
+            t.PlanStarted(7);
             t.ShutterOpened(31, "Ha", 300, Shutter.AddMinutes(12)).Number.Should().Be(2);
             t.CaptureEnded();
             t.PlanEnded();
 
-            t.PlanStarted(7, false);
+            t.PlanStarted(7);
             t.ShutterOpened(32, "OIII", 300, Shutter.AddMinutes(20)).Number.Should().Be(3);
             t.CaptureEnded();
             t.PlanEnded();
 
-            t.PlanStarted(8, false);
+            t.PlanStarted(8);
             t.ShutterOpened(40, "Ha", 300, Shutter.AddMinutes(30)).Number.Should().Be(1);
             t.CaptureEnded();
             t.PlanEnded();
 
-            t.PlanStarted(8, true);
-            t.ShutterOpened(40, "Ha", 300, Shutter.AddMinutes(40)).Number.Should().Be(1);
+            t.PlanStarted(8);
+            t.ShutterOpened(40, "Ha", 300, Shutter.AddMinutes(40)).Number.Should().Be(2);
+        }
+
+        private static DateTime CentralNight(DateTime utc) => utc.AddHours(-17).Date;
+
+        [Test]
+        public void TheNumberCountsEachTargetsExposuresForTheWholeNight() {
+            var t = new ExposureTracker(CentralNight);
+            t.PlanStarted(130);
+            for (var i = 0; i < 5; i++) {
+                t.ShutterOpened(773, "Red", 600, Shutter.AddMinutes(i * 11));
+                t.CaptureEnded();
+            }
+            t.PlanEnded();
+
+            t.PlanStarted(130);
+            t.ShutterOpened(774, "Green", 600, Shutter.AddMinutes(60)).Number.Should().Be(6);
+            t.CaptureEnded();
+            t.PlanEnded();
+
+            t.PlanStarted(128);
+            t.ShutterOpened(800, "Lum", 300, Shutter.AddMinutes(75)).Number.Should().Be(1);
+            t.CaptureEnded();
+            t.PlanEnded();
+
+            t.PlanStarted(130);
+            t.ShutterOpened(775, "Blue", 600, Shutter.AddMinutes(90)).Number.Should().Be(7);
+        }
+
+        [Test]
+        public void TheNumberStartsAgainOnTheNextNight() {
+            var t = new ExposureTracker(CentralNight);
+            t.PlanStarted(130);
+            t.ShutterOpened(773, "Red", 600, Shutter);
+            t.CaptureEnded();
+            t.PlanEnded();
+
+            t.PlanStarted(130);
+            t.ShutterOpened(773, "Red", 600, Shutter.AddHours(20)).Number.Should().Be(1);
+        }
+
+        [Test]
+        public void TheLocalNightTurnsAtNoon() {
+            var morning = new DateTime(2026, 10, 11, 9, 0, 0, DateTimeKind.Local).ToUniversalTime();
+            var evening = new DateTime(2026, 10, 11, 21, 0, 0, DateTimeKind.Local).ToUniversalTime();
+            ExposureTracker.LocalNight(morning).Should().Be(new DateTime(2026, 10, 10));
+            ExposureTracker.LocalNight(evening).Should().Be(new DateTime(2026, 10, 11));
         }
 
         [Test]
         public void ARepeatedPlanStartForTheSameTargetDoesNotResetTheCount() {
             var t = new ExposureTracker();
-            t.PlanStarted(7, true);
+            t.PlanStarted(7);
             t.ShutterOpened(31, "Ha", 300, Shutter);
             t.CaptureEnded();
             t.PlanEnded();
 
-            t.PlanStarted(7, false);
-            t.PlanStarted(7, false);
+            t.PlanStarted(7);
+            t.PlanStarted(7);
             t.ShutterOpened(31, "Ha", 300, Shutter.AddMinutes(6)).Number.Should().Be(2);
         }
 
@@ -147,7 +193,7 @@ namespace NINA.Plugin.TargetScheduler.Remote.Test {
             var t = new ExposureTracker();
             t.Pending(Picked).Should().BeEquivalentTo(PendingTiming.At(null, PendingTiming.BeforeNextExposure));
 
-            t.PlanStarted(7, true);
+            t.PlanStarted(7);
             t.Pending(Picked.AddMinutes(2)).Should().BeEquivalentTo(PendingTiming.At(null, PendingTiming.AfterNextExposure));
 
             t.ShutterOpened(31, "Ha", 300, Shutter);
@@ -164,7 +210,7 @@ namespace NINA.Plugin.TargetScheduler.Remote.Test {
         [Test]
         public void ActivitySinceMarksWhenThePhaseChanged() {
             var t = new ExposureTracker();
-            t.PlanStarted(7, true);
+            t.PlanStarted(7);
             t.View(Picked, Slew).ActivitySince.Should().Be(Picked);
             t.View(Picked.AddSeconds(30), Slew).ActivitySince.Should().Be(Picked);
             t.View(Picked.AddSeconds(40), Focus).ActivitySince.Should().Be(Picked.AddSeconds(40));
@@ -225,7 +271,7 @@ namespace NINA.Plugin.TargetScheduler.Remote.Test {
             var events = new List<CommandResult>();
             proc.ResultChanged += r => events.Add(r);
 
-            t.PlanStarted(7, true);
+            t.PlanStarted(7);
             ctx.Now = Picked.AddMinutes(2);
             var early = proc.Submit(Cmd.Of(CommandKinds.ProjectEdit, @"{""id"":5,""changes"":[{""field"":""priority"",""before"":1,""after"":0}]}", "early"), "api");
             early.Status.Should().Be(CommandStatus.Pending);

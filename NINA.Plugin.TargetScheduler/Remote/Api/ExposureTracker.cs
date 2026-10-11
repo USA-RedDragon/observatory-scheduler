@@ -93,13 +93,24 @@ namespace NINA.Plugin.TargetScheduler.Remote.Api {
 
     public class ExposureTracker {
         private readonly object sync = new object();
+        private readonly Func<DateTime, DateTime> nightOf;
+        private readonly Dictionary<int, int> counts = new Dictionary<int, int>();
+        private DateTime? night;
         private bool inPlan;
         private int? targetId;
-        private int number;
         private StatusExposure open;
         private bool afterShutter;
         private string lastActivity;
         private DateTime? since;
+
+        public ExposureTracker(Func<DateTime, DateTime> nightOf = null) {
+            this.nightOf = nightOf ?? LocalNight;
+        }
+
+        public static DateTime LocalNight(DateTime utc) {
+            var local = utc.ToLocalTime();
+            return local.Hour < 12 ? local.Date.AddDays(-1) : local.Date;
+        }
 
         public bool InPlan {
             get {
@@ -109,11 +120,8 @@ namespace NINA.Plugin.TargetScheduler.Remote.Api {
             }
         }
 
-        public void PlanStarted(int target, bool newTarget) {
+        public void PlanStarted(int target) {
             lock (sync) {
-                if (newTarget || targetId != target) {
-                    number = 0;
-                }
                 targetId = target;
                 inPlan = true;
                 open = null;
@@ -135,7 +143,8 @@ namespace NINA.Plugin.TargetScheduler.Remote.Api {
                 open = null;
                 afterShutter = false;
                 targetId = null;
-                number = 0;
+                counts.Clear();
+                night = null;
                 lastActivity = null;
                 since = null;
             }
@@ -143,7 +152,15 @@ namespace NINA.Plugin.TargetScheduler.Remote.Api {
 
         public StatusExposure ShutterOpened(int planId, string filter, double seconds, DateTime at) {
             lock (sync) {
+                var n = nightOf(at);
+                if (night != n) {
+                    counts.Clear();
+                    night = n;
+                }
+                var key = targetId ?? -1;
+                counts.TryGetValue(key, out var number);
                 number++;
+                counts[key] = number;
                 afterShutter = false;
                 open = new StatusExposure {
                     PlanId = planId,
