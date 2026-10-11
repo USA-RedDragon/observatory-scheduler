@@ -215,6 +215,7 @@ namespace NINA.Plugin.TargetScheduler.Remote.Api {
                         view.Exposure = Copy(open);
                         view.Activity = Activities.Exposing;
                     } else if (open != null) {
+                        view.Exposure = Copy(open);
                         view.Activity = Activities.Downloading;
                     } else if (stepActivity != null && stepActivity != Activities.Exposure) {
                         view.Activity = stepActivity;

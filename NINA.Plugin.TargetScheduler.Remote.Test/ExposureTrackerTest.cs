@@ -74,8 +74,9 @@ namespace NINA.Plugin.TargetScheduler.Remote.Test {
             t.ShutterOpened(31, "Ha", 300, Shutter);
 
             var v = t.View(Shutter.AddSeconds(302), Take);
-            v.Exposure.Should().BeNull();
             v.Activity.Should().Be(Activities.Downloading);
+            v.Exposure.PlanId.Should().Be(31);
+            v.Exposure.StartedAt.Should().Be(Shutter);
 
             t.CaptureEnded();
             t.View(Shutter.AddSeconds(305), Take).Activity.Should().Be(Activities.Saving);
@@ -150,6 +151,39 @@ namespace NINA.Plugin.TargetScheduler.Remote.Test {
             t.CaptureAborted();
             t.CaptureAborted();
             t.ShutterOpened(31, "Ha", 300, Shutter.AddMinutes(13)).Number.Should().Be(2);
+        }
+
+        [Test]
+        public void TheExposureStaysInTheStatusThroughTheDownloadUntilAbortedSoAbortStaysPossible() {
+            var t = new ExposureTracker();
+            t.PlanStarted(7);
+            t.ShutterOpened(31, "Ha", 300, Shutter);
+            t.View(Shutter.AddSeconds(305), Take).Exposure.StartedAt.Should().Be(Shutter);
+            t.Pending(Shutter.AddSeconds(305)).Message.Should().Be(PendingTiming.AfterSaving);
+
+            t.CaptureAborted();
+            var v = t.View(Shutter.AddSeconds(306), Take);
+            v.Exposure.Should().BeNull();
+            v.Activity.Should().Be(Activities.StartingExposure);
+        }
+
+        [Test]
+        public void AfterAnAbortThePreviewStartsNowInsteadOfAtTheAbortedExposuresEnd() {
+            var t = new ExposureTracker();
+            t.PlanStarted(7);
+            t.ShutterOpened(31, "Ha", 300, Shutter);
+            var now = Shutter.AddSeconds(60);
+            var during = t.View(now, Take).Exposure;
+            var live = new LiveImaging { TargetId = 7, TargetName = "M31", PlanId = during.PlanId, Filter = during.Filter, EndsAt = during.EndsAt };
+            PreviewBuilder.LiveStart(now, live).Should().Be(Shutter.AddSeconds(300));
+            PreviewBuilder.LiveAssumption(now, live, true).Text.Should().Contain("counts that exposure as acquired");
+
+            t.CaptureAborted();
+            var after = t.View(now.AddSeconds(1), Take).Exposure;
+            after.Should().BeNull();
+            var idle = new LiveImaging { TargetId = 7, TargetName = "M31", PlanId = after?.PlanId, Filter = after?.Filter, EndsAt = after?.EndsAt };
+            PreviewBuilder.LiveStart(now.AddSeconds(1), idle).Should().Be(now.AddSeconds(1));
+            PreviewBuilder.LiveAssumption(now.AddSeconds(1), idle, true).Text.Should().StartWith("No exposure is running");
         }
 
         private static DateTime CentralNight(DateTime utc) => DateTime.SpecifyKind(utc.AddHours(-17).Date.AddHours(17), DateTimeKind.Utc);
