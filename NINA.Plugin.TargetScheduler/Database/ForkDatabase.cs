@@ -24,6 +24,7 @@ namespace NINA.Plugin.TargetScheduler.Database {
                     Darks.DarkStore.Ensure(context.Database.Connection);
                     Darks.BiasStore.Ensure(context.Database.Connection);
                     Flats.FlatRequestStore.Ensure(context.Database.Connection);
+                    SubLengthStore.Ensure(context.Database.Connection);
                     ensured = true;
                     TSLogger.Info("fork goal schema ensured");
                     RefreshGoalSource(context);
@@ -41,8 +42,20 @@ namespace NINA.Plugin.TargetScheduler.Database {
             (SqliteGoalProgressSource source, PlannerSignals signals) = Load(context);
             PlannerSignals.Current = signals;
             MosaicCompletion.GoalSource = source.Count == 0 ? null : source;
+            RefreshSubLengths(context);
             RefreshPanelHistory(context);
             return MosaicCompletion.GoalSource;
+        }
+
+        public static void RefreshSubLengths(SchedulerDatabaseContext context) {
+            try {
+                Stopwatch sw = Stopwatch.StartNew();
+                SubLengthTable.Current = SubLengthStore.Load(context.Database.Connection);
+                TSLogger.Debug($"loaded sub length recommendations: {SubLengthTable.Current.Count} rows in {sw.ElapsedMilliseconds}ms");
+            } catch (Exception ex) {
+                SubLengthTable.Current = SubLengthTable.Empty;
+                TSLogger.Warning($"failed to load {SubLengthStore.Table}, using the plan or template exposure lengths: {ex.Message}");
+            }
         }
 
         public static void RefreshPanelHistory(SchedulerDatabaseContext context) {
