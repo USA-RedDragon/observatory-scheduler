@@ -421,6 +421,14 @@ namespace NINA.Plugin.TargetScheduler.Remote.Test {
         }
 
         [Test]
+        public void PlansWithoutALengthKeepTheTemplateMarker() {
+            Run("exposureplan.applyset", Samples.ApplySet.Replace("\"exposure\":600", "\"exposure\":-1")).Status.Should().Be(CommandStatus.Applied);
+            Run("project.create", Samples.ProjectCreate.Replace("\"exposure\":600", "\"exposure\":-1")).Status.Should().Be(CommandStatus.Applied);
+            db.Scalar("SELECT exposure FROM exposureplan WHERE guid = 'p1'").Should().Be(-1.0);
+            db.Scalar("SELECT exposure FROM exposureplan WHERE guid = 'pp'").Should().Be(-1.0);
+        }
+
+        [Test]
         public void ApplySetIsIdempotent() {
             Run("exposureplan.applyset", Samples.ApplySet).Status.Should().Be(CommandStatus.Applied);
             var after = Snapshot();
