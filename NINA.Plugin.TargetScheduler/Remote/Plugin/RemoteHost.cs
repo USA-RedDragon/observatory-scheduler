@@ -269,17 +269,19 @@ namespace NINA.Plugin.TargetScheduler.Remote.Plugin {
             tracker.PlanEnded();
         }
 
-        public CaptureKey ShutterOpening(IExposure x) {
+        public CaptureKey ShutterOpening(IExposure x, string abortBlocked = null, bool syncClients = false) {
             if (x == null) {
                 return null;
             }
-            var opened = tracker.ShutterOpened(x.DatabaseId, x.FilterName, x.ExposureLength, DateTime.UtcNow);
+            Control.Capture.Blocked = abortBlocked;
+            var opened = tracker.ShutterOpened(x.DatabaseId, x.FilterName, x.ExposureLength, DateTime.UtcNow, abortBlocked, syncClients);
             Processor.RefreshPending();
             Push("status", null);
             return new CaptureKey { PlanId = opened.PlanId, StartedAt = opened.StartedAt };
         }
 
         public void CaptureEnded(bool aborted = false) {
+            Control.Capture.Blocked = null;
             if (aborted) {
                 tracker.CaptureAborted();
             } else {

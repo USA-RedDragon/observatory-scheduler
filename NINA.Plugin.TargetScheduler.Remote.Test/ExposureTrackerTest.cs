@@ -168,6 +168,25 @@ namespace NINA.Plugin.TargetScheduler.Remote.Test {
         }
 
         [Test]
+        public void TheStatusSaysWhenAnExposureCannotBeAbortedAndWhenSyncClientsShareIt() {
+            var t = new ExposureTracker();
+            t.PlanStarted(7);
+            t.ShutterOpened(31, "Ha", 300, Shutter).AbortBlocked.Should().BeNull();
+            t.View(Shutter.AddSeconds(1), Take).Exposure.SyncClients.Should().BeFalse();
+            t.CaptureEnded();
+
+            t.ShutterOpened(31, "Ha", 300, Shutter.AddMinutes(6), CaptureGate.SyncClientBlocked);
+            t.View(Shutter.AddMinutes(6).AddSeconds(1), Take).Exposure.AbortBlocked.Should().Be(CaptureGate.SyncClientBlocked);
+            t.View(Shutter.AddMinutes(11).AddSeconds(2), Take).Exposure.AbortBlocked.Should().Be(CaptureGate.SyncClientBlocked);
+            t.CaptureEnded();
+
+            t.ShutterOpened(31, "Ha", 300, Shutter.AddMinutes(12), null, true);
+            var e = t.View(Shutter.AddMinutes(12).AddSeconds(1), Take).Exposure;
+            e.SyncClients.Should().BeTrue();
+            e.AbortBlocked.Should().BeNull();
+        }
+
+        [Test]
         public void AfterAnAbortThePreviewStartsNowInsteadOfAtTheAbortedExposuresEnd() {
             var t = new ExposureTracker();
             t.PlanStarted(7);

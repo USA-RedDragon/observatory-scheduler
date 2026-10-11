@@ -153,7 +153,7 @@ namespace NINA.Plugin.TargetScheduler.Remote.Api {
             }
         }
 
-        public StatusExposure ShutterOpened(int planId, string filter, double seconds, DateTime at) {
+        public StatusExposure ShutterOpened(int planId, string filter, double seconds, DateTime at, string abortBlocked = null, bool syncClients = false) {
             lock (sync) {
                 var n = nightOf(at);
                 if (night != n) {
@@ -178,6 +178,8 @@ namespace NINA.Plugin.TargetScheduler.Remote.Api {
                     StartedAt = at,
                     EndsAt = at.AddSeconds(seconds),
                     Number = number,
+                    AbortBlocked = abortBlocked,
+                    SyncClients = syncClients,
                 };
                 return Copy(open);
             }
@@ -260,6 +262,8 @@ namespace NINA.Plugin.TargetScheduler.Remote.Api {
                 StartedAt = e.StartedAt,
                 EndsAt = e.EndsAt,
                 Number = e.Number,
+                AbortBlocked = e.AbortBlocked,
+                SyncClients = e.SyncClients,
             };
         }
     }

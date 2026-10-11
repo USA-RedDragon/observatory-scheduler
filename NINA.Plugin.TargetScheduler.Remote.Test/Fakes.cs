@@ -13,6 +13,7 @@ namespace NINA.Plugin.TargetScheduler.Remote.Test {
         public DateTime? PausedUntil { get; private set; }
         public DateTime? Night { get; set; }
         public CaptureKey Exposing { get; set; }
+        public string AbortBlocked { get; set; }
         public List<string> Aborts { get; } = new List<string>();
 
         public void RequestReplan(string reason) => Replans.Add(reason);
@@ -35,7 +36,7 @@ namespace NINA.Plugin.TargetScheduler.Remote.Test {
 
         public AbortOutcome AbortExposure(string reason, int planId, DateTime startedAt) {
             if (Exposing == null) {
-                return AbortOutcome.NotCapturing;
+                return AbortBlocked != null ? AbortOutcome.Blocked : AbortOutcome.NotCapturing;
             }
             if (!Exposing.Matches(planId, startedAt)) {
                 return AbortOutcome.OtherExposure;

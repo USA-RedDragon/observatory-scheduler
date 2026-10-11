@@ -165,6 +165,8 @@ namespace NINA.Plugin.TargetScheduler.Remote.Commands {
                     return CommandResult.Of(command.Id, CommandStatus.Applied, "Stopping the exposure and discarding the partial frame. The scheduler re-plans once the camera has stopped.");
                 case AbortOutcome.AlreadyAborting:
                     return CommandResult.Of(command.Id, CommandStatus.Applied, "An abort of this exposure is already in progress.");
+                case AbortOutcome.Blocked:
+                    return CommandResult.Of(command.Id, CommandStatus.Rejected, context.Control.AbortBlocked ?? "This exposure cannot be aborted from the web.");
                 case AbortOutcome.OtherExposure:
                     return CommandResult.Of(command.Id, CommandStatus.Applied, "That exposure already ended. The exposure running now was left alone.");
                 default:

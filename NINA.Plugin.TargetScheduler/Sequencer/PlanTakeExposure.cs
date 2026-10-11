@@ -99,7 +99,7 @@ namespace NINA.Plugin.TargetScheduler.Sequencer {
             }
 
             var host = Remote.Plugin.RemoteHost.Instance;
-            var opened = host?.ShutterOpening(exposure);
+            var opened = host?.ShutterOpening(exposure, null, synchronizationEnabled);
             IExposureData exposureData;
             bool aborted = false;
             try {

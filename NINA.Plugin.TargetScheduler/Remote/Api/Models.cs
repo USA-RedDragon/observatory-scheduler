@@ -81,6 +81,12 @@ namespace NINA.Plugin.TargetScheduler.Remote.Api {
 
         [JsonPropertyName("number")]
         public int Number { get; set; }
+
+        [JsonPropertyName("abort_blocked")]
+        public string AbortBlocked { get; set; }
+
+        [JsonPropertyName("sync_clients")]
+        public bool SyncClients { get; set; }
     }
 
     public class StatusWait {

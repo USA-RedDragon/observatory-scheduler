@@ -107,6 +107,17 @@ namespace NINA.Plugin.TargetScheduler.Remote.Test {
             ctx.FakeControlInstance.Exposing.Should().NotBeNull();
         }
 
+        [Test]
+        public void AbortOnASyncClientIsRejectedWithTheReason() {
+            var ctx = new FakeContext();
+            ctx.FakeControlInstance.AbortBlocked = CaptureGate.SyncClientBlocked;
+            var r = new AbortExposureHandler().Apply(Cmd.Of(CommandKinds.AbortExposure, AbortRunning), ctx);
+            r.Status.Should().Be(CommandStatus.Rejected);
+            r.Message.Should().Be(CaptureGate.SyncClientBlocked);
+            ctx.FakeControlInstance.Aborts.Should().BeEmpty();
+            ctx.FakeControlInstance.Replans.Should().BeEmpty();
+        }
+
         [TestCase("{}")]
         [TestCase("null")]
         [TestCase(@"{""plan_id"":40}")]

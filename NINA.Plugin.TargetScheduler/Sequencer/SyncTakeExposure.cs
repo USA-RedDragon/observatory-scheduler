@@ -76,7 +76,7 @@ namespace NINA.Plugin.TargetScheduler.Sequencer {
                 capture.SubSambleRectangle = rect;
             }
 
-            Remote.Plugin.RemoteHost.Instance?.ShutterOpening(exposure);
+            Remote.Plugin.RemoteHost.Instance?.ShutterOpening(exposure, Remote.Commands.CaptureGate.SyncClientBlocked);
             IExposureData exposureData;
             try {
                 exposureData = await imagingMediator.CaptureImage(capture, token, progress);

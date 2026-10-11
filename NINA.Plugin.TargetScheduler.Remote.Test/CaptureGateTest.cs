@@ -39,6 +39,15 @@ namespace NINA.Plugin.TargetScheduler.Remote.Test {
         }
 
         [Test]
+        public void AnUngatedSyncClientCaptureSaysWhyItCannotBeAborted() {
+            var gate = new CaptureGate();
+            gate.Blocked = CaptureGate.SyncClientBlocked;
+            gate.Abort("abort by web", 40, Start).Should().Be(AbortOutcome.Blocked);
+            gate.Blocked = null;
+            gate.Abort("abort by web", 40, Start).Should().Be(AbortOutcome.NotCapturing);
+        }
+
+        [Test]
         public void AbortWithNothingCapturingDoesNothing() {
             var gate = new CaptureGate();
             gate.Abort("abort by web", 40, Start).Should().Be(AbortOutcome.NotCapturing);

@@ -92,6 +92,8 @@ namespace NINA.Plugin.TargetScheduler.Remote.Commands {
             return Capture.Abort(reason, planId, startedAt);
         }
 
+        public string AbortBlocked => Capture.Blocked;
+
         public DateTime? NightEnd(DateTime now) {
             return NightEndSource?.Invoke(now);
         }

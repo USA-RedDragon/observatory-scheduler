@@ -30,6 +30,7 @@ namespace NINA.Plugin.TargetScheduler.Remote.Commands {
         NotCapturing,
         OtherExposure,
         AlreadyAborting,
+        Blocked,
     }
 
     /// <summary>
@@ -38,15 +39,31 @@ namespace NINA.Plugin.TargetScheduler.Remote.Commands {
     /// sequence token, the plan container and the instruction status are left alone.
     /// </summary>
     public class CaptureGate {
+        public const string SyncClientBlocked = "This PC is a sync client. Its exposures are started by the sync server and cannot be aborted from the web.";
+
         private readonly object sync = new object();
         private CancellationTokenSource current;
         private CaptureKey currentKey;
         private string abortReason;
+        private string blocked;
 
         public bool Capturing {
             get {
                 lock (sync) {
                     return current != null;
+                }
+            }
+        }
+
+        public string Blocked {
+            get {
+                lock (sync) {
+                    return blocked;
+                }
+            }
+            set {
+                lock (sync) {
+                    blocked = value;
                 }
             }
         }
@@ -78,7 +95,7 @@ namespace NINA.Plugin.TargetScheduler.Remote.Commands {
             lock (sync) {
                 cts = current;
                 if (cts == null) {
-                    return AbortOutcome.NotCapturing;
+                    return blocked != null ? AbortOutcome.Blocked : AbortOutcome.NotCapturing;
                 }
                 if (abortReason != null) {
                     return AbortOutcome.AlreadyAborting;
