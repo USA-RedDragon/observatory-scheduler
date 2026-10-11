@@ -14,9 +14,12 @@ using NUnit.Framework;
 using System;
 using System.Collections.Generic;
 using System.Data.Entity.Validation;
+using System.Diagnostics;
 using System.IO;
+using System.Linq;
 using System.Text;
 using System.Threading;
+using System.Threading.Tasks;
 
 namespace NINA.Plugin.TargetScheduler.Test.Sequencer {
 
@@ -117,6 +120,77 @@ namespace NINA.Plugin.TargetScheduler.Test.Sequencer {
                 ai.GradingStatus.Should().Be(GradingStatus.Pending);
                 ai.RejectReason.Should().Be("");
             }
+        }
+
+        [Test, Order(3)]
+        [NonParallelizable]
+        public void testCanceledStopWaitsForImageBeingSaved() {
+            IProfile profile = GraderExpertTest.GetMockProfile(0, 0);
+            IImageSaveMediator imageSaveMediator = GetImageSaveMediator();
+            Mock<ITarget> t1 = PlanMocks.GetMockPlanTarget("T1", TestData.M42);
+            t1.SetupProperty(t => t.DatabaseId, 1);
+            Mock<IExposure> e1 = PlanMocks.GetMockPlanExposure("SII", 10, 0);
+            e1.SetupProperty(e => e.DatabaseId, 3);
+            CancellationTokenSource cts = new CancellationTokenSource();
+
+            int imageId = 24;
+            ImageSavedEventArgs imageData = GraderExpertTest.GetMockImageSavedEventArgs(0, 0, "SII", 0, 0, 1.5, 0);
+            imageData.MetaData.Image.Id = imageId;
+
+            Mock<ImageSaveWatcher> mock = new Mock<ImageSaveWatcher>(profile, imageSaveMediator) { CallBase = true };
+            mock.Setup(m => m.GetSchedulerDatabaseContext()).Returns(() => db.GetContext());
+            mock.Setup(m => m.GetProfilePreference(It.IsAny<IProfile>())).Returns(new ProfilePreference(profileId));
+
+            ImageSaveWatcher sut = mock.Object;
+            sut.CanceledSaveGrace = TimeSpan.FromSeconds(10);
+            sut.Start(cts.Token);
+            sut.WaitForExposure(imageId, new ExposureWaitData(t1.Object, e1.Object, imageId, cts.Token));
+            cts.Cancel();
+
+            Task saver = Task.Run(() => {
+                Thread.Sleep(1000);
+                sut.ImageSaved(null, imageData);
+            });
+            Stopwatch sw = Stopwatch.StartNew();
+            sut.Stop();
+            sw.Stop();
+            saver.Wait();
+
+            sw.Elapsed.Should().BeGreaterThan(TimeSpan.FromMilliseconds(900));
+            sw.Elapsed.Should().BeLessThan(TimeSpan.FromSeconds(10));
+            using (var context = db.GetContext()) {
+                var ep = context.GetExposurePlan(3);
+                ep.Acquired.Should().Be(1);
+                ep.Accepted.Should().Be(1);
+                context.AcquiredImageSet.Count(a => a.ExposureId == 3).Should().Be(1);
+            }
+        }
+
+        [Test, Order(4)]
+        [NonParallelizable]
+        public void testCanceledStopGivesUpAfterGrace() {
+            IProfile profile = GraderExpertTest.GetMockProfile(0, 0);
+            Mock<ITarget> t1 = PlanMocks.GetMockPlanTarget("T1", TestData.M42);
+            t1.SetupProperty(t => t.DatabaseId, 1);
+            Mock<IExposure> e1 = PlanMocks.GetMockPlanExposure("SII", 10, 0);
+            e1.SetupProperty(e => e.DatabaseId, 3);
+            CancellationTokenSource cts = new CancellationTokenSource();
+
+            Mock<ImageSaveWatcher> mock = new Mock<ImageSaveWatcher>(profile, GetImageSaveMediator()) { CallBase = true };
+            mock.Setup(m => m.GetProfilePreference(It.IsAny<IProfile>())).Returns(new ProfilePreference(profileId));
+
+            ImageSaveWatcher sut = mock.Object;
+            sut.CanceledSaveGrace = TimeSpan.FromSeconds(1);
+            sut.Start(cts.Token);
+            sut.WaitForExposure(25, new ExposureWaitData(t1.Object, e1.Object, 25, cts.Token));
+            cts.Cancel();
+
+            Stopwatch sw = Stopwatch.StartNew();
+            sut.Stop();
+            sw.Stop();
+
+            sw.Elapsed.Should().BeGreaterThanOrEqualTo(TimeSpan.FromSeconds(1));
+            sw.Elapsed.Should().BeLessThan(TimeSpan.FromSeconds(5));
         }
 
         private IImageSaveMediator GetImageSaveMediator() {

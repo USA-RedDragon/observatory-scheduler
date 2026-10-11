@@ -12,6 +12,7 @@ using NINA.WPF.Base.Interfaces.Mediator;
 using System;
 using System.Collections.Concurrent;
 using System.Data.Entity.Migrations;
+using System.Diagnostics;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
@@ -53,12 +54,20 @@ namespace NINA.Plugin.TargetScheduler.Sequencer {
             exposureDictionary.TryAdd(identifier, waitData);
         }
 
+        public TimeSpan CanceledSaveGrace { get; set; } = TimeSpan.FromSeconds(30);
+
         public void WaitForAllImagesSaved() {
-            // Wait for any remaining images to come through: poll every 400ms and bail out after 80 secs
+            // Wait for any remaining images to come through: poll every 400ms and bail out after 80 secs, or after CanceledSaveGrace once the sequence is canceled
             TSLogger.Debug($"waiting for exposures to complete:\n{ExposureIdsLog()}");
-            int count = 0;
-            while (!exposureDictionary.IsEmpty && !token.IsCancellationRequested) {
-                if (++count == 200) {
+            Stopwatch waited = Stopwatch.StartNew();
+            Stopwatch canceled = null;
+            while (!exposureDictionary.IsEmpty) {
+                if (canceled == null && token.IsCancellationRequested) {
+                    canceled = Stopwatch.StartNew();
+                    TSLogger.Info($"sequence canceled, waiting up to {CanceledSaveGrace.TotalSeconds}s for images still being saved:\n{ExposureIdsLog()}");
+                }
+
+                if (waited.Elapsed >= TimeSpan.FromSeconds(80) || (canceled != null && canceled.Elapsed >= CanceledSaveGrace)) {
                     TSLogger.Warning($"timed out or canceled waiting on all exposures to be processed, remaining:\n{ExposureIdsLog()}");
                     break;
                 }
