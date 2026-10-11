@@ -1,5 +1,6 @@
 ﻿using NINA.Plugin.TargetScheduler.Controls.Converters;
 using NINA.Plugin.TargetScheduler.Database.Schema;
+using NINA.Plugin.TargetScheduler.Remote.Plugin;
 using NINA.Plugin.TargetScheduler.Shared.Utility;
 using NINA.Profile.Interfaces;
 using NINA.WPF.Base.ViewModel;
@@ -66,8 +67,8 @@ namespace NINA.Plugin.TargetScheduler.Controls.DatabaseManager {
             ProfileName = profileName;
             ProfilePreferenceProxy = new ProfilePreferenceProxy(profilePreference);
 
-            EditCommand = new RelayCommand(Edit);
-            SaveCommand = new RelayCommand(Save);
+            EditCommand = LocalEditing.Gate(new RelayCommand(Edit));
+            SaveCommand = LocalEditing.Gate(new RelayCommand(Save));
             CancelCommand = new RelayCommand(Cancel);
 
             InitializeCombos();
@@ -94,6 +95,10 @@ namespace NINA.Plugin.TargetScheduler.Controls.DatabaseManager {
         public ICommand CancelCommand { get; private set; }
 
         private void Edit() {
+            if (!LocalEditing.CanEdit) {
+                return;
+            }
+
             ProfilePreferenceProxy.PropertyChanged += ProfilePreferenceProxy_PropertyChanged;
             managerVM.SetEditMode(true);
             ShowEditView = true;
@@ -101,6 +106,10 @@ namespace NINA.Plugin.TargetScheduler.Controls.DatabaseManager {
         }
 
         private void Save() {
+            if (!LocalEditing.CanEdit) {
+                return;
+            }
+
             TSLogger.SetLogLevel(ProfilePreferenceProxy.ProfilePreference.LogLevel);
             managerVM.SaveProfilePreference(ProfilePreferenceProxy.ProfilePreference);
             ProfilePreferenceProxy.OnSave();

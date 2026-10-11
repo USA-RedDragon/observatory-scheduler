@@ -5,6 +5,7 @@ using NINA.Plugin.TargetScheduler.Database.Schema;
 using NINA.Plugin.TargetScheduler.Planning.Exposures;
 using NINA.Plugin.TargetScheduler.Planning.Interfaces;
 using NINA.Plugin.TargetScheduler.Planning.Scoring.Rules;
+using NINA.Plugin.TargetScheduler.Remote.Plugin;
 using NINA.Plugin.TargetScheduler.Shared.Utility;
 using NINA.Plugin.TargetScheduler.Util;
 using NINA.Profile.Interfaces;
@@ -46,19 +47,19 @@ namespace NINA.Plugin.TargetScheduler.Controls.DatabaseManager {
             InitializeRuleWeights(ProjectProxy.Proxy);
             InitializeCombos();
 
-            EditCommand = new RelayCommand(Edit);
-            SaveCommand = new RelayCommand(Save);
+            EditCommand = LocalEditing.Gate(new RelayCommand(Edit));
+            SaveCommand = LocalEditing.Gate(new RelayCommand(Save));
             CancelCommand = new RelayCommand(Cancel);
-            CopyCommand = new RelayCommand(Copy);
-            DeleteCommand = new RelayCommand(Delete);
-            AddTargetCommand = new RelayCommand(AddTarget);
-            ResetTargetsCommand = new RelayCommand(ResetTargets);
-            PasteTargetCommand = new RelayCommand(PasteTarget);
-            MoveTargetCommand = new RelayCommand(MoveTarget);
-            ImportMosaicPanelsCommand = new RelayCommand(ImportMosaicPanels);
-            CopyScoringRuleWeightsCommand = new RelayCommand(CopyScoringRuleWeights);
-            PasteScoringRuleWeightsCommand = new RelayCommand(PasteScoringRuleWeights);
-            ResetScoringRuleWeightsCommand = new RelayCommand(ResetScoringRuleWeights);
+            CopyCommand = LocalEditing.Gate(new RelayCommand(Copy));
+            DeleteCommand = LocalEditing.Gate(new RelayCommand(Delete));
+            AddTargetCommand = LocalEditing.Gate(new RelayCommand(AddTarget));
+            ResetTargetsCommand = LocalEditing.Gate(new RelayCommand(ResetTargets));
+            PasteTargetCommand = LocalEditing.Gate(new RelayCommand(PasteTarget));
+            MoveTargetCommand = LocalEditing.Gate(new RelayCommand(MoveTarget));
+            ImportMosaicPanelsCommand = LocalEditing.Gate(new RelayCommand(ImportMosaicPanels));
+            CopyScoringRuleWeightsCommand = LocalEditing.Gate(new RelayCommand(CopyScoringRuleWeights));
+            PasteScoringRuleWeightsCommand = LocalEditing.Gate(new RelayCommand(PasteScoringRuleWeights));
+            ResetScoringRuleWeightsCommand = LocalEditing.Gate(new RelayCommand(ResetScoringRuleWeights));
         }
 
         private ExposureCompletionHelper GetExposureCompletionHelper(Project project) {
@@ -241,6 +242,10 @@ namespace NINA.Plugin.TargetScheduler.Controls.DatabaseManager {
         public ICommand ResetScoringRuleWeightsCommand { get; private set; }
 
         private void Edit() {
+            if (!LocalEditing.CanEdit) {
+                return;
+            }
+
             ProjectProxy.PropertyChanged += ProjectProxy_PropertyChanged;
             managerVM.SetEditMode(true);
             ShowEditView = true;
@@ -248,6 +253,10 @@ namespace NINA.Plugin.TargetScheduler.Controls.DatabaseManager {
         }
 
         private void Save() {
+            if (!LocalEditing.CanEdit) {
+                return;
+            }
+
             // Prevent save if minimum time setting is such that it would never allow a meridian window to work properly
             if (ProjectProxy.Proxy.MeridianWindow > 0 && ProjectProxy.Proxy.MinimumTime > (ProjectProxy.Proxy.MeridianWindow * 2)) {
                 string message = $"Minimum Time must be less than twice the Meridian Window or the project will never be selected for imaging.";
@@ -275,10 +284,18 @@ namespace NINA.Plugin.TargetScheduler.Controls.DatabaseManager {
         }
 
         private void Copy() {
+            if (!LocalEditing.CanEdit) {
+                return;
+            }
+
             managerVM.CopyItem();
         }
 
         private void Delete() {
+            if (!LocalEditing.CanEdit) {
+                return;
+            }
+
             string message = $"Delete project '{ProjectProxy.Project.Name}' and any associated targets?  This cannot be undone.";
             if (MyMessageBox.Show(message, "Delete Project?", MessageBoxButton.YesNo, MessageBoxResult.No) == MessageBoxResult.Yes) {
                 managerVM.DeleteProject(ProjectProxy.Proxy);
@@ -286,10 +303,18 @@ namespace NINA.Plugin.TargetScheduler.Controls.DatabaseManager {
         }
 
         private void AddTarget() {
+            if (!LocalEditing.CanEdit) {
+                return;
+            }
+
             managerVM.AddNewTarget(ProjectProxy.Proxy);
         }
 
         private void ResetTargets() {
+            if (!LocalEditing.CanEdit) {
+                return;
+            }
+
             string message = $"Reset target completion (accepted and acquired counts) on all targets under '{ProjectProxy.Project.Name}'?  This cannot be undone.";
             if (MyMessageBox.Show(message, "Reset Target Completion?", MessageBoxButton.YesNo, MessageBoxResult.No) == MessageBoxResult.Yes) {
                 managerVM.ResetProjectTargets();
@@ -297,16 +322,28 @@ namespace NINA.Plugin.TargetScheduler.Controls.DatabaseManager {
         }
 
         private void PasteTarget() {
+            if (!LocalEditing.CanEdit) {
+                return;
+            }
+
             managerVM.PasteTarget(ProjectProxy.Proxy);
             ProjectActive = ActiveNowWithActiveTargets(ProjectProxy.Project);
         }
 
         private void MoveTarget() {
+            if (!LocalEditing.CanEdit) {
+                return;
+            }
+
             managerVM.MoveTarget(ProjectProxy.Proxy);
             ProjectActive = ActiveNowWithActiveTargets(ProjectProxy.Project);
         }
 
         private void ImportMosaicPanels() {
+            if (!LocalEditing.CanEdit) {
+                return;
+            }
+
             int panels = FramingAssistantPanelsDefined();
             if (panels == 1) {
                 MyMessageBox.Show("The Framing Assistant only defines one panel at the moment.", "Oops");
@@ -333,11 +370,19 @@ namespace NINA.Plugin.TargetScheduler.Controls.DatabaseManager {
         }
 
         private void CopyScoringRuleWeights() {
+            if (!LocalEditing.CanEdit) {
+                return;
+            }
+
             ScoringRuleWeightsClipboard.SetItem(projectProxy.Project);
             RaisePropertyChanged(nameof(PasteScoringRuleWeightsEnabled));
         }
 
         private void PasteScoringRuleWeights() {
+            if (!LocalEditing.CanEdit) {
+                return;
+            }
+
             List<RuleWeight> weights = ScoringRuleWeightsClipboard.GetItem();
             foreach (RuleWeight weight in ProjectProxy.Proxy.RuleWeights) {
                 RuleWeight newRuleWeight = weights.Where(rw => rw.Name == weight.Name).FirstOrDefault();
@@ -352,6 +397,10 @@ namespace NINA.Plugin.TargetScheduler.Controls.DatabaseManager {
         }
 
         private void ResetScoringRuleWeights() {
+            if (!LocalEditing.CanEdit) {
+                return;
+            }
+
             Dictionary<string, IScoringRule> rules = ScoringRule.GetAllScoringRules();
             List<RuleWeight> weights = new List<RuleWeight>(rules.Count);
             foreach (var rule in rules) {

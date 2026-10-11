@@ -2,6 +2,7 @@
 using NINA.Core.MyMessageBox;
 using NINA.Core.Utility;
 using NINA.Plugin.TargetScheduler.Database.Schema;
+using NINA.Plugin.TargetScheduler.Remote.Plugin;
 using NINA.Plugin.TargetScheduler.Shared.Utility;
 using NINA.Profile;
 using NINA.Profile.Interfaces;
@@ -27,8 +28,8 @@ namespace NINA.Plugin.TargetScheduler.Controls.DatabaseManager {
             exposureTemplates = new ObservableCollection<ExposureTemplate>();
             orphanedExposureTemplates.ForEach(et => exposureTemplates.Add(et));
 
-            MoveExposureTemplateCommand = new RelayCommandParam(MoveExposureTemplates);
-            DeleteExposureTemplateCommand = new RelayCommandParam(DeleteExposureTemplates);
+            MoveExposureTemplateCommand = LocalEditing.Gate(new RelayCommandParam(MoveExposureTemplates));
+            DeleteExposureTemplateCommand = LocalEditing.Gate(new RelayCommandParam(DeleteExposureTemplates));
 
             InitializeProfilesList();
         }
@@ -77,6 +78,10 @@ namespace NINA.Plugin.TargetScheduler.Controls.DatabaseManager {
         public ICommand DeleteExposureTemplateCommand { get; private set; }
 
         private void MoveExposureTemplates(object obj) {
+            if (!LocalEditing.CanEdit) {
+                return;
+            }
+
             if (string.IsNullOrEmpty(SelectedProfileId)) {
                 MyMessageBox.Show("You must select a destination profile to move an Exposure Template.", "Oops");
                 return;
@@ -96,6 +101,10 @@ namespace NINA.Plugin.TargetScheduler.Controls.DatabaseManager {
         }
 
         private void DeleteExposureTemplates(object obj) {
+            if (!LocalEditing.CanEdit) {
+                return;
+            }
+
             ExposureTemplate exposureTemplate = obj as ExposureTemplate;
             if (exposureTemplate != null) {
                 if (MyMessageBox.Show($"Orphaned Exposure Template '{exposureTemplate.Name}' will be permanently deleted.  Are you sure?", "Delete Exposure Template?", MessageBoxButton.YesNo, MessageBoxResult.No) == MessageBoxResult.Yes) {

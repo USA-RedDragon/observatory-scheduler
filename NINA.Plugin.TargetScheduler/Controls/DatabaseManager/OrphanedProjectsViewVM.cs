@@ -2,6 +2,7 @@
 using NINA.Core.MyMessageBox;
 using NINA.Core.Utility;
 using NINA.Plugin.TargetScheduler.Database.Schema;
+using NINA.Plugin.TargetScheduler.Remote.Plugin;
 using NINA.Plugin.TargetScheduler.Shared.Utility;
 using NINA.Profile;
 using NINA.Profile.Interfaces;
@@ -27,8 +28,8 @@ namespace NINA.Plugin.TargetScheduler.Controls.DatabaseManager {
             projects = new ObservableCollection<Project>();
             orphanedProjects.ForEach(p => projects.Add(p));
 
-            MoveProjectCommand = new RelayCommandParam(MoveProject);
-            DeleteProjectCommand = new RelayCommandParam(DeleteProject);
+            MoveProjectCommand = LocalEditing.Gate(new RelayCommandParam(MoveProject));
+            DeleteProjectCommand = LocalEditing.Gate(new RelayCommandParam(DeleteProject));
 
             InitializeProfilesList();
         }
@@ -77,6 +78,10 @@ namespace NINA.Plugin.TargetScheduler.Controls.DatabaseManager {
         public ICommand DeleteProjectCommand { get; private set; }
 
         private void MoveProject(object obj) {
+            if (!LocalEditing.CanEdit) {
+                return;
+            }
+
             if (string.IsNullOrEmpty(SelectedProfileId)) {
                 MyMessageBox.Show("You must select a destination profile to move a project.", "Oops");
                 return;
@@ -96,6 +101,10 @@ namespace NINA.Plugin.TargetScheduler.Controls.DatabaseManager {
         }
 
         private void DeleteProject(object obj) {
+            if (!LocalEditing.CanEdit) {
+                return;
+            }
+
             Project project = obj as Project;
             if (project != null) {
                 if (MyMessageBox.Show($"Orphaned project '{project.Name}' will be permanently deleted.  Are you sure?", "Delete Project?", MessageBoxButton.YesNo, MessageBoxResult.No) == MessageBoxResult.Yes) {

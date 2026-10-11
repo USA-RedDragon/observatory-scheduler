@@ -8,6 +8,7 @@ using NINA.Plugin.TargetScheduler.Database;
 using NINA.Plugin.TargetScheduler.Database.Schema;
 using NINA.Plugin.TargetScheduler.Grading;
 using NINA.Plugin.TargetScheduler.Planning.Exposures;
+using NINA.Plugin.TargetScheduler.Remote.Plugin;
 using NINA.Plugin.TargetScheduler.Shared.Utility;
 using NINA.Profile;
 using NINA.Profile.Interfaces;
@@ -57,6 +58,38 @@ namespace NINA.Plugin.TargetScheduler.Controls.DatabaseManager {
             SelectedItemChangedCommand = new RelayCommandParam(SelectedItemChanged);
             SelectedDisplayMode = TreeDisplayMode.DisplayAll;
             InitializeProjectsColorize();
+            PropertyChangedEventManager.AddHandler(LocalEditing.Instance, LocalEditing_PropertyChanged, nameof(LocalEditing.Allowed));
+        }
+
+        private void LocalEditing_PropertyChanged(object sender, PropertyChangedEventArgs e) {
+            if (!LocalEditing.CanEdit) {
+                CancelLocalEdits();
+            }
+        }
+
+        /// <summary>
+        /// Discards any unsaved edit and closes edit-only popups, used when web editing turns on.
+        /// </summary>
+        public void CancelLocalEdits() {
+            if (ProjectViewVM?.ShowEditView == true) {
+                ProjectViewVM.CancelCommand.Execute(null);
+            }
+            if (TargetViewVM != null) {
+                if (TargetViewVM.ShowEditView) {
+                    TargetViewVM.CancelCommand.Execute(null);
+                }
+                TargetViewVM.ShowOverrideExposureOrderPopup = false;
+            }
+            if (ExposureTemplateViewVM?.ShowEditView == true) {
+                ExposureTemplateViewVM.CancelCommand.Execute(null);
+            }
+            if (ProfilePreferencesViewVM?.ShowEditView == true) {
+                ProfilePreferencesViewVM.CancelCommand.Execute(null);
+            }
+            if (ProfileViewVM != null) {
+                ProfileViewVM.ShowProfileImportView = false;
+            }
+            SetEditMode(false);
         }
 
         public SchedulerDatabaseInteraction Database { get { return database; } }
@@ -524,6 +557,10 @@ namespace NINA.Plugin.TargetScheduler.Controls.DatabaseManager {
         }
 
         public void SaveProfilePreference(ProfilePreference profilePreference) {
+            if (!LocalEditing.CanEdit) {
+                return;
+            }
+
             using (var context = database.GetContext()) {
                 if (context.SaveProfilePreference(profilePreference) == null) {
                     Notification.ShowError("Failed to save Scheduler Profile Preference (see log for details)");
@@ -532,6 +569,10 @@ namespace NINA.Plugin.TargetScheduler.Controls.DatabaseManager {
         }
 
         public Project AddNewProject(TreeDataItem parentItem) {
+            if (!LocalEditing.CanEdit) {
+                return null;
+            }
+
             ProfileMeta profile = (ProfileMeta)parentItem.Data;
             Project project = new Project(profile.Id.ToString());
             project.Name = "<new project>";
@@ -553,6 +594,10 @@ namespace NINA.Plugin.TargetScheduler.Controls.DatabaseManager {
         }
 
         public void SaveProject(Project project) {
+            if (!LocalEditing.CanEdit) {
+                return;
+            }
+
             using (var context = database.GetContext()) {
                 if (context.SaveProject(project) != null) {
                     activeTreeDataItem.Data = project;
@@ -571,6 +616,10 @@ namespace NINA.Plugin.TargetScheduler.Controls.DatabaseManager {
         }
 
         public void PasteProject(TreeDataItem parentItem) {
+            if (!LocalEditing.CanEdit) {
+                return;
+            }
+
             ProfileMeta profile = (ProfileMeta)parentItem.Data;
 
             if (!Clipboard.HasType(TreeDataType.Project)) {
@@ -600,6 +649,10 @@ namespace NINA.Plugin.TargetScheduler.Controls.DatabaseManager {
         }
 
         public void DeleteProject(Project project) {
+            if (!LocalEditing.CanEdit) {
+                return;
+            }
+
             string profileId = profileService.ActiveProfile.Id.ToString();
             bool deleteAcquiredImagesWithTarget = GetProfilePreference(profileId).EnableDeleteAcquiredImagesWithTarget;
 
@@ -615,6 +668,10 @@ namespace NINA.Plugin.TargetScheduler.Controls.DatabaseManager {
         }
 
         public bool MoveOrphanedProject(Project project, string profileId) {
+            if (!LocalEditing.CanEdit) {
+                return false;
+            }
+
             using (var context = database.GetContext()) {
                 Project newProject = context.MoveProject(project, profileId);
                 if (newProject != null) {
@@ -635,6 +692,10 @@ namespace NINA.Plugin.TargetScheduler.Controls.DatabaseManager {
         }
 
         public bool DeleteOrphanedProject(Project project) {
+            if (!LocalEditing.CanEdit) {
+                return false;
+            }
+
             string profileId = profileService.ActiveProfile.Id.ToString();
             bool deleteAcquiredImagesWithTarget = GetProfilePreference(profileId).EnableDeleteAcquiredImagesWithTarget;
 
@@ -649,6 +710,10 @@ namespace NINA.Plugin.TargetScheduler.Controls.DatabaseManager {
         }
 
         public void AddNewTarget(Project project) {
+            if (!LocalEditing.CanEdit) {
+                return;
+            }
+
             Target target = new Target();
             target.Name = "<new target>";
             TreeDataItem parentItem = activeTreeDataItem;
@@ -668,6 +733,10 @@ namespace NINA.Plugin.TargetScheduler.Controls.DatabaseManager {
         }
 
         public void AddTargets(Project project, List<Target> targets, TreeDataItem parentItem = null) {
+            if (!LocalEditing.CanEdit) {
+                return;
+            }
+
             parentItem = parentItem == null ? activeTreeDataItem : parentItem;
             using (var context = database.GetContext()) {
                 foreach (Target target in targets) {
@@ -686,6 +755,10 @@ namespace NINA.Plugin.TargetScheduler.Controls.DatabaseManager {
         }
 
         public void SaveTarget(Target target, bool clearFilterCadenceItems = false) {
+            if (!LocalEditing.CanEdit) {
+                return;
+            }
+
             using (var context = database.GetContext()) {
                 if (context.SaveTarget(target, clearFilterCadenceItems) != null) {
                     activeTreeDataItem.Data = target;
@@ -708,6 +781,10 @@ namespace NINA.Plugin.TargetScheduler.Controls.DatabaseManager {
         }
 
         public void PasteTarget(Project project) {
+            if (!LocalEditing.CanEdit) {
+                return;
+            }
+
             if (!Clipboard.HasType(TreeDataType.Target)) {
                 TSLogger.Error($"expected clipboard to hold Target");
                 return;
@@ -731,6 +808,10 @@ namespace NINA.Plugin.TargetScheduler.Controls.DatabaseManager {
         }
 
         public void MoveTarget(Project project) {
+            if (!LocalEditing.CanEdit) {
+                return;
+            }
+
             if (!Clipboard.HasType(TreeDataType.Target)) {
                 TSLogger.Error($"expected clipboard to hold Target");
                 return;
@@ -775,6 +856,10 @@ namespace NINA.Plugin.TargetScheduler.Controls.DatabaseManager {
         }
 
         public void GradeTarget(Target target) {
+            if (!LocalEditing.CanEdit) {
+                return;
+            }
+
             List<AcquiredImage> acquiredImages = new List<AcquiredImage>();
             using (var context = database.GetContext()) {
                 target.ExposurePlans.ForEach(ep => {
@@ -796,12 +881,20 @@ namespace NINA.Plugin.TargetScheduler.Controls.DatabaseManager {
         }
 
         public void ResetProfile(TreeDataItem parentItem) {
+            if (!LocalEditing.CanEdit) {
+                return;
+            }
+
             foreach (TreeDataItem projectItem in parentItem.Items) {
                 ResetProjectTargets(projectItem);
             }
         }
 
         public void ResetProjectTargets(TreeDataItem projectItem = null) {
+            if (!LocalEditing.CanEdit) {
+                return;
+            }
+
             TreeDataItem useItem = projectItem != null ? projectItem : activeTreeDataItem;
             foreach (TreeDataItem targetItem in useItem.Items) {
                 ResetTarget((Target)targetItem.Data, targetItem);
@@ -809,6 +902,10 @@ namespace NINA.Plugin.TargetScheduler.Controls.DatabaseManager {
         }
 
         public Target ResetTarget(Target target, TreeDataItem targetItem = null) {
+            if (!LocalEditing.CanEdit) {
+                return null;
+            }
+
             using (var context = database.GetContext()) {
                 Target updatedTarget = context.ResetExposurePlans(target);
                 if (updatedTarget != null) {
@@ -834,6 +931,10 @@ namespace NINA.Plugin.TargetScheduler.Controls.DatabaseManager {
         }
 
         public void DeleteTarget(Target target, bool deleteAcquiredImagesWithTarget) {
+            if (!LocalEditing.CanEdit) {
+                return;
+            }
+
             using (var context = database.GetContext()) {
                 if (deleteAcquiredImagesWithTarget) {
                     context.DeleteAcquiredImages(target.Id);
@@ -851,6 +952,10 @@ namespace NINA.Plugin.TargetScheduler.Controls.DatabaseManager {
         }
 
         public Target ToggleExposurePlan(Target target, ExposurePlan exposurePlan) {
+            if (!LocalEditing.CanEdit) {
+                return null;
+            }
+
             using (var context = database.GetContext()) {
                 Target updatedTarget = context.ToggleExposurePlan(target, exposurePlan);
                 if (updatedTarget != null) {
@@ -866,6 +971,10 @@ namespace NINA.Plugin.TargetScheduler.Controls.DatabaseManager {
         }
 
         public Target DeleteExposurePlan(Target target, ExposurePlan exposurePlan) {
+            if (!LocalEditing.CanEdit) {
+                return null;
+            }
+
             using (var context = database.GetContext()) {
                 Target updatedTarget = context.DeleteExposurePlan(target, exposurePlan);
                 if (updatedTarget != null) {
@@ -881,6 +990,10 @@ namespace NINA.Plugin.TargetScheduler.Controls.DatabaseManager {
         }
 
         public Target DeleteAllExposurePlans(Target target) {
+            if (!LocalEditing.CanEdit) {
+                return null;
+            }
+
             using (var context = database.GetContext()) {
                 Target updatedTarget = context.DeleteAllExposurePlans(target);
                 if (updatedTarget != null) {
@@ -909,6 +1022,10 @@ namespace NINA.Plugin.TargetScheduler.Controls.DatabaseManager {
         }
 
         public void AddNewExposureTemplate(TreeDataItem parentItem) {
+            if (!LocalEditing.CanEdit) {
+                return;
+            }
+
             ProfileMeta profileMeta = (ProfileMeta)parentItem.Data;
 
             IProfile profile = ProfileLoader.GetProfile(profileService, profileMeta.Id.ToString());
@@ -935,6 +1052,10 @@ namespace NINA.Plugin.TargetScheduler.Controls.DatabaseManager {
         }
 
         public void PasteExposureTemplate(TreeDataItem parentItem) {
+            if (!LocalEditing.CanEdit) {
+                return;
+            }
+
             ProfileMeta profile = (ProfileMeta)parentItem.Data;
 
             if (!Clipboard.HasType(TreeDataType.ExposureTemplate)) {
@@ -957,6 +1078,10 @@ namespace NINA.Plugin.TargetScheduler.Controls.DatabaseManager {
         }
 
         public void SaveExposureTemplate(ExposureTemplate exposureTemplate) {
+            if (!LocalEditing.CanEdit) {
+                return;
+            }
+
             using (var context = database.GetContext()) {
                 if (context.SaveExposureTemplate(exposureTemplate) != null) {
                     activeTreeDataItem.Data = exposureTemplate;
@@ -968,6 +1093,10 @@ namespace NINA.Plugin.TargetScheduler.Controls.DatabaseManager {
         }
 
         public void DeleteExposureTemplate(ExposureTemplate exposureTemplate) {
+            if (!LocalEditing.CanEdit) {
+                return;
+            }
+
             using (var context = database.GetContext()) {
                 if (context.DeleteExposureTemplate(exposureTemplate)) {
                     TreeDataItem parentItem = activeTreeDataItem.TreeParent;
@@ -980,6 +1109,10 @@ namespace NINA.Plugin.TargetScheduler.Controls.DatabaseManager {
         }
 
         public bool MoveOrphanedExposureTemplate(ExposureTemplate exposureTemplate, string profileId) {
+            if (!LocalEditing.CanEdit) {
+                return false;
+            }
+
             using (var context = database.GetContext()) {
                 ExposureTemplate newExposureTemplate = context.MoveExposureTemplate(exposureTemplate, profileId);
                 if (newExposureTemplate != null) {
@@ -995,6 +1128,10 @@ namespace NINA.Plugin.TargetScheduler.Controls.DatabaseManager {
         }
 
         public bool DeleteOrphanedExposureTemplate(ExposureTemplate exposureTemplate) {
+            if (!LocalEditing.CanEdit) {
+                return false;
+            }
+
             using (var context = database.GetContext()) {
                 if (context.DeleteExposureTemplate(exposureTemplate)) {
                     return true;
@@ -1012,6 +1149,10 @@ namespace NINA.Plugin.TargetScheduler.Controls.DatabaseManager {
         }
 
         public void CopyItem() {
+            if (!LocalEditing.CanEdit) {
+                return;
+            }
+
             Clipboard.SetItem(activeTreeDataItem);
         }
 

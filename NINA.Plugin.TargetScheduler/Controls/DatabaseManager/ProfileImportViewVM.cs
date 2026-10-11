@@ -6,6 +6,7 @@ using NINA.Plugin.TargetScheduler.Controls.Util;
 using NINA.Plugin.TargetScheduler.Database;
 using NINA.Plugin.TargetScheduler.Database.ExportImport;
 using NINA.Plugin.TargetScheduler.Database.Schema;
+using NINA.Plugin.TargetScheduler.Remote.Plugin;
 using NINA.Plugin.TargetScheduler.Shared.Utility;
 using NINA.Profile;
 using NINA.Profile.Interfaces;
@@ -37,11 +38,11 @@ namespace NINA.Plugin.TargetScheduler.Controls.DatabaseManager {
             ProfileMeta = profileItem.Data as ProfileMeta;
             ParentProfileId = (profileItem.Data as ProfileMeta).Id.ToString();
 
-            ImportProfileCommand = new AsyncRelayCommand(ImportProfile);
+            ImportProfileCommand = LocalEditing.Gate(new AsyncRelayCommand(ImportProfile));
             SelectZipFileCommand = new AsyncRelayCommand(SelectZipFile);
             ImportZipFilePath = null;
 
-            ImportTargetsCommand = new AsyncRelayCommand(ImportTargets);
+            ImportTargetsCommand = LocalEditing.Gate(new AsyncRelayCommand(ImportTargets));
             SelectCSVFileCommand = new AsyncRelayCommand(SelectCSVFile);
             ImportCSVFilePath = null;
             InitializeTargetImportCombos();
@@ -142,6 +143,10 @@ namespace NINA.Plugin.TargetScheduler.Controls.DatabaseManager {
         }
 
         private async Task<bool> ImportProfile() {
+            if (!LocalEditing.CanEdit) {
+                return false;
+            }
+
             if (MyMessageBox.Show($"This will add all profile elements from the zip file to the current profile.\nIf you have existing projects or exposure templates with the same name as an\nimported item, it will show twice - there is no renaming performed.\n\nContinue?", "Import?", MessageBoxButton.YesNo, MessageBoxResult.No) == MessageBoxResult.Yes) {
                 ImportStatus status = null;
 
@@ -312,6 +317,10 @@ namespace NINA.Plugin.TargetScheduler.Controls.DatabaseManager {
         }
 
         private Task<bool> ImportTargets() {
+            if (!LocalEditing.CanEdit) {
+                return Task.FromResult(false);
+            }
+
             TSLogger.Info($"importing targets from {importCSVFilePath}");
             CsvTargetLoader loader = new CsvTargetLoader();
 

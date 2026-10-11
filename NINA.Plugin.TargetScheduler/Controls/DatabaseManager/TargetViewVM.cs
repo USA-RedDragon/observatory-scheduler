@@ -8,6 +8,7 @@ using NINA.Plugin.TargetScheduler.Controls.Util;
 using NINA.Plugin.TargetScheduler.Database.Schema;
 using NINA.Plugin.TargetScheduler.Planning;
 using NINA.Plugin.TargetScheduler.Planning.Exposures;
+using NINA.Plugin.TargetScheduler.Remote.Plugin;
 using NINA.Plugin.TargetScheduler.Shared.Utility;
 using NINA.Profile.Interfaces;
 using NINA.WPF.Base.Interfaces.Mediator;
@@ -63,24 +64,24 @@ namespace NINA.Plugin.TargetScheduler.Controls.DatabaseManager {
             InitializeExposureTemplateList(profile);
             SetExposureOrderDisplay();
 
-            EditCommand = new RelayCommand(Edit);
-            SaveCommand = new RelayCommand(Save);
+            EditCommand = LocalEditing.Gate(new RelayCommand(Edit));
+            SaveCommand = LocalEditing.Gate(new RelayCommand(Save));
             CancelCommand = new RelayCommand(Cancel);
-            CopyCommand = new RelayCommand(Copy);
-            DeleteCommand = new RelayCommand(Delete);
-            ResetTargetCommand = new RelayCommand(ResetTarget);
-            GradeCommand = new RelayCommand(Grade);
+            CopyCommand = LocalEditing.Gate(new RelayCommand(Copy));
+            DeleteCommand = LocalEditing.Gate(new RelayCommand(Delete));
+            ResetTargetCommand = LocalEditing.Gate(new RelayCommand(ResetTarget));
+            GradeCommand = LocalEditing.Gate(new RelayCommand(Grade));
             RefreshCommand = new RelayCommand(Refresh);
 
-            ShowTargetImportViewCommand = new RelayCommand(ShowTargetImportViewCmd);
-            AddExposurePlanCommand = new RelayCommand(AddExposurePlan);
-            CopyExposurePlansCommand = new RelayCommand(CopyExposurePlans);
-            PasteExposurePlansCommand = new RelayCommand(PasteExposurePlans);
-            DeleteExposurePlansCommand = new RelayCommand(DeleteAllExposurePlans);
-            DeleteExposurePlanCommand = new RelayCommandParam((obj) => DeleteExposurePlan(obj), (obj) => true);
-            ToggleExposurePlanCommand = new RelayCommandParam((obj) => ToggleExposurePlan(obj), (obj) => true);
-            OverrideExposureOrderCommand = new RelayCommand(DisplayOverrideExposureOrder);
-            CancelOverrideExposureOrderCommand = new RelayCommand(CancelOverrideExposureOrder);
+            ShowTargetImportViewCommand = LocalEditing.Gate(new RelayCommand(ShowTargetImportViewCmd));
+            AddExposurePlanCommand = LocalEditing.Gate(new RelayCommand(AddExposurePlan));
+            CopyExposurePlansCommand = LocalEditing.Gate(new RelayCommand(CopyExposurePlans));
+            PasteExposurePlansCommand = LocalEditing.Gate(new RelayCommand(PasteExposurePlans));
+            DeleteExposurePlansCommand = LocalEditing.Gate(new RelayCommand(DeleteAllExposurePlans));
+            DeleteExposurePlanCommand = LocalEditing.Gate(new RelayCommandParam((obj) => DeleteExposurePlan(obj), (obj) => true));
+            ToggleExposurePlanCommand = LocalEditing.Gate(new RelayCommandParam((obj) => ToggleExposurePlan(obj), (obj) => true));
+            OverrideExposureOrderCommand = LocalEditing.Gate(new RelayCommand(DisplayOverrideExposureOrder));
+            CancelOverrideExposureOrderCommand = LocalEditing.Gate(new RelayCommand(CancelOverrideExposureOrder));
             SendCoordinatesToFramingAssistantCommand = new AsyncRelayCommand(SendCoordinatesToFramingAssistant);
 
             TargetImportVM = new TargetImportVM(deepSkyObjectSearchVM, framingAssistantVM, planetariumFactory);
@@ -289,6 +290,10 @@ namespace NINA.Plugin.TargetScheduler.Controls.DatabaseManager {
         public ICommand CancelOverrideExposureOrderCommand { get; private set; }
 
         private void Edit() {
+            if (!LocalEditing.CanEdit) {
+                return;
+            }
+
             Refresh(); // force a refresh since display could be out of date
             TargetProxy.PropertyChanged += TargetProxy_PropertyChanged;
             managerVM.SetEditMode(true);
@@ -297,10 +302,18 @@ namespace NINA.Plugin.TargetScheduler.Controls.DatabaseManager {
         }
 
         private void ShowTargetImportViewCmd() {
+            if (!LocalEditing.CanEdit) {
+                return;
+            }
+
             ShowTargetImportView = !ShowTargetImportView;
         }
 
         private void Save() {
+            if (!LocalEditing.CanEdit) {
+                return;
+            }
+
             TargetProxy.Proxy.ExposurePlans = ExposurePlans;
 
             // If exposure plans have been added or removed, we have to clear override exposure order and filter cadence
@@ -332,10 +345,18 @@ namespace NINA.Plugin.TargetScheduler.Controls.DatabaseManager {
         }
 
         private void Copy() {
+            if (!LocalEditing.CanEdit) {
+                return;
+            }
+
             managerVM.CopyItem();
         }
 
         private void Delete() {
+            if (!LocalEditing.CanEdit) {
+                return;
+            }
+
             bool deleteAcquiredImagesWithTarget = managerVM.GetProfilePreference(profileId).EnableDeleteAcquiredImagesWithTarget;
             string message = deleteAcquiredImagesWithTarget
                 ? $"Delete target '{TargetProxy.Target.Name}' and all associated acquired image records?  This cannot be undone."
@@ -346,6 +367,10 @@ namespace NINA.Plugin.TargetScheduler.Controls.DatabaseManager {
         }
 
         private void ResetTarget() {
+            if (!LocalEditing.CanEdit) {
+                return;
+            }
+
             string message = $"Reset target completion (accepted and acquired counts) on all Exposure Plans for '{TargetProxy.Proxy.Name}'?  This cannot be undone.";
             if (MyMessageBox.Show(message, "Reset Target Completion?", MessageBoxButton.YesNo, MessageBoxResult.No) == MessageBoxResult.Yes) {
                 Target updatedTarget = managerVM.ResetTarget(TargetProxy.Original);
@@ -358,6 +383,10 @@ namespace NINA.Plugin.TargetScheduler.Controls.DatabaseManager {
         }
 
         private void Grade() {
+            if (!LocalEditing.CanEdit) {
+                return;
+            }
+
             if (!project.EnableGrader) {
                 MyMessageBox.Show("You cannot grade since the project has grading disabled.", "Oops");
                 return;
@@ -390,6 +419,10 @@ namespace NINA.Plugin.TargetScheduler.Controls.DatabaseManager {
         }
 
         private void AddExposurePlan() {
+            if (!LocalEditing.CanEdit) {
+                return;
+            }
+
             ExposureTemplate exposureTemplate = GetDefaultExposureTemplate();
             if (exposureTemplate == null) {
                 return;
@@ -407,6 +440,10 @@ namespace NINA.Plugin.TargetScheduler.Controls.DatabaseManager {
         }
 
         private void CopyExposurePlans() {
+            if (!LocalEditing.CanEdit) {
+                return;
+            }
+
             if (Common.IsNotEmpty(ExposurePlans)) {
                 List<ExposurePlan> exposurePlans = new List<ExposurePlan>(ExposurePlans.Count);
                 ExposurePlans.ForEach(ep => exposurePlans.Add(ep));
@@ -421,6 +458,10 @@ namespace NINA.Plugin.TargetScheduler.Controls.DatabaseManager {
         }
 
         private void PasteExposurePlans() {
+            if (!LocalEditing.CanEdit) {
+                return;
+            }
+
             ExposurePlansSpec source = ExposurePlansClipboard.GetItem();
             List<ExposurePlan> srcExposurePlans = source.ExposurePlans;
 
@@ -472,6 +513,10 @@ namespace NINA.Plugin.TargetScheduler.Controls.DatabaseManager {
         }
 
         private void DeleteAllExposurePlans() {
+            if (!LocalEditing.CanEdit) {
+                return;
+            }
+
             if (Common.IsNotEmpty(TargetProxy.Original.ExposurePlans)) {
                 string message = "Delete all exposure plans for this target?  This cannot be undone.";
                 if (MyMessageBox.Show(message, "Delete all Exposure Plans?", MessageBoxButton.YesNo, MessageBoxResult.No) == MessageBoxResult.Yes) {
@@ -489,6 +534,10 @@ namespace NINA.Plugin.TargetScheduler.Controls.DatabaseManager {
         }
 
         private void ToggleExposurePlan(object obj) {
+            if (!LocalEditing.CanEdit) {
+                return;
+            }
+
             ExposurePlanVM item = obj as ExposurePlanVM;
             ExposurePlan exposurePlan = TargetProxy.Original.ExposurePlans.Where(ep => ep.Id == item?.ExposurePlan.Id).FirstOrDefault();
             if (exposurePlan != null) {
@@ -505,6 +554,10 @@ namespace NINA.Plugin.TargetScheduler.Controls.DatabaseManager {
         }
 
         private void DeleteExposurePlan(object obj) {
+            if (!LocalEditing.CanEdit) {
+                return;
+            }
+
             ExposurePlanVM item = obj as ExposurePlanVM;
             ExposurePlan exposurePlan = TargetProxy.Original.ExposurePlans.Where(ep => ep.Id == item?.ExposurePlan.Id).FirstOrDefault();
             if (exposurePlan != null) {
@@ -622,11 +675,19 @@ namespace NINA.Plugin.TargetScheduler.Controls.DatabaseManager {
         }
 
         private void DisplayOverrideExposureOrder() {
+            if (!LocalEditing.CanEdit) {
+                return;
+            }
+
             OverrideExposureOrderVM = new OverrideExposureOrderViewVM(this, profileService);
             ShowOverrideExposureOrderPopup = true;
         }
 
         private void CancelOverrideExposureOrder() {
+            if (!LocalEditing.CanEdit) {
+                return;
+            }
+
             string message = $"Clear override exposure order?  This cannot be undone.";
             if (MyMessageBox.Show(message, "Clear?", MessageBoxButton.YesNo, MessageBoxResult.No) == MessageBoxResult.Yes) {
                 TargetProxy.Proxy.OverrideExposureOrders = new List<OverrideExposureOrderItem>();
@@ -637,6 +698,10 @@ namespace NINA.Plugin.TargetScheduler.Controls.DatabaseManager {
         }
 
         public void SaveOverrideExposureOrder(List<OverrideExposureOrderItem> overrideExposureOrders) {
+            if (!LocalEditing.CanEdit) {
+                return;
+            }
+
             TargetProxy.Target.OverrideExposureOrders = overrideExposureOrders;
             managerVM.SaveTarget(TargetProxy.Proxy, true);
             TargetProxy.OnSave();

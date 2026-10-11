@@ -3,6 +3,7 @@ using NINA.Core.MyMessageBox;
 using NINA.Plugin.TargetScheduler.Controls.Converters;
 using NINA.Plugin.TargetScheduler.Controls.Util;
 using NINA.Plugin.TargetScheduler.Database.Schema;
+using NINA.Plugin.TargetScheduler.Remote.Plugin;
 using NINA.Profile.Interfaces;
 using NINA.WPF.Base.ViewModel;
 using System.Collections.Generic;
@@ -24,11 +25,11 @@ namespace NINA.Plugin.TargetScheduler.Controls.DatabaseManager {
 
             ExposureTemplateProxy = new ExposureTemplateProxy(exposureTemplate);
 
-            EditCommand = new RelayCommand(Edit);
-            SaveCommand = new RelayCommand(Save);
+            EditCommand = LocalEditing.Gate(new RelayCommand(Edit));
+            SaveCommand = LocalEditing.Gate(new RelayCommand(Save));
             CancelCommand = new RelayCommand(Cancel);
-            CopyCommand = new RelayCommand(Copy);
-            DeleteCommand = new RelayCommand(Delete);
+            CopyCommand = LocalEditing.Gate(new RelayCommand(Copy));
+            DeleteCommand = LocalEditing.Gate(new RelayCommand(Delete));
 
             InitializeCombos();
         }
@@ -197,6 +198,10 @@ namespace NINA.Plugin.TargetScheduler.Controls.DatabaseManager {
         public ICommand DeleteCommand { get; private set; }
 
         private void Edit() {
+            if (!LocalEditing.CanEdit) {
+                return;
+            }
+
             ExposureTemplateProxy.PropertyChanged += ExposureTemplateProxy_PropertyChanged;
             managerVM.SetEditMode(true);
             ShowEditView = true;
@@ -204,6 +209,10 @@ namespace NINA.Plugin.TargetScheduler.Controls.DatabaseManager {
         }
 
         private void Save() {
+            if (!LocalEditing.CanEdit) {
+                return;
+            }
+
             managerVM.SaveExposureTemplate(ExposureTemplateProxy.Proxy);
             ExposureTemplateProxy.OnSave();
             ExposureTemplateProxy.PropertyChanged -= ExposureTemplateProxy_PropertyChanged;
@@ -221,10 +230,18 @@ namespace NINA.Plugin.TargetScheduler.Controls.DatabaseManager {
         }
 
         private void Copy() {
+            if (!LocalEditing.CanEdit) {
+                return;
+            }
+
             managerVM.CopyItem();
         }
 
         private void Delete() {
+            if (!LocalEditing.CanEdit) {
+                return;
+            }
+
             int count = managerVM.ExposureTemplateUsage(ExposureTemplateProxy.ExposureTemplate.Id);
             string msg = count > 0
                 ? $"Are you sure?  '{ExposureTemplateProxy.ExposureTemplate.Name}' is in use by {count} exposure plan(s).  If those exposure plans are still active, deleting may cause problems later.  This cannot be undone."

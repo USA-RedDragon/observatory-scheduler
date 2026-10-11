@@ -1,5 +1,6 @@
 ﻿using CommunityToolkit.Mvvm.Input;
 using NINA.Plugin.TargetScheduler.Database.Schema;
+using NINA.Plugin.TargetScheduler.Remote.Plugin;
 using NINA.Plugin.TargetScheduler.Shared.Utility;
 using NINA.Profile.Interfaces;
 using NINA.WPF.Base.ViewModel;
@@ -17,13 +18,13 @@ namespace NINA.Plugin.TargetScheduler.Controls.DatabaseManager {
             this.targetViewVM = targetViewVM;
             displayOverrideExposureOrder = SetOverrideItems(targetViewVM.TargetProxy.Target);
 
-            MoveItemUpCommand = new RelayCommand<object>(MoveItemUp);
-            MoveItemDownCommand = new RelayCommand<object>(MoveItemDown);
-            CopyItemCommand = new RelayCommand<object>(CopyItem);
-            DeleteItemCommand = new RelayCommand<object>(DeleteItem);
-            InsertDitherCommand = new RelayCommand<object>(InsertDither);
+            MoveItemUpCommand = LocalEditing.Gate(new RelayCommand<object>(MoveItemUp));
+            MoveItemDownCommand = LocalEditing.Gate(new RelayCommand<object>(MoveItemDown));
+            CopyItemCommand = LocalEditing.Gate(new RelayCommand<object>(CopyItem));
+            DeleteItemCommand = LocalEditing.Gate(new RelayCommand<object>(DeleteItem));
+            InsertDitherCommand = LocalEditing.Gate(new RelayCommand<object>(InsertDither));
 
-            SaveCommand = new RelayCommand(Save);
+            SaveCommand = LocalEditing.Gate(new RelayCommand(Save));
             CancelCommand = new RelayCommand(Cancel);
         }
 
@@ -107,6 +108,10 @@ namespace NINA.Plugin.TargetScheduler.Controls.DatabaseManager {
         }
 
         private void Save() {
+            if (!LocalEditing.CanEdit) {
+                return;
+            }
+
             List<OverrideExposureOrderItem> overrideExposureOrders = new List<OverrideExposureOrderItem>();
             if (DisplayOverrideExposureOrder?.Count > 0) {
                 int targetId = targetViewVM.TargetProxy.Target.Id;

@@ -1,5 +1,6 @@
 ﻿using NINA.Core.Model.Equipment;
 using NINA.Plugin.TargetScheduler.Database.Schema;
+using NINA.Plugin.TargetScheduler.Remote.Plugin;
 using NINA.Profile;
 using NINA.Profile.Interfaces;
 using NINA.WPF.Base.ViewModel;
@@ -43,10 +44,10 @@ namespace NINA.Plugin.TargetScheduler.Controls.DatabaseManager {
             parentItem = profileItem;
             ExposureTemplates = InitExposureTemplates(profileItem);
 
-            AddExposureTemplateCommand = new RelayCommand(AddExposureTemplate);
-            PasteExposureTemplateCommand = new RelayCommand(PasteExposureTemplate);
+            AddExposureTemplateCommand = LocalEditing.Gate(new RelayCommand(AddExposureTemplate));
+            PasteExposureTemplateCommand = LocalEditing.Gate(new RelayCommand(PasteExposureTemplate));
             ViewExposureTemplateCommand = new RelayCommandParam(ViewExposureTemplate);
-            CopyExposureTemplateCommand = new RelayCommandParam(CopyExposureTemplate);
+            CopyExposureTemplateCommand = LocalEditing.Gate(new RelayCommandParam(CopyExposureTemplate));
         }
 
         private List<ExposureTemplateRowView> InitExposureTemplates(TreeDataItem profileItem) {
@@ -64,10 +65,18 @@ namespace NINA.Plugin.TargetScheduler.Controls.DatabaseManager {
         public ICommand CopyExposureTemplateCommand { get; private set; }
 
         private void AddExposureTemplate() {
+            if (!LocalEditing.CanEdit) {
+                return;
+            }
+
             managerVM.AddNewExposureTemplate(parentItem);
         }
 
         private void PasteExposureTemplate() {
+            if (!LocalEditing.CanEdit) {
+                return;
+            }
+
             managerVM.PasteExposureTemplate(parentItem);
         }
 
@@ -82,6 +91,10 @@ namespace NINA.Plugin.TargetScheduler.Controls.DatabaseManager {
         }
 
         private void CopyExposureTemplate(object obj) {
+            if (!LocalEditing.CanEdit) {
+                return;
+            }
+
             ExposureTemplate exposureTemplate = (obj as ExposureTemplateRowView).ExposureTemplate;
             if (exposureTemplate != null) {
                 TreeDataItem item = Find(exposureTemplate);

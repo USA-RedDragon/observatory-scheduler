@@ -1,6 +1,7 @@
 ﻿using NINA.Core.MyMessageBox;
 using NINA.Plugin.TargetScheduler.Database;
 using NINA.Plugin.TargetScheduler.Database.Schema;
+using NINA.Plugin.TargetScheduler.Remote.Plugin;
 using NINA.Plugin.TargetScheduler.Shared.Utility;
 using NINA.Profile;
 using NINA.Profile.Interfaces;
@@ -61,13 +62,13 @@ namespace NINA.Plugin.TargetScheduler.Controls.DatabaseManager {
             Projects = InitProjects(profileItem);
 
             ProfileSettingsCommand = new RelayCommand(ViewProfilePreferences);
-            AddProjectCommand = new RelayCommand(AddProject);
-            PasteProjectCommand = new RelayCommand(PasteProject);
+            AddProjectCommand = LocalEditing.Gate(new RelayCommand(AddProject));
+            PasteProjectCommand = LocalEditing.Gate(new RelayCommand(PasteProject));
             ExportCommand = new RelayCommand(DisplayProfileExport);
-            ImportCommand = new RelayCommand(DisplayProfileImport);
-            ResetProfileCommand = new RelayCommand(ResetProfile);
+            ImportCommand = LocalEditing.Gate(new RelayCommand(DisplayProfileImport));
+            ResetProfileCommand = LocalEditing.Gate(new RelayCommand(ResetProfile));
             ViewProjectCommand = new RelayCommandParam(ViewProject);
-            CopyProjectCommand = new RelayCommandParam(CopyProject);
+            CopyProjectCommand = LocalEditing.Gate(new RelayCommandParam(CopyProject));
         }
 
         private List<Project> InitProjects(TreeDataItem profileItem) {
@@ -133,10 +134,18 @@ namespace NINA.Plugin.TargetScheduler.Controls.DatabaseManager {
         }
 
         private void AddProject() {
+            if (!LocalEditing.CanEdit) {
+                return;
+            }
+
             managerVM.AddNewProject(parentItem);
         }
 
         private void PasteProject() {
+            if (!LocalEditing.CanEdit) {
+                return;
+            }
+
             managerVM.PasteProject(parentItem);
         }
 
@@ -149,6 +158,10 @@ namespace NINA.Plugin.TargetScheduler.Controls.DatabaseManager {
         }
 
         private void DisplayProfileImport() {
+            if (!LocalEditing.CanEdit) {
+                return;
+            }
+
             ShowProfileImportView = !ShowProfileImportView;
             if (ShowProfileImportView) {
                 ShowProfileExportView = false;
@@ -157,6 +170,10 @@ namespace NINA.Plugin.TargetScheduler.Controls.DatabaseManager {
         }
 
         private void ResetProfile() {
+            if (!LocalEditing.CanEdit) {
+                return;
+            }
+
             string message = $"Reset target completion (accepted and acquired counts) on all projects/targets under '{Profile.Name}'?  This cannot be undone.";
             if (MyMessageBox.Show(message, "Reset Target Completion?", MessageBoxButton.YesNo, MessageBoxResult.No) == MessageBoxResult.Yes) {
                 managerVM.ResetProfile(parentItem);
@@ -164,6 +181,10 @@ namespace NINA.Plugin.TargetScheduler.Controls.DatabaseManager {
         }
 
         private void CopyProject(object obj) {
+            if (!LocalEditing.CanEdit) {
+                return;
+            }
+
             Project project = obj as Project;
             if (project != null) {
                 TreeDataItem item = Find(project);
