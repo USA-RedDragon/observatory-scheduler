@@ -40,6 +40,8 @@ namespace NINA.Plugin.TargetScheduler.Remote.Plugin {
             var nowLocal = DateTime.Now;
             var tc = host.TwilightFor(request.Start?.ToLocalTime() ?? nowLocal);
             DateTime startLocal = request.Start?.ToLocalTime() ?? DefaultStart(nowLocal, tc);
+            var live = request.Start == null ? host.Imaging() : null;
+            startLocal = PreviewBuilder.LiveStart(startLocal.ToUniversalTime(), live).ToLocalTime();
 
             var preview = new Preview {
                 Start = startLocal.ToUniversalTime(),
@@ -61,6 +63,10 @@ namespace NINA.Plugin.TargetScheduler.Remote.Plugin {
 
             var simulated = new SimulatedStackSubs();
             var projects = LoadProjects(profile, prefs, request.Overrides ?? new List<PreviewOverride>(), simulated);
+            var running = live == null ? null : projects.SelectMany(p => p.Targets).FirstOrDefault(t => t.DatabaseId == live.TargetId);
+            if (request.Start == null) {
+                preview.Assumptions.Insert(0, PreviewBuilder.LiveAssumption(preview.Start, live, running != null));
+            }
             if (projects.Count == 0) {
                 return preview;
             }
@@ -71,7 +77,10 @@ namespace NINA.Plugin.TargetScheduler.Remote.Plugin {
             var planned = new List<PlannedExposure>();
             var rejections = new List<Rejection>();
             var passTimes = new List<DateTime>();
-            ITarget previous = null;
+            ITarget previous = running;
+            if (running != null && live.PlanId is int planId && live.EndsAt is DateTime endsAt && endsAt >= preview.Start) {
+                CountRunning(running, planId, simulated);
+            }
             DateTime current = startLocal;
             var stopAt = startLocal.AddHours(Hours);
             string stopReason = null;
@@ -112,7 +121,7 @@ namespace NINA.Plugin.TargetScheduler.Remote.Plugin {
                     previous = null;
                 } else {
                     var t = plan.PlanTarget;
-                    bool newPick = !ReferenceEquals(t, previous);
+                    bool newPick = planned.Count == 0 || !ReferenceEquals(t, previous);
                     var p = new PlannedExposure {
                         Start = plan.StartTime.ToUniversalTime(),
                         End = plan.EndTime.ToUniversalTime(),
@@ -204,6 +213,18 @@ namespace NINA.Plugin.TargetScheduler.Remote.Plugin {
                 return dusk.Value;
             }
             return nowLocal;
+        }
+
+        private static void CountRunning(ITarget t, int planId, SimulatedStackSubs simulated) {
+            var exposure = t.AllExposurePlans.FirstOrDefault(e => e.DatabaseId == planId);
+            if (exposure == null) {
+                return;
+            }
+            exposure.Acquired++;
+            if (t.Project.EnableGrader) {
+                exposure.Accepted++;
+            }
+            simulated.Add(t.Guid, exposure.FilterName);
         }
 
         private static void Advance(ITarget t, ITarget previous, SimulatedStackSubs simulated) {

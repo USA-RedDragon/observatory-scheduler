@@ -214,6 +214,33 @@ namespace NINA.Plugin.TargetScheduler.Remote.Test {
             a.Single(x => x.Key == "visibility").Text.Should().Contain("30 s").And.Contain("10 s");
         }
 
+        [Test]
+        public void TheLivePreviewStartsWhenTheRunningExposureEnds() {
+            var start = new DateTime(2026, 10, 11, 6, 33, 38, DateTimeKind.Utc);
+            var ends = new DateTime(2026, 10, 11, 6, 38, 44, DateTimeKind.Utc);
+            var live = new LiveImaging { TargetId = 130, TargetName = "IC 1318 Panel 15", PlanId = 774, Filter = "Green", EndsAt = ends };
+            PreviewBuilder.LiveStart(start, live).Should().Be(ends);
+            PreviewBuilder.LiveStart(start, null).Should().Be(start);
+            PreviewBuilder.LiveStart(start, new LiveImaging { TargetId = 130, EndsAt = start.AddMinutes(-1) }).Should().Be(start);
+            PreviewBuilder.LiveStart(start, new LiveImaging { TargetId = 130 }).Should().Be(start);
+        }
+
+        [Test]
+        public void TheLivePreviewStatesHowItSeedsTheCurrentTarget() {
+            var ends = new DateTime(2026, 10, 11, 6, 38, 44, DateTimeKind.Utc);
+            var live = new LiveImaging { TargetId = 130, TargetName = "IC 1318 Panel 15", PlanId = 774, Filter = "Green", EndsAt = ends };
+            var running = PreviewBuilder.LiveAssumption(ends, live, true);
+            running.Key.Should().Be("live");
+            running.Text.Should().Contain("running Green exposure ends at " + ends.ToLocalTime().ToString("HH:mm"))
+                .And.Contain("counts that exposure as acquired")
+                .And.Contain("IC 1318 Panel 15 starts as the current target")
+                .And.Contain("Target Switch Penalty");
+            PreviewBuilder.LiveAssumption(ends, new LiveImaging { TargetId = 130, TargetName = "IC 1318 Panel 15" }, true).Text
+                .Should().StartWith("No exposure is running").And.Contain("IC 1318 Panel 15 starts as the current target");
+            PreviewBuilder.LiveAssumption(ends, live, false).Text.Should().Contain("not among the simulated projects");
+            PreviewBuilder.LiveAssumption(ends, null, false).Text.Should().StartWith("Nothing is imaging now");
+        }
+
         private static GraderHfrSettings Hfr(bool improvement = false, double? auto = null, string mode = "immediate") {
             return new GraderHfrSettings { ProjectGrading = true, Enabled = true, SigmaFactor = 2, AcceptImprovement = improvement, AutoAcceptLevel = auto, MaxSampleSize = 10, Mode = mode, DelayThresholdPercent = 50 };
         }

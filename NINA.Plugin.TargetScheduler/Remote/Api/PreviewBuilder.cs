@@ -126,6 +126,25 @@ namespace NINA.Plugin.TargetScheduler.Remote.Api {
             return end > at ? end : at;
         }
 
+        public static DateTime LiveStart(DateTime startUtc, LiveImaging live) {
+            return live?.EndsAt is DateTime end && end > startUtc ? end : startUtc;
+        }
+
+        public static PreviewAssumption LiveAssumption(DateTime startUtc, LiveImaging live, bool simulated) {
+            const string key = "live";
+            if (live == null) {
+                return new PreviewAssumption { Key = key, Text = "Nothing is imaging now, so no target starts as the current one." };
+            }
+            if (!simulated) {
+                return new PreviewAssumption { Key = key, Text = $"{live.TargetName} is imaging now but is not among the simulated projects, so no target starts as the current one." };
+            }
+            var current = $"{live.TargetName} starts as the current target, so it keeps the Target Switch Penalty score the live planner gives it";
+            if (live.EndsAt is DateTime end && end >= startUtc) {
+                return new PreviewAssumption { Key = key, Text = $"The simulation starts when the running {live.Filter} exposure ends at {end.ToLocalTime():HH:mm} and counts that exposure as acquired. {current}." };
+            }
+            return new PreviewAssumption { Key = key, Text = $"No exposure is running, so the simulation starts now; the rest of the current step (slew, centering, focus, download or save) is not simulated. {current}." };
+        }
+
         public static List<PreviewAssumption> Assumptions(int previewSampleSeconds, int liveSampleSeconds, double hours, int maxPlans) {
             return new List<PreviewAssumption> {
                 new PreviewAssumption { Key = "weather", Text = "No weather data is used, so humidity never rejects a target and no weather stop happens." },
@@ -136,5 +155,13 @@ namespace NINA.Plugin.TargetScheduler.Remote.Api {
                 new PreviewAssumption { Key = "limits", Text = $"The simulation stops after {hours:0} hours or {maxPlans} plans." },
             };
         }
+    }
+
+    public class LiveImaging {
+        public int TargetId { get; set; }
+        public string TargetName { get; set; }
+        public int? PlanId { get; set; }
+        public string Filter { get; set; }
+        public DateTime? EndsAt { get; set; }
     }
 }

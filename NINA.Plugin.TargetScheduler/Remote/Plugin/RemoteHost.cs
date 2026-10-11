@@ -490,6 +490,23 @@ namespace NINA.Plugin.TargetScheduler.Remote.Plugin {
 
         public CommandResult Cancel(string id) => Processor.Cancel(id);
 
+        public LiveImaging Imaging() {
+            var view = CurrentView();
+            var planning = tracker.InPlan;
+            lock (sync) {
+                if (!containerRunning || containerPaused || target == null || !(planning || view.Exposure != null)) {
+                    return null;
+                }
+                return new LiveImaging {
+                    TargetId = target.TargetId,
+                    TargetName = target.TargetName,
+                    PlanId = view.Exposure?.PlanId,
+                    Filter = view.Exposure?.Filter,
+                    EndsAt = view.Exposure?.EndsAt,
+                };
+            }
+        }
+
         public Preview Preview(PreviewRequest request) => new PreviewRunner(profileService, this).Run(request);
 
         public GraderReport Grader(int? targetId) {
