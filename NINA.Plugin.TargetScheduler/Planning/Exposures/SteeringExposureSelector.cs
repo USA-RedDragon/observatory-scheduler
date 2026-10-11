@@ -55,7 +55,9 @@ namespace NINA.Plugin.TargetScheduler.Planning.Exposures {
                 });
             }
 
-            int chosen = FilterSteering.Choose(candidates, currentIndex);
+            double? quality = SkyConditions.NightQuality(atTime);
+            int chosen = FilterSteering.Choose(candidates, currentIndex, quality);
+            TSLogger.Debug($"filter steering conditions for {target.Name}: glare {glare:0.00}, quality {(quality.HasValue ? quality.Value.ToString("0.00") : "unknown")}, favors {(ConditionMatch.NarrowbandFavored(glare, quality) ? "narrowband" : "broadband")}");
             return chosen < 0 ? null : target.ExposurePlans[chosen];
         }
 

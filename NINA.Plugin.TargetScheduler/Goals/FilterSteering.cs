@@ -37,30 +37,37 @@ namespace NINA.Plugin.TargetScheduler.Goals {
             return c.Goal.GainPerHourPct;
         }
 
-        public static void Evaluate(IList<SteeringCandidate> candidates) {
+        public static bool Favored(SteeringCandidate c, double? quality) {
+            return c.Narrowband == ConditionMatch.NarrowbandFavored(c.MoonGlare, quality);
+        }
+
+        public static void Evaluate(IList<SteeringCandidate> candidates, double? quality = null) {
             if (candidates == null || candidates.Count == 0) { return; }
 
             double maxGain = candidates.Where(c => c != null).Select(Gain).DefaultIfEmpty(0).Max();
             foreach (SteeringCandidate c in candidates) {
                 if (c == null) { continue; }
                 double gainNorm = maxGain > 0 ? GoalCompletion.Clamp01(Gain(c) / maxGain) : 1;
-                c.Value = Deficit(c) * (0.5 + 0.5 * gainNorm) * ConditionMatch.MoonScore(c.Narrowband, c.MoonGlare);
+                double condition = ConditionMatch.MoonScore(c.Narrowband, c.MoonGlare) * ConditionMatch.SkyScore(c.Narrowband, quality);
+                c.Value = Deficit(c) * (0.5 + 0.5 * gainNorm) * condition;
             }
         }
 
-        public static int Choose(IList<SteeringCandidate> candidates, int currentIndex) {
+        public static int Choose(IList<SteeringCandidate> candidates, int currentIndex, double? quality = null) {
             if (!Applies(candidates)) { return -1; }
 
-            Evaluate(candidates);
+            Evaluate(candidates, quality);
+            List<SteeringCandidate> pool = candidates.Where(c => c != null && c.Value > 0 && Favored(c, quality)).ToList();
+            if (pool.Count == 0) { pool = candidates.Where(c => c != null).ToList(); }
+
             SteeringCandidate best = null;
-            foreach (SteeringCandidate c in candidates) {
-                if (c == null) { continue; }
+            foreach (SteeringCandidate c in pool) {
                 if (best == null || c.Value > best.Value) { best = c; }
             }
 
             if (best == null || best.Value <= 0) { return -1; }
 
-            SteeringCandidate current = candidates.FirstOrDefault(c => c != null && c.Index == currentIndex);
+            SteeringCandidate current = pool.FirstOrDefault(c => c.Index == currentIndex);
             if (current != null && current.Value >= best.Value * (1 - KeepCurrentWithin)) {
                 return current.Index;
             }

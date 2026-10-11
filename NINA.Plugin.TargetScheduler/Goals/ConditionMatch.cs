@@ -16,6 +16,7 @@ namespace NINA.Plugin.TargetScheduler.Goals {
         public const double GlareFullSeparation = 30;
         public const double NarrowbandMoonTolerance = 0.25;
         public const double NarrowbandQualityFloor = 0.5;
+        public const double BroadbandSuitableScore = 0.5;
 
         public static double MoonIllumination(double moonAgeDays) {
             if (double.IsNaN(moonAgeDays)) { return 0; }
@@ -56,6 +57,14 @@ namespace NINA.Plugin.TargetScheduler.Goals {
         public static double FilterScore(FilterCondition filter, double? quality) {
             if (filter == null) { return 0; }
             return MoonScore(filter.Narrowband, filter.MoonGlare) * SkyScore(filter.Narrowband, quality);
+        }
+
+        public static bool NarrowbandFavored(double glare, double? quality) {
+            return MoonScore(false, glare) * SkyScore(false, quality) < BroadbandSuitableScore;
+        }
+
+        public static bool Favored(FilterCondition filter, double? quality) {
+            return filter != null && filter.Narrowband == NarrowbandFavored(filter.MoonGlare, quality);
         }
 
         public static double Score(double altitude, double peakAltitude, IEnumerable<FilterCondition> filters, double? quality) {
