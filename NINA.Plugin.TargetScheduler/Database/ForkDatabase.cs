@@ -23,6 +23,7 @@ namespace NINA.Plugin.TargetScheduler.Database {
                     GoalSchema.EnsureColumns(context.Database.Connection);
                     Darks.DarkStore.Ensure(context.Database.Connection);
                     Darks.BiasStore.Ensure(context.Database.Connection);
+                    Flats.FlatRequestStore.Ensure(context.Database.Connection);
                     ensured = true;
                     TSLogger.Info("fork goal schema ensured");
                     RefreshGoalSource(context);

@@ -82,6 +82,72 @@ namespace NINA.Plugin.TargetScheduler.Test.Flats {
             lightSessions[11].TargetId.Should().Be(2); lightSessions[11].SessionId.Should().Be(1);
         }
 
+        [Test]
+        public void TestGetRequestedLightSessions() {
+            Mock<IProfile> profileMock = new Mock<IProfile>();
+            profileMock.SetupProperty(m => m.Id, new Guid("01234567-0000-0000-0000-000000000000"));
+
+            DateTime dusk = new DateTime(2024, 1, 5, 21, 0, 0);
+            List<AcquiredImage> images = new List<AcquiredImage> {
+                GetAcquiredImage(dusk, 12, GetImageMetadata(7, "R", 10, 20, "1x1", 0, 10, 100)),
+                GetAcquiredImage(dusk.AddMinutes(5), 12, GetImageMetadata(7, "R", 10, 20, "1x1", 0, 10, 100)),
+                GetAcquiredImage(dusk.AddHours(5), 12, GetImageMetadata(7, "G", 10, 20, "1x1", 0, 10, 100)),
+                GetAcquiredImage(dusk.AddHours(15.5), 12, GetImageMetadata(7, "B", 10, 20, "1x1", 0, 10, 100)),
+                GetAcquiredImage(dusk.AddDays(1), 12, GetImageMetadata(8, "B", 10, 20, "1x1", 0, 10, 100)),
+                GetAcquiredImage(dusk, 13, GetImageMetadata(7, "L", 10, 20, "1x1", 0, 10, 100))
+            };
+
+            Mock<FlatsExpert> mock = new Mock<FlatsExpert> { };
+            mock.Setup(m => m.GetAcquiredImagesForTarget(It.IsAny<IProfile>(), 12)).Returns(images);
+            mock.Setup(m => m.GetFlatHistory(It.IsAny<Target>(), It.IsAny<IProfile>())).Returns(new List<FlatHistory> {
+                GetFlatHistory(12, new DateTime(2024, 1, 5, 12, 0, 0), 7, dusk.AddHours(10), new FlatSpec(12, "R", 10, 20, new BinningMode(1, 1), 0, 10, 100))
+            });
+
+            FlatRequest request = new FlatRequest { RequestId = "r1", TargetId = 12, TargetName = "M 31", Night = "2024-01-05" };
+            List<LightSession> sessions = mock.Object.GetRequestedLightSessions(profileMock.Object, request);
+
+            sessions.Count.Should().Be(2);
+            sessions.ConvertAll(ls => ls.FlatSpec.FilterName).Should().Equal("R", "G");
+            sessions.ForEach(ls => {
+                ls.TargetId.Should().Be(12);
+                ls.SessionId.Should().Be(7);
+                ls.SessionDate.Should().Be(new DateTime(2024, 1, 5, 12, 0, 0));
+            });
+
+            mock.Verify(m => m.GetFlatHistory(It.IsAny<Target>(), It.IsAny<IProfile>()), Times.Never);
+            mock.Verify(m => m.GetAcquiredImages(It.IsAny<IProfile>()), Times.Never);
+            mock.Verify(m => m.GetTargetsForPeriodicFlats(It.IsAny<IProfile>()), Times.Never);
+            mock.Verify(m => m.GetTargetsForCompletionFlats(It.IsAny<IProfile>()), Times.Never);
+
+            request.Night = "2024-01-06";
+            mock.Object.GetRequestedLightSessions(profileMock.Object, request).ConvertAll(ls => ls.FlatSpec.FilterName).Should().Equal("B", "B");
+
+            request.Night = "2024-01-07";
+            mock.Object.GetRequestedLightSessions(profileMock.Object, request).Should().BeEmpty();
+        }
+
+        [Test]
+        public void TestRequestedSessionsMergeWithNeededFlats() {
+            Mock<IProfile> profileMock = new Mock<IProfile>();
+            profileMock.SetupProperty(m => m.Id, new Guid("01234567-0000-0000-0000-000000000000"));
+            DateTime baseDate = DateTime.Now.Date.AddDays(-2).AddHours(20);
+
+            List<AcquiredImage> acquiredImages = GetTestAcquiredImages(baseDate, 1, 1, 1);
+            Mock<FlatsExpert> mock = new Mock<FlatsExpert> { };
+            mock.Setup(m => m.GetTargetsForPeriodicFlats(It.IsAny<IProfile>())).Returns(new List<Target>());
+            mock.Setup(m => m.GetTargetsForCompletionFlats(It.IsAny<IProfile>())).Returns(new List<Target> { GetTestTarget(1, baseDate, Project.FLATS_HANDLING_TARGET_COMPLETION) });
+            mock.Setup(m => m.GetAcquiredImages(It.IsAny<IProfile>())).Returns(acquiredImages);
+            mock.Setup(m => m.GetAcquiredImagesForTarget(It.IsAny<IProfile>(), 1)).Returns(acquiredImages);
+            mock.Setup(m => m.GetFlatHistory(It.IsAny<Target>(), It.IsAny<IProfile>())).Returns(new List<FlatHistory>());
+
+            List<LightSession> needed = mock.Object.GetNeededFlats(profileMock.Object, DateTime.Now);
+            needed.Count.Should().Be(3);
+            FlatRequest request = new FlatRequest { RequestId = "r1", TargetId = 1, TargetName = "T1", Night = baseDate.ToString("yyyy-MM-dd") };
+            List<LightSession> requested = mock.Object.GetRequestedLightSessions(profileMock.Object, request);
+            requested.Count.Should().Be(3);
+            requested.TrueForAll(needed.Contains).Should().BeTrue();
+        }
+
         private List<AcquiredImage> GetTestAcquiredImages(DateTime baseDate, int targetId, int numSessions, int startSessionId) {
             List<AcquiredImage> list = new List<AcquiredImage>();
 

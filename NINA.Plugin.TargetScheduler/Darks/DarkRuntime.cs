@@ -15,10 +15,12 @@ namespace NINA.Plugin.TargetScheduler.Darks {
         private static readonly Lazy<DarkState> state = new Lazy<DarkState>(() => new DarkState(Path.Combine(Common.PLUGIN_HOME, "observatory-scheduler-darks.json")));
         private static readonly Lazy<DarkStore> store = new Lazy<DarkStore>(() => new DarkStore(Connect));
         private static readonly Lazy<BiasStore> biasStore = new Lazy<BiasStore>(() => new BiasStore(Connect));
+        private static readonly Lazy<Flats.FlatRequestStore> flatRequestStore = new Lazy<Flats.FlatRequestStore>(() => new Flats.FlatRequestStore(Connect));
 
         public static DarkState State => state.Value;
         public static DarkStore Store => store.Value;
         public static BiasStore BiasStore => biasStore.Value;
+        public static Flats.FlatRequestStore FlatRequestStore => flatRequestStore.Value;
 
         private static DbConnection Connect() {
             var c = new SQLiteConnection($"Data Source={Path.Combine(Common.PLUGIN_HOME, "schedulerdb.sqlite")};") { BusyTimeout = 5000 };

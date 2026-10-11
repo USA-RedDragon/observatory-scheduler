@@ -349,6 +349,21 @@ namespace NINA.Plugin.TargetScheduler.Flats {
             }
         }
 
+        public virtual List<AcquiredImage> GetAcquiredImagesForTarget(IProfile activeProfile, int targetId) {
+            string profileId = activeProfile.Id.ToString();
+            using (var context = GetDatabase().GetContext()) {
+                return context.GetAcquiredImages(targetId).Where(ai => ai.ProfileId == profileId && ai.Metadata.SessionId != 0).ToList();
+            }
+        }
+
+        public List<LightSession> GetRequestedLightSessions(IProfile activeProfile, FlatRequest request) {
+            List<AcquiredImage> images = GetAcquiredImagesForTarget(activeProfile, request.TargetId)
+                .Where(ai => ai.TargetId == request.TargetId && FlatRequestPlanner.SameNight(GetLightSessionDate(ai.AcquiredDate), request.Night))
+                .ToList();
+            Target target = new Target { Id = request.TargetId, Name = request.TargetName };
+            return GetLightSessions(target, images);
+        }
+
         /// <summary>
         /// Get all flat history records for the target and profile.
         /// </summary>

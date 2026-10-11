@@ -28,6 +28,8 @@
     <Compile Include="..\NINA.Plugin.TargetScheduler\Darks\SqliteRows.cs" Link="Linked\Darks\SqliteRows.cs" />
     <Compile Include="..\NINA.Plugin.TargetScheduler\Darks\BiasPlanner.cs" Link="Linked\Darks\BiasPlanner.cs" />
     <Compile Include="..\NINA.Plugin.TargetScheduler\Darks\BiasStore.cs" Link="Linked\Darks\BiasStore.cs" />
+    <Compile Include="..\NINA.Plugin.TargetScheduler\Flats\FlatRequestPlanner.cs" Link="Linked\Flats\FlatRequestPlanner.cs" />
+    <Compile Include="..\NINA.Plugin.TargetScheduler\Flats\FlatRequestStore.cs" Link="Linked\Flats\FlatRequestStore.cs" />
   </ItemGroup>
 
   <ItemGroup>
