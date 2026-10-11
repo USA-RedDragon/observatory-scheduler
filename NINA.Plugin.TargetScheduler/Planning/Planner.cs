@@ -474,6 +474,7 @@ namespace NINA.Plugin.TargetScheduler.Planning {
             }
 
             foreach (ITarget target in readyTargets) {
+                SubLengthPlanning.Apply(target, atTime);
                 target.SelectedExposure = target.ExposureSelector.Select(atTime, target.Project, target);
             }
 

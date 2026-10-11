@@ -274,7 +274,7 @@ namespace NINA.Plugin.TargetScheduler.Remote.Plugin {
                 return null;
             }
             Control.Capture.Blocked = abortBlocked;
-            var opened = tracker.ShutterOpened(x.DatabaseId, x.FilterName, x.ExposureLength, DateTime.UtcNow, abortBlocked, syncClients);
+            var opened = tracker.ShutterOpened(x.DatabaseId, x.FilterName, x.ExposureLength, DateTime.UtcNow, abortBlocked, syncClients, x.LengthSource, x.LengthBucket);
             Processor.RefreshPending();
             Push("status", null);
             return new CaptureKey { PlanId = opened.PlanId, StartedAt = opened.StartedAt };
@@ -510,6 +510,7 @@ namespace NINA.Plugin.TargetScheduler.Remote.Plugin {
                     TargetName = target.TargetName,
                     PlanId = view.Exposure?.PlanId,
                     Filter = view.Exposure?.Filter,
+                    StartedAt = view.Exposure?.StartedAt,
                     EndsAt = view.Exposure?.EndsAt,
                 };
             }

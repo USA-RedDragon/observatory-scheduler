@@ -73,6 +73,12 @@ namespace NINA.Plugin.TargetScheduler.Remote.Api {
         [JsonPropertyName("seconds")]
         public double Seconds { get; set; }
 
+        [JsonPropertyName("length_source")]
+        public string LengthSource { get; set; }
+
+        [JsonPropertyName("length_bucket")]
+        public string LengthBucket { get; set; }
+
         [JsonPropertyName("started_at")]
         public DateTime StartedAt { get; set; }
 
@@ -267,6 +273,12 @@ namespace NINA.Plugin.TargetScheduler.Remote.Api {
 
         [JsonPropertyName("exposure_seconds")]
         public double ExposureSeconds { get; set; }
+
+        [JsonPropertyName("length_source")]
+        public string LengthSource { get; set; }
+
+        [JsonPropertyName("length_bucket")]
+        public string LengthBucket { get; set; }
 
         [JsonPropertyName("count")]
         public int Count { get; set; }
@@ -550,6 +562,8 @@ namespace NINA.Plugin.TargetScheduler.Remote.Api {
         public string TargetName { get; set; }
         public string Filter { get; set; }
         public double ExposureSeconds { get; set; }
+        public string LengthSource { get; set; }
+        public string LengthBucket { get; set; }
         public bool NewPick { get; set; }
         public List<RuleScore> Scores { get; set; }
         public double? Total { get; set; }

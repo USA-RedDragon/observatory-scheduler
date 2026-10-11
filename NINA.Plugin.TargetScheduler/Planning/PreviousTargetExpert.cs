@@ -94,6 +94,7 @@ namespace NINA.Plugin.TargetScheduler.Planning {
                 TSLogger.Info($"extending allowed time for target {previousTarget.Name} to {previousTarget.BonusTimeSpanEnd} for visibility end allowance");
             }
 
+            SubLengthPlanning.Apply(previousTarget, atTime);
             IExposure nextExposure = previousTarget.ExposureSelector.Select(atTime, previousTarget.Project, previousTarget);
 
             // In some cases, we will have picked a target but at some point during the minimum time

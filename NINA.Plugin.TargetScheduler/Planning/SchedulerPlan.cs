@@ -1,4 +1,5 @@
 ﻿using NINA.Core.Enum;
+using NINA.Plugin.TargetScheduler.Goals;
 using NINA.Plugin.TargetScheduler.Planning.Entities;
 using NINA.Plugin.TargetScheduler.Planning.Interfaces;
 using NINA.Plugin.TargetScheduler.Planning.Scoring.Rules;
@@ -162,6 +163,7 @@ namespace NINA.Plugin.TargetScheduler.Planning {
             if (type == "TARGET") {
                 sb.AppendLine($"Selected Target: {PlanTarget.Project.Name}/{PlanTarget.Name}");
                 sb.AppendLine($"Selected Filter: {PlanTarget.SelectedExposure.FilterName}, moon avoid score: {Utils.FormatDbl(PlanTarget.SelectedExposure.MoonAvoidanceScore)}");
+                sb.AppendLine($"Exposure:        {LengthText(PlanTarget.SelectedExposure)}");
                 sb.AppendLine($"Plan Start:      {DateFmt(PlanTime)}");
                 sb.AppendLine($"Plan Stop:       {DateFmt(PlanTime.AddSeconds(TimeInterval.Duration))}");
                 sb.AppendLine($"Plan Min Expire: {DateFmt(PlanTarget.MinimumTimeSpanEnd)}");
@@ -178,10 +180,15 @@ namespace NINA.Plugin.TargetScheduler.Planning {
             if (type == "WAIT") {
                 sb.AppendLine($"WAIT from {DateFmt(PlanTime)} to {DateFmt(WaitForNextTargetTime)}");
             } else {
-                sb.AppendLine($"TARGET {PlanTarget.Project.Name}/{PlanTarget.Name}, filter {PlanTarget.SelectedExposure.FilterName} at {DateFmt(PlanTime)}");
+                sb.AppendLine($"TARGET {PlanTarget.Project.Name}/{PlanTarget.Name}, filter {PlanTarget.SelectedExposure.FilterName}, exposure {LengthText(PlanTarget.SelectedExposure)} at {DateFmt(PlanTime)}");
             }
 
             return sb.ToString();
+        }
+
+        public static string LengthText(IExposure exposure) {
+            if (exposure == null) { return ""; }
+            return $"{Utils.FormatDbl(exposure.ExposureLength)} s from {exposure.LengthSource ?? SubLength.SourceTemplate}, moon bucket {exposure.LengthBucket ?? "none"}";
         }
 
         private string GetStartTime(ITarget target) {

@@ -7,6 +7,7 @@ namespace NINA.Plugin.TargetScheduler.Remote.Api {
     public static class PreviewBuilder {
         public const string LowerScore = "lower score";
         public const string Complete = "its plans are complete";
+        public const string SystemSource = "system";
 
         public static List<PreviewBlock> Blocks(IList<PlannedExposure> plans) {
             var blocks = new List<PreviewBlock>();
@@ -16,9 +17,12 @@ namespace NINA.Plugin.TargetScheduler.Remote.Api {
                 var prev = last;
                 last = p;
                 bool sameTarget = current != null && !current.Wait && !p.Wait && current.TargetId == p.TargetId;
-                if (sameTarget && !p.NewPick && current.Filter == p.Filter && current.ExposureSeconds == p.ExposureSeconds) {
+                if (sameTarget && !p.NewPick && SameLength(current, p)) {
                     current.End = p.End;
                     current.Count++;
+                    if (current.LengthBucket != p.LengthBucket) {
+                        current.LengthBucket = null;
+                    }
                     continue;
                 }
                 bool picked = !p.Wait && (p.NewPick || current == null || current.Wait || current.TargetId != p.TargetId);
@@ -35,6 +39,8 @@ namespace NINA.Plugin.TargetScheduler.Remote.Api {
                     TargetName = p.TargetName,
                     Filter = p.Wait ? null : p.Filter,
                     ExposureSeconds = p.Wait ? 0 : p.ExposureSeconds,
+                    LengthSource = p.Wait ? null : p.LengthSource,
+                    LengthBucket = p.Wait ? null : p.LengthBucket,
                     Count = p.Wait ? 0 : 1,
                     Picked = picked,
                     Scores = picked ? p.Scores : null,
@@ -47,6 +53,13 @@ namespace NINA.Plugin.TargetScheduler.Remote.Api {
                 current.Reason ??= EndReason(last);
             }
             return blocks;
+        }
+
+        public static bool SameLength(PreviewBlock block, PlannedExposure p) {
+            if (block.Filter != p.Filter || block.ExposureSeconds != p.ExposureSeconds || block.LengthSource != p.LengthSource) {
+                return false;
+            }
+            return block.LengthSource != SystemSource || block.LengthBucket == p.LengthBucket;
         }
 
         public static string EndReason(PlannedExposure ending) {
@@ -162,6 +175,7 @@ namespace NINA.Plugin.TargetScheduler.Remote.Api {
         public string TargetName { get; set; }
         public int? PlanId { get; set; }
         public string Filter { get; set; }
+        public DateTime? StartedAt { get; set; }
         public DateTime? EndsAt { get; set; }
     }
 }

@@ -28,6 +28,8 @@ namespace NINA.Plugin.TargetScheduler.PubSub {
             IExposure exp = plan.PlanTarget.SelectedExposure;
             message.CustomHeaders.Add("ExposureFilterName", exp.FilterName);
             message.CustomHeaders.Add("ExposureLength", exp.ExposureLength);
+            message.CustomHeaders.Add("ExposureLengthSource", exp.LengthSource);
+            message.CustomHeaders.Add("ExposureLengthBucket", exp.LengthBucket ?? "");
             message.CustomHeaders.Add("ExposureGain", exp.Gain.HasValue ? exp.Gain.ToString() : "(camera)");
             message.CustomHeaders.Add("ExposureOffset", exp.Offset.HasValue ? exp.Offset.ToString() : "(camera)");
             message.CustomHeaders.Add("ExposureBinning", exp.BinningMode.ToString());

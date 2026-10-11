@@ -304,7 +304,7 @@ namespace NINA.Plugin.TargetScheduler.Sequencer {
         }
 
         private void AddTakeExposure(ITarget target, IExposure exposure) {
-            TSLogger.Debug($"adding take exposure: {exposure.FilterName} {exposure.ExposureLength}s");
+            TSLogger.Info($"adding take exposure: {exposure.FilterName} {SchedulerPlan.LengthText(exposure)}");
 
             PlanTakeExposure takeExposure = new PlanTakeExposure(
                         parentContainer,

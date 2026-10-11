@@ -55,7 +55,7 @@ namespace NINA.Plugin.TargetScheduler.Sequencer {
             ImageType = CaptureSequence.ImageTypes.LIGHT;
             ROI = target.ROI;
 
-            UpdateDisplayTextAction($"Exposing: {ExposureTime}s, Filter: {exposureTemplate.FilterName}, Gain: {Gain}, Offset: {Offset}, Bin: {Binning}");
+            UpdateDisplayTextAction($"Exposing: {ExposureTime}s ({exposure.LengthSource ?? Goals.SubLength.SourceTemplate}, moon bucket {exposure.LengthBucket ?? "none"}), Filter: {exposureTemplate.FilterName}, Gain: {Gain}, Offset: {Offset}, Bin: {Binning}");
             ExposureCount = exposureCount++;
         }
 
@@ -132,7 +132,7 @@ namespace NINA.Plugin.TargetScheduler.Sequencer {
         }
 
         private double GetExposureLength() {
-            return exposure.ExposureLength > 0 ? exposure.ExposureLength : exposureTemplate.defaultExposure;
+            return exposure.ExposureLength > 0 ? exposure.ExposureLength : exposureTemplate.DefaultExposure;
         }
 
         private int GetGain() {

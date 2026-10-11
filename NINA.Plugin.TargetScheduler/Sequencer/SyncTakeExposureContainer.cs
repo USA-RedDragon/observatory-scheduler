@@ -2,6 +2,8 @@
 using NINA.Equipment.Interfaces.Mediator;
 using NINA.Plugin.TargetScheduler.Database;
 using NINA.Plugin.TargetScheduler.Database.Schema;
+using NINA.Plugin.TargetScheduler.Planning;
+using NINA.Plugin.TargetScheduler.Planning.Exposures;
 using NINA.Plugin.TargetScheduler.Planning.Interfaces;
 using NINA.Plugin.TargetScheduler.Shared.Utility;
 using NINA.Plugin.TargetScheduler.SyncService.Sync;
@@ -87,6 +89,10 @@ namespace NINA.Plugin.TargetScheduler.Sequencer {
                 this.exposurePlan = context.GetExposurePlan(syncedExposure.ExposurePlanDatabaseId);
                 this.exposureTemplate = GetExposureTemplate(context, exposurePlan);
             }
+
+            double? glare = SubLengthPlanning.Glare(SkyConditions.Observer(profileService.ActiveProfile), target.Coordinates, DateTime.Now);
+            SubLengthPlanning.Apply(exposure, target.Guid, exposureTemplate.FilterName, exposureTemplate.Gain, exposureTemplate.DefaultExposure, glare);
+            TSLogger.Info($"SYNC client exposure: {exposureTemplate.FilterName} {SchedulerPlan.LengthText(exposure)}, server exposure {syncedExposure.ExposureLength} s");
         }
 
         private ExposureTemplate GetExposureTemplate(SchedulerDatabaseContext context, ExposurePlan exposurePlan) {
@@ -104,7 +110,7 @@ namespace NINA.Plugin.TargetScheduler.Sequencer {
         }
 
         private int ExposureRepeatCount() {
-            double clientExposureLength = exposure.ExposureLength > 0 ? exposure.ExposureLength : exposureTemplate.defaultExposure;
+            double clientExposureLength = exposure.ExposureLength > 0 ? exposure.ExposureLength : exposureTemplate.DefaultExposure;
             int count = (int)Math.Truncate(syncedExposure.ExposureLength / clientExposureLength);
             return count < 1 ? 1 : count;
         }

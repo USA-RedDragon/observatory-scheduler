@@ -357,7 +357,7 @@ namespace NINA.Plugin.TargetScheduler.Sequencer {
             plan.AddPlanInstruction(instruction);
 
             PlanExecutionHistoryItem item = new PlanExecutionHistoryItem(DateTime.Now, plan);
-            item.EndTime = item.StartTime.AddSeconds(exposure.ExposureLength); // sync container plan end time is estimated
+            item.EndTime = item.StartTime.AddSeconds(syncedExposure.ExposureLength);
             PlanExecutionHistory.Add(item);
         }
 
@@ -376,14 +376,7 @@ namespace NINA.Plugin.TargetScheduler.Sequencer {
         }
 
         private IExposure GetPlanExposure(ITarget target, int exposurePlanDatabaseId) {
-            IExposure exposure = target.AllExposurePlans.FirstOrDefault(ep => ep.DatabaseId == exposurePlanDatabaseId);
-            // We have to go back to the database to see if this exposure plan is overriding the exposure length
-            using (var context = new SchedulerDatabaseInteraction().GetContext()) {
-                ExposurePlan exposurePlan = context.ExposurePlanSet.Where(ep => ep.Id == exposurePlanDatabaseId).FirstOrDefault();
-                if (exposurePlan?.Exposure <= 0) { exposure.ExposureLength = -1; }
-            }
-
-            return exposure;
+            return target.AllExposurePlans.FirstOrDefault(ep => ep.DatabaseId == exposurePlanDatabaseId);
         }
 
         private async Task DoSyncedSolveRotate(SyncedSolveRotate syncedSolveRotate, IProgress<ApplicationStatus> progress, CancellationToken token) {

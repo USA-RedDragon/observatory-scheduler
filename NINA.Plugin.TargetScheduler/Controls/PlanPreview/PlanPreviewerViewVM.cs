@@ -497,7 +497,7 @@ namespace NINA.Plugin.TargetScheduler.Controls.PlanPreview {
             IExposure planExposure = instruction.exposure;
             StringBuilder sb = new StringBuilder();
             sb.Append("Take Exposure:");
-            sb.Append($" {planExposure.ExposureLength} secs, ");
+            sb.Append($" {planExposure.ExposureLength} secs ({planExposure.LengthSource}, moon {planExposure.LengthBucket ?? "unknown"}), ");
             sb.Append($" Gain={CameraDefault(planExposure.Gain)}, ");
             sb.Append($" Offset={CameraDefault(planExposure.Offset)}, ");
             sb.Append($" Binning={planExposure.BinningMode}");

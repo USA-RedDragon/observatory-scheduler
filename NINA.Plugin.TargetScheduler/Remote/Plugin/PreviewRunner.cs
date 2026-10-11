@@ -80,7 +80,7 @@ namespace NINA.Plugin.TargetScheduler.Remote.Plugin {
             var passTimes = new List<DateTime>();
             ITarget previous = running;
             if (running != null && live.PlanId is int planId && live.EndsAt is DateTime endsAt && endsAt >= preview.Start) {
-                CountRunning(running, planId, simulated, endsAt);
+                CountRunning(running, planId, simulated, live.StartedAt, endsAt);
             }
             DateTime current = startLocal;
             var stopAt = startLocal.AddHours(Hours);
@@ -132,6 +132,8 @@ namespace NINA.Plugin.TargetScheduler.Remote.Plugin {
                         TargetName = t.Name,
                         Filter = t.SelectedExposure.FilterName,
                         ExposureSeconds = t.SelectedExposure.ExposureLength,
+                        LengthSource = t.SelectedExposure.LengthSource,
+                        LengthBucket = t.SelectedExposure.LengthBucket,
                         NewPick = newPick,
                         TargetEnd = t.EndTime == default ? null : t.EndTime.ToUniversalTime(),
                     };
@@ -216,7 +218,7 @@ namespace NINA.Plugin.TargetScheduler.Remote.Plugin {
             return nowLocal;
         }
 
-        private static void CountRunning(ITarget t, int planId, SimulatedStackSubs simulated, DateTime endsAt) {
+        private static void CountRunning(ITarget t, int planId, SimulatedStackSubs simulated, DateTime? startedAt, DateTime endsAt) {
             var exposure = t.AllExposurePlans.FirstOrDefault(e => e.DatabaseId == planId);
             if (exposure == null) {
                 return;
@@ -226,7 +228,7 @@ namespace NINA.Plugin.TargetScheduler.Remote.Plugin {
                 exposure.Accepted++;
             }
             simulated.Add(t.Guid, exposure.FilterName);
-            PanelBalance.Record(t, exposure, endsAt.AddSeconds(-exposure.ExposureLength));
+            PanelBalance.Record(t, exposure, startedAt ?? endsAt.AddSeconds(-exposure.ExposureLength));
         }
 
         private static void Advance(ITarget t, ITarget previous, SimulatedStackSubs simulated, DateTime startTime) {
@@ -293,6 +295,7 @@ namespace NINA.Plugin.TargetScheduler.Remote.Plugin {
             var result = new List<IProject>();
             using (var context = new SchedulerDatabaseInteraction().GetContext()) {
                 ForkDatabase.RefreshPanelHistory(context);
+                ForkDatabase.RefreshSubLengths(context);
                 var projects = context.ProjectSet
                     .Include("targets.exposureplans.exposuretemplate")
                     .Include("ruleweights")

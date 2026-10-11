@@ -56,10 +56,10 @@ namespace NINA.Plugin.TargetScheduler.Grading {
                         }
 
                         double delayPercent = goal != null
-                            ? GoalCompletion.DelayPercent(goal, ExposureSeconds(exposurePlan), population.Count)
+                            ? GoalCompletion.DelayPercent(goal, ExposureSeconds(exposurePlan, currentAcquiredImage), population.Count)
                             : CurrentDelayThreshold(population.Count, exposurePlan.Desired);
                         string basis = goal != null
-                            ? $"goal {GoalCompletionLog.Decision(goal, population.Count)} at {delayPercent:0.#}% (stack_subs={(goal.StackSubs.HasValue ? goal.StackSubs.Value.ToString() : "none")}, remaining_subs={GoalCompletion.RemainingExposures(goal, ExposureSeconds(exposurePlan), population.Count)})"
+                            ? $"goal {GoalCompletionLog.Decision(goal, population.Count)} at {delayPercent:0.#}% (stack_subs={(goal.StackSubs.HasValue ? goal.StackSubs.Value.ToString() : "none")}, remaining_subs={GoalCompletion.RemainingExposures(goal, ExposureSeconds(exposurePlan, currentAcquiredImage), population.Count)})"
                             : $"desired={exposurePlan.Desired}";
 
                         if (workData.ForceGrading || delayPercent >= graderPreferences.DelayGradingThreshold) {
@@ -217,7 +217,9 @@ namespace NINA.Plugin.TargetScheduler.Grading {
             }
         }
 
-        private static double ExposureSeconds(ExposurePlan exposurePlan) {
+        private static double ExposureSeconds(ExposurePlan exposurePlan, AcquiredImage current) {
+            double taken = current?.Metadata?.ExposureDuration ?? 0;
+            if (taken > 0) { return taken; }
             if (exposurePlan.Exposure > 0) { return exposurePlan.Exposure; }
             return exposurePlan.ExposureTemplate?.DefaultExposure ?? 0;
         }

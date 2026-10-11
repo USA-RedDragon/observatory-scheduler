@@ -262,7 +262,7 @@ namespace NINA.Plugin.TargetScheduler.Dockables {
                     StopAt = $"{target?.EndTime:HH:mm:ss}";
                     Rotation = $"{target?.Rotation}°";
                     FilterName = exposure?.FilterName;
-                    ExposureLength = $"{Utils.FormatDbl(exposure.ExposureLength)}s";
+                    ExposureLength = exposure == null ? "" : $"{Utils.FormatDbl(exposure.ExposureLength)}s ({exposure.LengthSource})";
                     break;
 
                 case STATUS_PAUSED:

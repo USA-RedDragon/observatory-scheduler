@@ -1,6 +1,7 @@
 ﻿using NINA.Core.Model.Equipment;
 using NINA.Plugin.TargetScheduler.Astrometry;
 using NINA.Plugin.TargetScheduler.Database.Schema;
+using NINA.Plugin.TargetScheduler.Planning.Exposures;
 using NINA.Plugin.TargetScheduler.Planning.Interfaces;
 using System;
 using System.Text;
@@ -14,6 +15,10 @@ namespace NINA.Plugin.TargetScheduler.Planning.Entities {
         public bool IsEnabled { get; set; }
         public string FilterName { get; set; }
         public double ExposureLength { get; set; }
+        public double PlanExposureLength { get; set; }
+        public double TemplateExposureLength { get; set; }
+        public string LengthSource { get; set; }
+        public string LengthBucket { get; set; }
         public int? Gain { get; set; }
         public int? Offset { get; set; }
         public BinningMode BinningMode { get; set; }
@@ -49,8 +54,10 @@ namespace NINA.Plugin.TargetScheduler.Planning.Entities {
             this.Guid = exposurePlan.Guid;
             this.IsEnabled = exposurePlan.IsEnabled;
             this.FilterName = exposureTemplate.FilterName;
-            this.ExposureLength = exposurePlan.Exposure != -1 ? exposurePlan.Exposure : exposureTemplate.DefaultExposure;
             this.Gain = GetNullableIntValue(exposureTemplate.Gain);
+            this.PlanExposureLength = exposurePlan.Exposure;
+            this.TemplateExposureLength = exposureTemplate.DefaultExposure;
+            SubLengthPlanning.Apply(this, planTarget?.Guid, null);
             this.Offset = GetNullableIntValue(exposureTemplate.Offset);
             this.BinningMode = exposureTemplate.BinningMode;
             this.ReadoutMode = GetNullableIntValue(exposureTemplate.ReadoutMode);
@@ -94,7 +101,7 @@ namespace NINA.Plugin.TargetScheduler.Planning.Entities {
             sb.AppendLine($"Id: {PlanId}");
             sb.AppendLine($"Enabled: {IsEnabled}");
             sb.AppendLine($"FilterName: {FilterName}");
-            sb.AppendLine($"ExposureLength: {ExposureLength}");
+            sb.AppendLine($"ExposureLength: {ExposureLength} ({LengthSource}, bucket {LengthBucket ?? "none"})");
             sb.AppendLine($"Gain: {Gain}");
             sb.AppendLine($"Offset: {Offset}");
             sb.AppendLine($"Bin: {BinningMode}");

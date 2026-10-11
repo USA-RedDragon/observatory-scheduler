@@ -195,6 +195,10 @@ namespace NINA.Plugin.TargetScheduler.Planning {
         public bool IsEnabled { get; set; }
         public string FilterName { get; set; }
         public double ExposureLength { get; set; }
+        public double PlanExposureLength { get; set; }
+        public double TemplateExposureLength { get; set; }
+        public string LengthSource { get; set; }
+        public string LengthBucket { get; set; }
         public int? Gain { get; set; }
         public int? Offset { get; set; }
         public BinningMode BinningMode { get; set; }

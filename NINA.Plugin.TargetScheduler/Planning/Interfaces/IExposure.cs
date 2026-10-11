@@ -11,6 +11,10 @@ namespace NINA.Plugin.TargetScheduler.Planning.Interfaces {
         bool IsEnabled { get; set; }
         string FilterName { get; set; }
         double ExposureLength { get; set; }
+        double PlanExposureLength { get; set; }
+        double TemplateExposureLength { get; set; }
+        string LengthSource { get; set; }
+        string LengthBucket { get; set; }
         int? Gain { get; set; }
         int? Offset { get; set; }
         BinningMode BinningMode { get; set; }
