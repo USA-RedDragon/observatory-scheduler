@@ -107,20 +107,28 @@ namespace NINA.Plugin.TargetScheduler.Sequencer {
                     exposureData = await imagingMediator.CaptureImage(capture, token, progress);
                 } else {
                     var outcome = await host.Control.Capture.Run(t => imagingMediator.CaptureImage(capture, t, progress), opened, token);
-                    if (outcome.Aborted) {
-                        aborted = true;
+                    aborted = outcome.Aborted;
+                    exposureData = outcome.Value;
+                    if (aborted) {
                         TSLogger.Info($"exposure aborted from the web ({outcome.Reason}), the partial frame is discarded");
                         host.Control.RequestReplan(outcome.Reason);
-                        if (synchronizationEnabled) {
-                            TSLogger.Info("abort: waiting for sync clients to finish their own exposures");
-                            await SyncServer.Instance.WaitForClientExposureCompletion(exposureId, token);
-                        }
-                        return;
                     }
-                    exposureData = outcome.Value;
                 }
             } finally {
+                if (aborted) {
+                    RevertExposureTaken();
+                }
                 host?.CaptureEnded(aborted);
+            }
+
+            if (aborted) {
+                if (synchronizationEnabled) {
+                    TSLogger.Info("abort: waiting for sync clients to finish their own exposures");
+                    progress?.Report(new ApplicationStatus() { Status = "Target Scheduler: exposure aborted, waiting for sync clients to complete their exposures" });
+                    await SyncServer.Instance.WaitForClientExposureCompletion(exposureId, token);
+                    progress?.Report(new ApplicationStatus() { Status = "" });
+                }
+                return;
             }
 
             if (IsLightSequence()) {
@@ -138,6 +146,14 @@ namespace NINA.Plugin.TargetScheduler.Sequencer {
             }
 
             ExposureCount++;
+        }
+
+        private void RevertExposureTaken() {
+            try {
+                target.ExposureSelector.ExposureAborted(exposure);
+            } catch (Exception ex) {
+                TSLogger.Error($"could not undo the filter cadence and dither count for the aborted exposure: {ex.Message}");
+            }
         }
 
         // Cobbled from NINA TakeExposure - private method

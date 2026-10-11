@@ -31,6 +31,10 @@
     <Compile Include="..\NINA.Plugin.TargetScheduler\Darks\DarkState.cs" Link="Linked\Darks\DarkState.cs" />
     <Compile Include="..\NINA.Plugin.TargetScheduler\Planning\ImagingLimit.cs" Link="Linked\Planning\ImagingLimit.cs" />
     <Compile Include="..\NINA.Plugin.TargetScheduler\Darks\DarkReadiness.cs" Link="Linked\Darks\DarkReadiness.cs" />
+    <Compile Include="..\NINA.Plugin.TargetScheduler\Planning\FilterCadence.cs" Link="Linked\Planning\FilterCadence.cs" />
+    <Compile Include="..\NINA.Plugin.TargetScheduler\Planning\Interfaces\IFilterCadenceItem.cs" Link="Linked\Planning\Interfaces\IFilterCadenceItem.cs" />
+    <Compile Include="..\NINA.Plugin.TargetScheduler\Database\Schema\FilterCadenceItem.cs" Link="Linked\Database\Schema\FilterCadenceItem.cs" />
+    <Compile Include="..\NINA.Plugin.TargetScheduler\Planning\Entities\PlanningFilterCadence.cs" Link="Linked\Planning\Entities\PlanningFilterCadence.cs" />
   </ItemGroup>
 
   <ItemGroup>

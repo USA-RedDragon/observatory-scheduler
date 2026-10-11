@@ -2,6 +2,7 @@
 using NINA.Plugin.TargetScheduler.Database;
 using NINA.Plugin.TargetScheduler.Database.Schema;
 using NINA.Plugin.TargetScheduler.Planning.Interfaces;
+using System;
 using System.Collections.Generic;
 
 namespace NINA.Plugin.TargetScheduler.Planning.Exposures {
@@ -10,6 +11,7 @@ namespace NINA.Plugin.TargetScheduler.Planning.Exposures {
         protected ITarget Target;
         protected FilterCadence FilterCadence;
         protected DitherManager DitherManager;
+        protected Action UndoTaken;
 
         public BaseExposureSelector(ITarget target) {
             Target = target;
@@ -69,6 +71,20 @@ namespace NINA.Plugin.TargetScheduler.Planning.Exposures {
             using (var context = GetSchedulerDatabaseContext()) {
                 context.ReplaceFilterCadences(Target.DatabaseId, items, false);
             }
+        }
+
+        public virtual void ExposureAborted(IExposure exposure) {
+            Action undo = UndoTaken;
+            UndoTaken = null;
+            undo?.Invoke();
+        }
+
+        protected Action UndoCadence() {
+            CadenceMark mark = FilterCadence.Mark();
+            return () => {
+                FilterCadence.Restore(mark);
+                UpdateFilterCadences(FilterCadence);
+            };
         }
 
         public virtual SchedulerDatabaseContext GetSchedulerDatabaseContext() {

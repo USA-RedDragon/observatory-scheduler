@@ -50,6 +50,22 @@ namespace NINA.Plugin.TargetScheduler.Planning {
             }
         }
 
+        public CadenceMark Mark() {
+            lock (lockObj) {
+                return new CadenceMark(filterCadenceList.FindIndex(fc => fc.Next), lastSelectedIdx);
+            }
+        }
+
+        public void Restore(CadenceMark mark) {
+            lock (lockObj) {
+                if (mark == null || mark.Next < 0 || mark.Next >= filterCadenceList.Count) { return; }
+                for (int i = 0; i < filterCadenceList.Count; i++) {
+                    filterCadenceList[i].Next = i == mark.Next;
+                }
+                lastSelectedIdx = mark.LastSelected;
+            }
+        }
+
         public int Count { get => filterCadenceList.Count; }
 
         public ReadOnlyCollection<IFilterCadenceItem> List { get => filterCadenceList.AsReadOnly(); }
@@ -81,6 +97,8 @@ namespace NINA.Plugin.TargetScheduler.Planning {
             return sb.ToString();
         }
     }
+
+    public sealed record CadenceMark(int Next, int LastSelected);
 
     /// <summary>
     /// Custom circular iterator filter cadence for cycling.

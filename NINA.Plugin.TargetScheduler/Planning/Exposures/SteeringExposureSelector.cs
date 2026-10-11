@@ -63,6 +63,10 @@ namespace NINA.Plugin.TargetScheduler.Planning.Exposures {
             inner.ExposureTaken(exposure);
         }
 
+        public override void ExposureAborted(IExposure exposure) {
+            inner.ExposureAborted(exposure);
+        }
+
         public void TargetReset() {
             inner.TargetReset();
         }

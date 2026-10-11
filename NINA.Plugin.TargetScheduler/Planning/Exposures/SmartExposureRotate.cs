@@ -34,6 +34,12 @@ namespace NINA.Plugin.TargetScheduler.Planning.Exposures {
             exposureRotateStatus.ExposureTaken(exposure, rotateCount);
         }
 
+        public Action UndoPoint() {
+            ExposureRotateStatus status = GetRotateStatus();
+            Dictionary<int, ExposureCountState> counts = status.Counts();
+            return () => status.Restore(counts);
+        }
+
         public void Reset() {
             SmartExposureRotateCache.Remove(target);
         }
@@ -77,6 +83,18 @@ namespace NINA.Plugin.TargetScheduler.Planning.Exposures {
             ExposureCountState state = item.Value;
             state.Count = state.Count == rotateCount ? rotateCount : state.Count + 1;
             exposureCountState[item.Key] = state;
+        }
+
+        internal Dictionary<int, ExposureCountState> Counts() {
+            return exposureCountState.ToDictionary(ec => ec.Key, ec => ec.Value);
+        }
+
+        internal void Restore(Dictionary<int, ExposureCountState> counts) {
+            foreach (var ec in counts) {
+                if (exposureCountState.ContainsKey(ec.Key)) {
+                    exposureCountState[ec.Key] = ec.Value;
+                }
+            }
         }
 
         private void ResetForSelect(List<IExposure> candidates, int rotateCount) {

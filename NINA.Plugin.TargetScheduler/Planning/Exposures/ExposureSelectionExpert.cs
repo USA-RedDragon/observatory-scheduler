@@ -41,6 +41,13 @@ namespace NINA.Plugin.TargetScheduler.Planning.Exposures {
 
         void ExposureTaken(IExposure exposure);
 
+        /// <summary>
+        /// Undo the last ExposureTaken because its frame was aborted and discarded: the cadence goes back
+        /// to the aborted exposure and the frame no longer counts toward the next dither. A dither that
+        /// already ran before the frame still counts.
+        /// </summary>
+        void ExposureAborted(IExposure exposure);
+
         void TargetReset();
     }
 }

@@ -41,6 +41,11 @@ namespace NINA.Plugin.TargetScheduler.Planning.Exposures {
         }
 
         public void ExposureTaken(IExposure exposure) {
+            Action undoCadence = UndoCadence();
+            UndoTaken = () => {
+                undoCadence();
+                DitherManager.RemoveLast(exposure);
+            };
             FilterCadence.Advance();
             UpdateFilterCadences(FilterCadence);
 

@@ -34,6 +34,12 @@ namespace NINA.Plugin.TargetScheduler.Planning.Exposures {
             exposureStack.Push(exposure);
         }
 
+        public void RemoveLast(IExposure exposure) {
+            if (exposureStack.Count > 0 && ReferenceEquals(exposureStack.Peek(), exposure)) {
+                exposureStack.Pop();
+            }
+        }
+
         public bool DitherRequired(IExposure nextExposure) {
             int? ditherOverride = GetExposureDitherOverride(nextExposure);
             int dither = ditherOverride.HasValue ? ditherOverride.Value : ditherEvery;

@@ -33,6 +33,7 @@ namespace NINA.Plugin.TargetScheduler.Planning.Exposures {
         }
 
         public void ExposureTaken(IExposure exposure) {
+            UndoTaken = () => DitherManager.RemoveLast(exposure);
             if (exposure.PreDither) DitherManager.Reset();
             DitherManager.AddExposure(exposure);
         }

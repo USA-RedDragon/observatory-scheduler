@@ -56,6 +56,11 @@ namespace NINA.Plugin.TargetScheduler.Planning.Exposures {
         }
 
         public void ExposureTaken(IExposure exposure) {
+            Action undoRotate = SmartExposureRotateManager?.UndoPoint();
+            UndoTaken = () => {
+                DitherManager.RemoveLast(exposure);
+                undoRotate?.Invoke();
+            };
             if (exposure.PreDither) DitherManager.Reset();
             DitherManager.AddExposure(exposure);
             SmartExposureRotateManager?.ExposureTaken(exposure);
