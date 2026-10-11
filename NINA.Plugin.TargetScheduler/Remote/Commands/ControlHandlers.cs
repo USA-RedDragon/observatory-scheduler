@@ -144,6 +144,35 @@ namespace NINA.Plugin.TargetScheduler.Remote.Commands {
         }
     }
 
+    public class AbortExposureHandler : ControlHandler<AbortExposurePayload> {
+        public override string Kind => CommandKinds.AbortExposure;
+        public override CommandTiming Timing => CommandTiming.Immediate;
+
+        protected override string Check(AbortExposurePayload p) {
+            if (p.PlanId <= 0) {
+                return "missing plan_id";
+            }
+            if (p.StartedAt == null || p.StartedAt.Value == default) {
+                return "missing started_at";
+            }
+            return null;
+        }
+
+        protected override CommandResult Run(CommandEnvelope command, AbortExposurePayload p, ICommandContext context) {
+            var outcome = context.Control.AbortExposure($"exposure aborted by {command.Author}", p.PlanId, p.StartedAt.Value);
+            switch (outcome) {
+                case AbortOutcome.Aborted:
+                    return CommandResult.Of(command.Id, CommandStatus.Applied, "Stopping the exposure and discarding the partial frame. The scheduler re-plans once the camera has stopped.");
+                case AbortOutcome.AlreadyAborting:
+                    return CommandResult.Of(command.Id, CommandStatus.Applied, "An abort of this exposure is already in progress.");
+                case AbortOutcome.OtherExposure:
+                    return CommandResult.Of(command.Id, CommandStatus.Applied, "That exposure already ended. The exposure running now was left alone.");
+                default:
+                    return CommandResult.Of(command.Id, CommandStatus.Applied, "Nothing was exposing, so nothing was aborted.");
+            }
+        }
+    }
+
     public class ReplanHandler : ControlHandler<EmptyPayload> {
         public override string Kind => CommandKinds.Replan;
 

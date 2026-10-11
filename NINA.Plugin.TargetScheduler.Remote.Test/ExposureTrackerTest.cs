@@ -129,6 +129,29 @@ namespace NINA.Plugin.TargetScheduler.Remote.Test {
             t.ShutterOpened(40, "Ha", 300, Shutter.AddMinutes(40)).Number.Should().Be(2);
         }
 
+        [Test]
+        public void AnAbortedExposureIsNotCountedOrShownAsSaving() {
+            var t = new ExposureTracker();
+            t.PlanStarted(7);
+            t.ShutterOpened(31, "Ha", 300, Shutter).Number.Should().Be(1);
+            t.CaptureEnded();
+            t.PlanEnded();
+
+            t.PlanStarted(7);
+            t.ShutterOpened(31, "Ha", 300, Shutter.AddMinutes(10)).Number.Should().Be(2);
+            t.CaptureAborted();
+            var v = t.View(Shutter.AddMinutes(11), Take);
+            v.Exposure.Should().BeNull();
+            v.Activity.Should().NotBe(Activities.Saving);
+            t.PlanEnded();
+
+            t.PlanStarted(7);
+            t.ShutterOpened(31, "Ha", 300, Shutter.AddMinutes(12)).Number.Should().Be(2);
+            t.CaptureAborted();
+            t.CaptureAborted();
+            t.ShutterOpened(31, "Ha", 300, Shutter.AddMinutes(13)).Number.Should().Be(2);
+        }
+
         private static DateTime CentralNight(DateTime utc) => DateTime.SpecifyKind(utc.AddHours(-17).Date.AddHours(17), DateTimeKind.Utc);
 
         [Test]

@@ -14,6 +14,7 @@ namespace NINA.Plugin.TargetScheduler.Remote.Commands {
         private PauseState pause;
 
         public SkipList Skips { get; } = new SkipList();
+        public CaptureGate Capture { get; } = new CaptureGate();
         public Func<DateTime, DateTime?> NightEndSource { get; set; }
         public Action<int?, int?> Invalidated { get; set; }
         public Action Changed { get; set; }
@@ -85,6 +86,10 @@ namespace NINA.Plugin.TargetScheduler.Remote.Commands {
                 }
                 return false;
             }
+        }
+
+        public AbortOutcome AbortExposure(string reason, int planId, DateTime startedAt) {
+            return Capture.Abort(reason, planId, startedAt);
         }
 
         public DateTime? NightEnd(DateTime now) {

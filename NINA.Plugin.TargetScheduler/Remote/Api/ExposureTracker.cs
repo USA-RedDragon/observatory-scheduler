@@ -183,6 +183,20 @@ namespace NINA.Plugin.TargetScheduler.Remote.Api {
             }
         }
 
+        public void CaptureAborted() {
+            lock (sync) {
+                if (open == null) {
+                    return;
+                }
+                var key = targetId ?? -1;
+                if (counts.TryGetValue(key, out var number) && number > 0) {
+                    counts[key] = number - 1;
+                }
+                open = null;
+                afterShutter = false;
+            }
+        }
+
         public void CaptureEnded() {
             lock (sync) {
                 if (open != null) {

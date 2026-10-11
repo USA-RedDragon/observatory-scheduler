@@ -68,12 +68,63 @@ namespace NINA.Plugin.TargetScheduler.Remote.Test {
             at.Should().Be(new DateTime(2026, 10, 9, 23, 45, 0));
         }
 
+        private const string AbortRunning = @"{""plan_id"":40,""started_at"":""2026-10-10T06:45:00.1234567Z"",""target_name"":""Panel 2"",""filter"":""Ha""}";
+
+        private static CaptureKey Running() => new CaptureKey { PlanId = 40, StartedAt = new DateTime(2026, 10, 10, 6, 45, 0, 123, DateTimeKind.Utc) };
+
+        [Test]
+        public void AbortStopsTheRunningExposureAndAppliesAtOnce() {
+            var ctx = new FakeContext();
+            ctx.FakeControlInstance.Exposing = Running();
+            var h = new AbortExposureHandler();
+            h.Kind.Should().Be("exposure.abort");
+            h.Timing.Should().Be(CommandTiming.Immediate);
+            h.IsEdit.Should().BeFalse();
+            var r = h.Apply(Cmd.Of(CommandKinds.AbortExposure, AbortRunning), ctx);
+            r.Status.Should().Be(CommandStatus.Applied);
+            r.Message.Should().StartWith("Stopping the exposure and discarding the partial frame.");
+            ctx.FakeControlInstance.Aborts.Should().ContainSingle().Which.Should().Be("exposure aborted by web");
+        }
+
+        [Test]
+        public void AbortIsANoOpWhenNothingIsExposing() {
+            var ctx = new FakeContext();
+            var r = new AbortExposureHandler().Apply(Cmd.Of(CommandKinds.AbortExposure, AbortRunning), ctx);
+            r.Status.Should().Be(CommandStatus.Applied);
+            r.Message.Should().Be("Nothing was exposing, so nothing was aborted.");
+            ctx.FakeControlInstance.Aborts.Should().BeEmpty();
+            ctx.FakeControlInstance.Replans.Should().BeEmpty();
+        }
+
+        [Test]
+        public void AStaleAbortLeavesALaterExposureAlone() {
+            var ctx = new FakeContext();
+            ctx.FakeControlInstance.Exposing = new CaptureKey { PlanId = 40, StartedAt = Running().StartedAt.AddMinutes(10) };
+            var r = new AbortExposureHandler().Apply(Cmd.Of(CommandKinds.AbortExposure, AbortRunning), ctx);
+            r.Status.Should().Be(CommandStatus.Applied);
+            r.Message.Should().Contain("already ended").And.Contain("left alone");
+            ctx.FakeControlInstance.Aborts.Should().BeEmpty();
+            ctx.FakeControlInstance.Exposing.Should().NotBeNull();
+        }
+
+        [TestCase("{}")]
+        [TestCase("null")]
+        [TestCase(@"{""plan_id"":40}")]
+        [TestCase(@"{""started_at"":""2026-10-10T06:45:00Z""}")]
+        [TestCase(@"{""plan_id"":40,""started_at"":""soon""}")]
+        public void AbortNeedsTheExposureItTargets(string payload) {
+            var ctx = new FakeContext();
+            ctx.FakeControlInstance.Exposing = Running();
+            new AbortExposureHandler().Apply(Cmd.Of(CommandKinds.AbortExposure, payload), ctx).Status.Should().Be(CommandStatus.Rejected);
+            ctx.FakeControlInstance.Aborts.Should().BeEmpty();
+        }
+
         [Test]
         public void BuiltinRegistryHasEveryKind() {
             var reg = CommandRegistry.Builtin();
             reg.Kinds.Should().BeEquivalentTo(new[] {
                 CommandKinds.ProjectEdit, CommandKinds.TargetEdit, CommandKinds.ExposurePlanEdit,
-                CommandKinds.Skip, CommandKinds.Unskip, CommandKinds.Pause, CommandKinds.Resume, CommandKinds.Replan,
+                CommandKinds.Skip, CommandKinds.Unskip, CommandKinds.Pause, CommandKinds.Resume, CommandKinds.Replan, CommandKinds.AbortExposure,
                 CommandKinds.ExposureTemplateEdit, CommandKinds.ProjectBatchEdit, CommandKinds.ExposurePlanBatchEdit, CommandKinds.ExposureTemplateBatchEdit,
                 CommandKinds.ExposureTemplateClone, CommandKinds.ExposureTemplateDelete, CommandKinds.GoalEdit, CommandKinds.RuleWeightEdit,
                 CommandKinds.ApplySet, CommandKinds.UnapplySet, CommandKinds.ProjectCreate, CommandKinds.ProjectDelete });

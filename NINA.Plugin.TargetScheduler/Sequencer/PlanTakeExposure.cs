@@ -98,12 +98,29 @@ namespace NINA.Plugin.TargetScheduler.Sequencer {
                 progress?.Report(new ApplicationStatus() { Status = "" });
             }
 
-            Remote.Plugin.RemoteHost.Instance?.ShutterOpening(exposure);
+            var host = Remote.Plugin.RemoteHost.Instance;
+            var opened = host?.ShutterOpening(exposure);
             IExposureData exposureData;
+            bool aborted = false;
             try {
-                exposureData = await imagingMediator.CaptureImage(capture, token, progress);
+                if (host == null) {
+                    exposureData = await imagingMediator.CaptureImage(capture, token, progress);
+                } else {
+                    var outcome = await host.Control.Capture.Run(t => imagingMediator.CaptureImage(capture, t, progress), opened, token);
+                    if (outcome.Aborted) {
+                        aborted = true;
+                        TSLogger.Info($"exposure aborted from the web ({outcome.Reason}), the partial frame is discarded");
+                        host.Control.RequestReplan(outcome.Reason);
+                        if (synchronizationEnabled) {
+                            TSLogger.Info("abort: waiting for sync clients to finish their own exposures");
+                            await SyncServer.Instance.WaitForClientExposureCompletion(exposureId, token);
+                        }
+                        return;
+                    }
+                    exposureData = outcome.Value;
+                }
             } finally {
-                Remote.Plugin.RemoteHost.Instance?.CaptureEnded();
+                host?.CaptureEnded(aborted);
             }
 
             if (IsLightSequence()) {

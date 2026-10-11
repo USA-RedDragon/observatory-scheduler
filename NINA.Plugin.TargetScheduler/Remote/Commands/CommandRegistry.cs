@@ -36,6 +36,7 @@ namespace NINA.Plugin.TargetScheduler.Remote.Commands {
                 new PauseHandler(),
                 new ResumeHandler(),
                 new ReplanHandler(),
+                new AbortExposureHandler(),
                 EditHandler.ExposureTemplate(),
                 BatchEditHandler.ExposureTemplates(),
                 BatchEditHandler.Projects(),

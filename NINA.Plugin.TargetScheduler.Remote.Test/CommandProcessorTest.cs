@@ -39,6 +39,16 @@ namespace NINA.Plugin.TargetScheduler.Remote.Test {
         }
 
         [Test]
+        public void AbortAppliesMidPlanWithoutWaitingForTheBoundary() {
+            ctx.FakeControlInstance.Exposing = new CaptureKey { PlanId = 40, StartedAt = ctx.Now.AddMinutes(-3) };
+            var r = proc.Submit(Cmd.Of(CommandKinds.AbortExposure, @"{""plan_id"":40,""started_at"":""2026-10-10T06:49:00Z""}", "abort"), "api");
+            r.Status.Should().Be(CommandStatus.Applied);
+            proc.Pending.Should().BeEmpty();
+            store.GetResult("abort").Status.Should().Be(CommandStatus.Applied);
+            ctx.FakeControlInstance.Aborts.Should().HaveCount(1);
+        }
+
+        [Test]
         public void EditsWaitForThePlanBoundary() {
             var r = proc.Submit(Cmd.Of(CommandKinds.ProjectEdit, PriorityEdit, "a"), "api");
             r.Status.Should().Be(CommandStatus.Pending);

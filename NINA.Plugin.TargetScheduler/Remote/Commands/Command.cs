@@ -28,6 +28,7 @@ namespace NINA.Plugin.TargetScheduler.Remote.Commands {
         public const string Pause = "scheduler.pause";
         public const string Resume = "scheduler.resume";
         public const string Replan = "scheduler.replan";
+        public const string AbortExposure = "exposure.abort";
         public const string ExposureTemplateEdit = "exposuretemplate.edit";
         public const string ProjectBatchEdit = "project.batchedit";
         public const string ExposurePlanBatchEdit = "exposureplan.batchedit";
@@ -163,6 +164,21 @@ namespace NINA.Plugin.TargetScheduler.Remote.Commands {
 
         [JsonPropertyName("resume_at")]
         public string ResumeAt { get; set; }
+    }
+
+    public class AbortExposurePayload {
+
+        [JsonPropertyName("plan_id")]
+        public int PlanId { get; set; }
+
+        [JsonPropertyName("started_at")]
+        public DateTime? StartedAt { get; set; }
+
+        [JsonPropertyName("target_name")]
+        public string TargetName { get; set; }
+
+        [JsonPropertyName("filter")]
+        public string Filter { get; set; }
     }
 
     public static class CommandJson {

@@ -38,6 +38,8 @@ namespace NINA.Plugin.TargetScheduler.Remote.Commands {
 
         bool Resume();
 
+        AbortOutcome AbortExposure(string reason, int planId, DateTime startedAt);
+
         DateTime? NightEnd(DateTime now);
 
         void Invalidate(int? projectId, int? targetId);
