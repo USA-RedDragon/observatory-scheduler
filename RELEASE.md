@@ -1,6 +1,8 @@
-Observatory Scheduler 5.8.2.211: project settings over the web API.
+Observatory Scheduler 5.8.2.212: exposure counts per night and a live start for tonight's preview.
 
-- **Project settings on create**: `project.create` takes dither every, filter switch frequency, flats handling, smart exposure order, meridian window, custom horizon, horizon offset, maximum altitude and grader. A setting left out gets the profile's most common value, or Target Scheduler's default when the profile has no projects. Projects created from the app no longer get dither every 0 and flats off.
-- **Project settings on edit**: `project.edit` can change the same settings, with the ranges Target Scheduler's project editor allows.
+- **Exposure number per night**: the status exposure number counts each target's exposures for the whole night (reset at local noon) and no longer resets on every re-plan. After a restart it continues from the target's acquired images since local noon.
+- **Preview starts from the live state**: tonight's preview starts when the running exposure ends, counts that exposure, and treats the target imaging now as the current target. A `live` assumption explains the starting state.
+- **Altitude check on edits**: project edits that put the maximum altitude at or below the minimum (other than 0, off) are rejected.
+- **Null before values**: edits accept a null `before` value for settings the project has no value for.
 
-No database changes. Requires NINA 3.1.2.9001 or later. Install like 5.8.2.210: with NINA closed, replace the "Observatory Scheduler" folder in %LOCALAPPDATA%\NINA\Plugins\3.0.0\ with the one in this zip.
+No database changes. Requires NINA 3.1.2.9001 or later. Install like 5.8.2.211: with NINA closed, replace the "Observatory Scheduler" folder in %LOCALAPPDATA%\NINA\Plugins\3.0.0\ with the one in this zip.
