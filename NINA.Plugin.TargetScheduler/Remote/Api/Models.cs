@@ -392,6 +392,9 @@ namespace NINA.Plugin.TargetScheduler.Remote.Api {
 
         [JsonPropertyName("assumptions")]
         public List<PreviewAssumption> Assumptions { get; set; } = new List<PreviewAssumption>();
+
+        [JsonPropertyName("override_kinds")]
+        public IReadOnlyList<string> OverrideKinds { get; set; } = PreviewOverrides.Kinds;
     }
 
     public class GraderHfrSettings {

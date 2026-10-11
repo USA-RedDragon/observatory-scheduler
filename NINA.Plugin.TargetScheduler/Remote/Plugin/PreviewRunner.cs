@@ -286,7 +286,7 @@ namespace NINA.Plugin.TargetScheduler.Remote.Plugin {
 
         private static List<IProject> LoadProjects(IProfile profile, ProfilePreference prefs, List<PreviewOverride> overrides, SimulatedStackSubs simulated) {
             var profileId = profile.Id.ToString();
-            var overridden = new HashSet<int>(overrides.Where(o => o.Entity == "project").Select(o => o.Id));
+            var overridden = new HashSet<int>(overrides.Where(o => o.Entity == PreviewOverrides.Project).Select(o => o.Id));
             var result = new List<IProject>();
             using (var context = new SchedulerDatabaseInteraction().GetContext()) {
                 var projects = context.ProjectSet
@@ -295,7 +295,7 @@ namespace NINA.Plugin.TargetScheduler.Remote.Plugin {
                     .Where(p => p.ProfileId == profileId && (p.state_col == (int)ProjectState.Active || overridden.Contains(p.Id)))
                     .ToList();
                 foreach (var project in projects) {
-                    foreach (var o in overrides.Where(o => o.Entity == "project" && o.Id == project.Id)) {
+                    foreach (var o in overrides.Where(o => o.Entity == PreviewOverrides.Project && o.Id == project.Id)) {
                         switch (o.Field) {
                             case "priority":
                                 project.priority_col = (int)o.Value;
@@ -316,6 +316,11 @@ namespace NINA.Plugin.TargetScheduler.Remote.Plugin {
                     }
                     if (project.state_col != (int)ProjectState.Active) {
                         continue;
+                    }
+                    var weights = PreviewOverrides.RuleWeights(overrides, project.Id);
+                    if (weights.Count > 0) {
+                        project.RuleWeights ??= new List<RuleWeight>();
+                        PreviewOverrides.Apply(project.RuleWeights, weights, r => r.Name, (r, w) => r.Weight = w, (n, w) => new RuleWeight(n, w) { ProjectId = project.Id });
                     }
                     foreach (var target in project.Targets) {
                         target.OverrideExposureOrders = context.GetOverrideExposureOrders(target.Id);
