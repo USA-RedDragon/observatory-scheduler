@@ -9,6 +9,7 @@ namespace NINA.Plugin.TargetScheduler.Darks {
         public DateTime Now { get; set; }
         public Func<DateTime, double?> SunAltitudeAt { get; set; }
         public IList<DarkNeed> Queue { get; set; }
+        public IList<BiasNeed> BiasQueue { get; set; }
         public bool WeatherConnected { get; set; }
         public double? Ambient { get; set; }
         public IList<CoolerHold> Holds { get; set; }
@@ -23,6 +24,7 @@ namespace NINA.Plugin.TargetScheduler.Darks {
         public bool Learning { get; set; }
         public string Reason { get; set; }
         public DarkNeed Need { get; set; }
+        public IList<BiasNeed> Bias { get; set; }
         public string Basis { get; set; }
     }
 
@@ -50,6 +52,32 @@ namespace NINA.Plugin.TargetScheduler.Darks {
         }
 
         public static DarkReadyResult Check(DarkReadyInput i) {
+            DarkReadyResult darks = CheckDarks(i);
+            if (darks.Ready) {
+                return darks;
+            }
+
+            List<BiasNeed> bias = (i.BiasQueue ?? new List<BiasNeed>()).Where(n => n != null).ToList();
+            if (bias.Count == 0) {
+                return darks;
+            }
+
+            var w = new DarkWindow { Placement = DarkPlacement.WhileUnsafe, Now = i.Now, SunAltitudeAt = i.SunAltitudeAt };
+            string sun = DarkPlanner.SunFitReason(w, TimeSpan.Zero, 0, i.SaveTime ?? TimeSpan.Zero);
+            if (sun != null) {
+                return No(string.Format(CultureInfo.InvariantCulture, "{0}; the bias frames cannot be taken either: {1}", darks.Reason, sun));
+            }
+
+            return new DarkReadyResult {
+                Ready = true,
+                Bias = bias,
+                Basis = string.Format(CultureInfo.InvariantCulture,
+                    "no darks can be taken now ({0}), but the stacker's bias backlog still needs {1}; bias frames need only the camera at its current setpoint, and the sun is below the light-safe limit of {2:0.0}°",
+                    darks.Reason, BiasPlanner.Describe(bias), DarkPlanner.SunLimitDegrees)
+            };
+        }
+
+        private static DarkReadyResult CheckDarks(DarkReadyInput i) {
             List<DarkNeed> queue = (i.Queue ?? new List<DarkNeed>()).Where(n => n != null).ToList();
             if (queue.Count == 0) {
                 return No("no combo in the stacker's dark backlog still needs darks");

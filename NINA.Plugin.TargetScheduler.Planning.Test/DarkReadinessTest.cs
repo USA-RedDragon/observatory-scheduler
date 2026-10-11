@@ -168,5 +168,77 @@ namespace NINA.Plugin.TargetScheduler.Planning.Test {
             r.Ready.Should().BeFalse();
             r.Reason.Should().Contain("cannot heat");
         }
+
+        private static BiasNeed Bias(string key, double offset) {
+            return new BiasNeed { ComboKey = key, Priority = 1, Gain = 100, Offset = offset, Binning = 1, FramesNeeded = 30, SessionGapHours = 36 };
+        }
+
+        [Test]
+        public void BiasOnlyIsReadyWithoutWeatherOrCoolerProof() {
+            DarkReadyInput i = Input();
+            i.BiasQueue = new List<BiasNeed> { Bias("bias|100|50|1", 50), Bias("bias|100|240|1", 240) };
+            i.WeatherConnected = false;
+            i.Ambient = null;
+            DarkReadyResult r = DarkReadiness.Check(i);
+            r.Ready.Should().BeTrue();
+            r.Learning.Should().BeFalse();
+            r.Need.Should().BeNull();
+            r.Bias.Should().HaveCount(2);
+            r.Basis.Should().Contain("no combo in the stacker's dark backlog still needs darks");
+            r.Basis.Should().Contain("bias, gain 100, offset 50, bin 1; bias, gain 100, offset 240, bin 1");
+        }
+
+        [Test]
+        public void BiasIsReadyWhenTheNeededDarksAreNot() {
+            DarkReadyInput i = Input(Need("a", -5));
+            i.WeatherConnected = false;
+            i.BiasQueue = new List<BiasNeed> { Bias("b", 50) };
+            DarkReadyResult r = DarkReadiness.Check(i);
+            r.Ready.Should().BeTrue();
+            r.Need.Should().BeNull();
+            r.Basis.Should().Contain("no weather device");
+        }
+
+        [Test]
+        public void ReadyDarksAreUnchangedByABiasQueue() {
+            DarkReadyInput i = Input(Need("a", -5));
+            i.Holds.Add(Hold(20, -5));
+            DarkReadyResult without = DarkReadiness.Check(i);
+            i.BiasQueue = new List<BiasNeed> { Bias("b", 50) };
+            DarkReadyResult with = DarkReadiness.Check(i);
+            with.Ready.Should().BeTrue();
+            with.Need.ComboKey.Should().Be("a");
+            with.Bias.Should().BeNull();
+            with.Basis.Should().Be(without.Basis);
+        }
+
+        [Test]
+        public void NeitherQueueIsNotReady() {
+            DarkReadyInput i = Input();
+            i.BiasQueue = new List<BiasNeed>();
+            DarkReadyResult r = DarkReadiness.Check(i);
+            r.Ready.Should().BeFalse();
+            r.Reason.Should().Be("no combo in the stacker's dark backlog still needs darks");
+            i.BiasQueue = null;
+            DarkReadiness.Check(i).Reason.Should().Be("no combo in the stacker's dark backlog still needs darks");
+        }
+
+        [Test]
+        public void BiasWaitsForTheSunBelowTheLimit() {
+            DarkReadyInput i = Input();
+            i.BiasQueue = new List<BiasNeed> { Bias("b", 50) };
+            i.SunAltitudeAt = t => -7.9;
+            DarkReadyResult r = DarkReadiness.Check(i);
+            r.Ready.Should().BeFalse();
+            r.Reason.Should().Contain("the bias frames cannot be taken either");
+            r.Reason.Should().Contain("light-safe limit");
+            i.SunAltitudeAt = t => -8.5 + (t - Now).TotalMinutes * 6;
+            i.SaveTime = TimeSpan.FromSeconds(10);
+            DarkReadiness.Check(i).Ready.Should().BeFalse();
+            i.SaveTime = TimeSpan.FromSeconds(3);
+            DarkReadiness.Check(i).Ready.Should().BeTrue();
+            i.SunAltitudeAt = null;
+            DarkReadiness.Check(i).Reason.Should().Contain("not known");
+        }
     }
 }

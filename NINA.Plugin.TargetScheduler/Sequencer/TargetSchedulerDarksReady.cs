@@ -15,7 +15,7 @@ using System.Threading.Tasks;
 namespace NINA.Plugin.TargetScheduler.Sequencer {
 
     [ExportMetadata("Name", "Target Scheduler Darks Ready")]
-    [ExportMetadata("Description", "Succeeds when darks can be taken now without the camera: the dark backlog is not empty, the sun is below the light-safe altitude and a needed dark fits before dawn, the weather device reports the ambient temperature, and the cooler is known (or tried once per night) to reach a needed set temperature at that ambient. Fails with the reason otherwise. Use it as the condition of an If Fails.")]
+    [ExportMetadata("Description", "Succeeds when darks can be taken now without the camera: the dark backlog is not empty, the sun is below the light-safe altitude and a needed dark fits before dawn, the weather device reports the ambient temperature, and the cooler is known (or tried once per night) to reach a needed set temperature at that ambient. Also succeeds when no darks can be taken but the bias backlog is not empty and the sun is below the light-safe altitude. Fails with the reason otherwise. Use it as the condition of an If Fails.")]
     [ExportMetadata("Icon", "Scheduler.SchedulerSVG")]
     [ExportMetadata("Category", "Target Scheduler")]
     [Export(typeof(ISequenceItem))]
@@ -68,12 +68,21 @@ namespace NINA.Plugin.TargetScheduler.Sequencer {
                 throw Fail($"could not read the dark backlog: {ex.Message}");
             }
 
+            List<BiasNeed> biasQueue;
+            try {
+                biasQueue = BiasPlanner.Queue(DarkRuntime.BiasStore.LoadNeeds(), DarkRuntime.BiasStore.LoadTaken(now.AddDays(-7)), now);
+            } catch (Exception ex) {
+                TSLogger.Warning($"TS Darks Ready: could not read the bias backlog, so it counts as empty: {ex.Message}");
+                biasQueue = new List<BiasNeed>();
+            }
+
             var weather = weatherDataMediator.GetInfo();
             DarkStateData state = DarkRuntime.State.Snapshot();
             var input = new DarkReadyInput {
                 Now = now,
                 SunAltitudeAt = SunAltitude(),
                 Queue = queue,
+                BiasQueue = biasQueue,
                 WeatherConnected = weather.Connected,
                 Ambient = weather.Connected && !double.IsNaN(weather.Temperature) ? weather.Temperature : null,
                 Holds = DarkRuntime.State.Holds(),
@@ -86,6 +95,12 @@ namespace NINA.Plugin.TargetScheduler.Sequencer {
             DarkReadyResult r = DarkReadiness.Check(input);
             if (!r.Ready) {
                 throw Fail(r.Reason);
+            }
+
+            if (r.Need == null) {
+                DisplayText = $"Ready: bias, {r.Bias.Count} combos";
+                TSLogger.Info($"TS Darks Ready: ready for bias frames, {r.Bias.Count} combos need bias: {r.Basis}");
+                return Task.CompletedTask;
             }
 
             string counted = input.CoolingSecondsPerC.HasValue ? "the measured cooling time, exposure and save time" : $"{DarkPlanner.UnmeasuredMoveHorizon.TotalMinutes:0} min for the unmeasured cooling, exposure and save time";
