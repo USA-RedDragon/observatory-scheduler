@@ -27,7 +27,7 @@ using System.Threading.Tasks;
 namespace NINA.Plugin.TargetScheduler.Sequencer {
 
     [ExportMetadata("Name", "Target Scheduler Darks")]
-    [ExportMetadata("Description", "Takes the darks the stacker's dark backlog asks for, at each one's set temperature, while the cover is already closed and the sun is below the light-safe altitude. It uses only the camera.")]
+    [ExportMetadata("Description", "Takes the bias frames the stacker's bias backlog asks for, at the current setpoint and the camera's minimum exposure, and then the darks the stacker's dark backlog asks for, at each one's set temperature, while the cover is already closed and the sun is below the light-safe altitude. It uses only the camera.")]
     [ExportMetadata("Icon", "Scheduler.SchedulerSVG")]
     [ExportMetadata("Category", "Target Scheduler")]
     [Export(typeof(ISequenceItem))]
@@ -99,6 +99,7 @@ namespace NINA.Plugin.TargetScheduler.Sequencer {
         }
 
         private DateTime? stopBy;
+        private int biasDone;
         private CancellationTokenSource yieldCts;
 
         public IList<DarkPlacement> Placements => Enum.GetValues(typeof(DarkPlacement)).Cast<DarkPlacement>().ToList();
@@ -225,34 +226,50 @@ namespace NINA.Plugin.TargetScheduler.Sequencer {
 
         private async Task Run(IProgress<ApplicationStatus> progress, CancellationToken token, CancellationToken yieldToken) {
             CameraInfo cam = cameraMediator.GetInfo();
-            if (!cam.Connected || !cam.CanSetTemperature) {
-                TSLogger.Warning("TS Darks: camera not connected or cannot set its temperature, skipping");
+            if (!cam.Connected) {
+                TSLogger.Warning("TS Darks: camera not connected, skipping");
                 return;
             }
 
             TSLogger.Info($"TS Darks: light-safe sun limit {DarkPlanner.SunLimitDegrees:0.0}°: {DarkPlanner.SunLimitBasis}");
             string stop = DarkPlanner.StopReason(Window());
             if (stop != null) {
-                TSLogger.Info($"TS Darks: not taking darks: {stop}");
+                TSLogger.Info($"TS Darks: not taking darks or bias frames: {stop}");
                 return;
             }
 
-            List<DarkNeed> queue;
-            List<DarkTaken> taken;
+            List<BiasNeed> biasQueue = new List<BiasNeed>();
+            List<BiasTaken> biasTaken = new List<BiasTaken>();
             try {
-                IList<DarkNeed> needs = DarkRuntime.Store.LoadNeeds();
-                taken = DarkRuntime.Store.LoadTaken(DateTime.UtcNow.AddDays(-7)).ToList();
-                queue = DarkPlanner.Queue(needs, taken, DateTime.UtcNow);
-                if (Placement == DarkPlacement.WhileUnsafe) {
-                    queue = DarkPlanner.WarmFirst(queue);
-                }
-                TSLogger.Info($"TS Darks: {needs.Count} combos in the stacker's backlog, {queue.Count} still need darks");
+                IList<BiasNeed> biasNeeds = DarkRuntime.BiasStore.LoadNeeds();
+                biasTaken = DarkRuntime.BiasStore.LoadTaken(DateTime.UtcNow.AddDays(-7)).ToList();
+                biasQueue = BiasPlanner.Queue(biasNeeds, biasTaken, DateTime.UtcNow);
+                TSLogger.Info($"TS Bias: {biasNeeds.Count} combos in the stacker's bias backlog, {biasQueue.Count} still need bias frames");
             } catch (Exception ex) {
-                TSLogger.Error($"TS Darks: could not read the dark backlog: {ex.Message}");
-                return;
+                TSLogger.Error($"TS Bias: could not read the bias backlog: {ex.Message}");
+                biasQueue = new List<BiasNeed>();
             }
 
-            if (queue.Count == 0) {
+            List<DarkNeed> queue = new List<DarkNeed>();
+            List<DarkTaken> taken = new List<DarkTaken>();
+            if (!cam.CanSetTemperature) {
+                TSLogger.Warning("TS Darks: the camera cannot set its temperature, so no darks are taken");
+            } else {
+                try {
+                    IList<DarkNeed> needs = DarkRuntime.Store.LoadNeeds();
+                    taken = DarkRuntime.Store.LoadTaken(DateTime.UtcNow.AddDays(-7)).ToList();
+                    queue = DarkPlanner.Queue(needs, taken, DateTime.UtcNow);
+                    if (Placement == DarkPlacement.WhileUnsafe) {
+                        queue = DarkPlanner.WarmFirst(queue);
+                    }
+                    TSLogger.Info($"TS Darks: {needs.Count} combos in the stacker's backlog, {queue.Count} still need darks");
+                } catch (Exception ex) {
+                    TSLogger.Error($"TS Darks: could not read the dark backlog: {ex.Message}");
+                    queue = new List<DarkNeed>();
+                }
+            }
+
+            if (queue.Count == 0 && biasQueue.Count == 0) {
                 return;
             }
 
@@ -261,10 +278,19 @@ namespace NINA.Plugin.TargetScheduler.Sequencer {
             short normalReadout = cam.ReadoutModeForNormalImages;
             double currentSetpoint = imagingSetpoint;
             int done = 0;
+            biasDone = 0;
             TSLogger.Info($"TS Darks: placement {Placement}, imaging setpoint {imagingSetpoint} °C, sensor {cam.Temperature} °C, cooler {cam.CoolerPower}%");
 
             using var watch = new TemperatureWatch(cameraMediator);
             try {
+                if (biasQueue.Count > 0 && await TakeBiasQueue(biasQueue, biasTaken, progress, token)) {
+                    return;
+                }
+
+                if (queue.Count == 0) {
+                    return;
+                }
+
                 for (int ci = 0; ci < queue.Count; ci++) {
                     DarkNeed need = queue[ci];
                     while (true) {
@@ -341,15 +367,17 @@ namespace NINA.Plugin.TargetScheduler.Sequencer {
 
                 TSLogger.Info($"TS Darks: done, {done} darks taken");
             } catch (Exception ex) when (Utils.IsCancelException(ex)) {
-                TSLogger.Warning($"TS Darks: canceled after {done} darks");
+                TSLogger.Warning($"TS Darks: canceled after {biasDone} bias frames and {done} darks");
                 throw;
             } finally {
-                DisplayText = "Restoring the imaging setpoint";
+                DisplayText = queue.Count > 0 ? "Restoring the imaging setpoint" : "Restoring the readout mode";
                 try {
                     if (cameraMediator.GetInfo().ReadoutModeForNormalImages != normalReadout) {
                         cameraMediator.SetReadoutModeForNormalImages(normalReadout);
                     }
-                    await Restore(imagingSetpoint, watch, progress, token);
+                    if (queue.Count > 0) {
+                        await Restore(imagingSetpoint, watch, progress, token);
+                    }
                 } catch (Exception ex) {
                     TSLogger.Error($"TS Darks: restoring the imaging setpoint {imagingSetpoint} °C failed: {ex.Message}");
                 }
@@ -536,6 +564,99 @@ namespace NINA.Plugin.TargetScheduler.Sequencer {
             double? peakPower = watch.PeakPower;
             TSLogger.Info($"TS Darks: dark saved to {path ?? "(not reported)"}, largest sensor deviation {deviation:0.0} °C");
             return (deviation, peakPower, takenAt, path);
+        }
+
+        private async Task<bool> TakeBiasQueue(List<BiasNeed> queue, List<BiasTaken> taken, IProgress<ApplicationStatus> progress, CancellationToken token) {
+            for (int ci = 0; ci < queue.Count; ci++) {
+                BiasNeed need = queue[ci];
+                while (true) {
+                    token.ThrowIfCancellationRequested();
+                    Remote.Plugin.RemoteHost.Instance?.AtPlanBoundary();
+
+                    DarkWindow w = Window();
+                    string stop = DarkPlanner.StopReason(w);
+                    if (stop != null) {
+                        TSLogger.Info($"TS Bias: stopping after {biasDone} bias frames: {stop}");
+                        return true;
+                    }
+
+                    int remaining = BiasPlanner.Remaining(need, taken, DateTime.UtcNow);
+                    if (remaining == 0) {
+                        break;
+                    }
+
+                    CameraInfo info = cameraMediator.GetInfo();
+                    double exposure = BiasPlanner.Exposure(info.ExposureMin);
+                    TimeSpan overhead = TimeSpan.FromSeconds(Math.Max(0, info.LastDownloadTime));
+                    string skip = BiasPlanner.FitReason(w, exposure, overhead);
+                    if (skip != null) {
+                        TSLogger.Info($"TS Bias: skipping {need}: {skip}");
+                        break;
+                    }
+
+                    DisplayText = $"{need} ({ci + 1}/{queue.Count})";
+                    ProgressText = $"{need.FramesNeeded - remaining}/{need.FramesNeeded}";
+
+                    (DateTime takenAt, double? sensorTemp, string path) = await TakeBias(need, exposure, info.ReadoutModes?.ToList(), progress, token);
+                    DarkRuntime.BiasStore.RecordTaken(need, takenAt, exposure, sensorTemp, path);
+                    taken.Add(new BiasTaken { ComboKey = need.ComboKey, TakenAt = takenAt });
+                    biasDone++;
+                }
+            }
+
+            TSLogger.Info($"TS Bias: done, {biasDone} bias frames taken");
+            return false;
+        }
+
+        private async Task<(DateTime takenAt, double? sensorTemp, string path)> TakeBias(BiasNeed need, double exposure, IList<string> readoutModes, IProgress<ApplicationStatus> progress, CancellationToken token) {
+            short? readout = DarkPlanner.ReadoutIndex(need.ReadoutMode, readoutModes);
+            if (readout.HasValue && cameraMediator.GetInfo().ReadoutModeForNormalImages != readout.Value) {
+                cameraMediator.SetReadoutModeForNormalImages(readout.Value);
+            }
+
+            var saved = new TaskCompletionSource<string>(TaskCreationOptions.RunContinuationsAsynchronously);
+            void OnSaved(object sender, ImageSavedEventArgs args) {
+                if (args?.MetaData?.Image?.ImageType == CaptureSequence.ImageTypes.BIAS) {
+                    saved.TrySetResult(args.PathToImage?.LocalPath);
+                }
+            }
+
+            short bin = (short)Math.Max(1, Math.Round(need.Binning));
+            var take = new TakeExposure(profileService, cameraMediator, imagingMediator, imageSaveMediator, imageHistoryVM) {
+                ImageType = CaptureSequence.ImageTypes.BIAS,
+                ExposureTime = exposure,
+                Gain = (int)Math.Round(need.Gain),
+                Offset = (int)Math.Round(need.Offset),
+                Binning = new BinningMode(bin, bin)
+            };
+
+            CameraInfo before = cameraMediator.GetInfo();
+            DateTime takenAt = DateTime.UtcNow;
+            DisplayText = $"Bias {need}";
+            TSLogger.Info($"TS Bias: taking a bias frame: {need}, {exposure} s, sensor {before.Temperature} °C");
+            imageSaveMediator.ImageSaved += OnSaved;
+            string path = null;
+            DateTime exposed;
+            try {
+                await take.Execute(progress, token);
+                exposed = DateTime.UtcNow;
+                using var saveWait = CancellationTokenSource.CreateLinkedTokenSource(token);
+                saveWait.CancelAfter(TimeSpan.FromSeconds(60));
+                using (saveWait.Token.Register(() => saved.TrySetCanceled())) {
+                    try {
+                        path = await saved.Task;
+                        DarkRuntime.State.RecordSave(DateTime.UtcNow - exposed, DateTime.UtcNow);
+                    } catch (OperationCanceledException) when (!token.IsCancellationRequested) {
+                        TSLogger.Warning("TS Bias: the bias frame was not reported saved; NINA's log has the save error if there was one");
+                    }
+                }
+            } finally {
+                imageSaveMediator.ImageSaved -= OnSaved;
+            }
+
+            double temp = cameraMediator.GetInfo().Temperature;
+            TSLogger.Info($"TS Bias: bias frame saved to {path ?? "(not reported)"}");
+            return (takenAt, double.IsNaN(temp) ? null : temp, path);
         }
 
         public override string ToString() {
