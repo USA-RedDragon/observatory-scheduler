@@ -116,8 +116,11 @@ namespace NINA.Plugin.TargetScheduler.Darks {
 
             var unknown = new List<DarkNeed>();
             string refused = null;
+            CoolerCapacity capacity = DarkPlanner.Capacity(i.Holds, i.Limits);
             foreach (DarkNeed n in DarkPlanner.WarmFirst(fitting)) {
-                string limit = DarkPlanner.AboveAmbientReason(n.SetTemp, ambient) ?? DarkPlanner.LimitReason(i.Limits, n.SetTemp, ambient, double.NaN, null);
+                string limit = DarkPlanner.AboveAmbientReason(n.SetTemp, ambient)
+                    ?? DarkPlanner.CapacityReason(capacity, n.SetTemp, ambient)
+                    ?? DarkPlanner.LimitReason(i.Limits, n.SetTemp, ambient, double.NaN, null);
                 if (limit != null) {
                     refused ??= string.Format(CultureInfo.InvariantCulture, "{0}: {1}", n, limit);
                     continue;

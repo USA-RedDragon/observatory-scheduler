@@ -51,7 +51,25 @@ namespace NINA.Plugin.TargetScheduler.Darks {
         public double? Ambient { get; set; }
         public double? ImagingPower { get; set; }
         public double? ImagingSetpoint { get; set; }
+        public double? Reached { get; set; }
         public string Reason { get; set; }
+    }
+
+    public class CoolerCapacity {
+        public double DropC { get; set; }
+        public double Ambient { get; set; }
+        public double Temperature { get; set; }
+        public DateTime? At { get; set; }
+        public bool Held { get; set; }
+        public double? PeakPower { get; set; }
+
+        public override string ToString() {
+            string when = At.HasValue ? At.Value.ToLocalTime().ToString(" yyyy-MM-dd HH:mm", CultureInfo.InvariantCulture) : "";
+            return Held
+                ? string.Format(CultureInfo.InvariantCulture, "held {0} °C at {1:0.#} °C ambient{2}{3}", Temperature, Ambient, when,
+                    PeakPower.HasValue ? string.Format(CultureInfo.InvariantCulture, " at up to {0:0}% cooler power", PeakPower.Value) : "")
+                : string.Format(CultureInfo.InvariantCulture, "reached {0:0.#} °C at {1:0.#} °C ambient{2} before it stopped making progress", Temperature, Ambient, when);
+        }
     }
 
     public class CoolerHold {
@@ -76,6 +94,10 @@ namespace NINA.Plugin.TargetScheduler.Darks {
         public const double AtTargetToleranceC = 2.0;
 
         public const double SunLimitDegrees = -8.0;
+
+        public const double RetryAmbientDropC = 1.0;
+
+        public const double CapacityPowerPercent = 99.0;
 
         public const string SunLimitBasis = "measured from the darks in s3:astro/DARK with the stacker's light-leak spread (leak limit about 0.6 ADU) and the sun's altitude over each exposure at the site in their headers. 2026-09-29 dawn, 600 s Blue at -5 °C: dark 0020 ended at -0.67° and is clean (0.33 ADU); dark 0021 ran from -0.67° to +1.45° and leaks (0.71 ADU), then 1.76, 3.11 and 4.14 ADU. 2026-09-30 dawn, 600 s Luminance at +5 °C: clean to -4.46° (0.37 ADU). 2025-02-05 dusk, 600 s S-II at 0 °C: dark 0113 from -3.61° to -5.66° leaks (5.51 ADU) and dark 0114 from -5.66° to -7.73° is at the limit (0.59 ADU). -8° is below every altitude at which any of these darks gained signal, and below the last clean dawn dark at -0.67°";
 
@@ -318,11 +340,12 @@ namespace NINA.Plugin.TargetScheduler.Darks {
                 }
 
                 if (ambient.HasValue && l.Ambient.HasValue) {
-                    if (ambient.Value < l.Ambient.Value) {
+                    if (ambient.Value <= l.Ambient.Value - RetryAmbientDropC + 0.05) {
                         continue;
                     }
                     return string.Format(CultureInfo.InvariantCulture,
-                        "the cooler could not hold {0} °C at {1:0.#} °C ambient and it is {2:0.#} °C now ({3})", l.SetTemp, l.Ambient.Value, ambient.Value, l.Reason);
+                        "the cooler could not hold {0} °C at {1:0.#} °C ambient and it is {2:0.#} °C now; it is tried again once the ambient is {3:0.#} °C or lower ({4})",
+                        l.SetTemp, l.Ambient.Value, ambient.Value, l.Ambient.Value - RetryAmbientDropC, l.Reason);
                 }
 
                 if (imagingPower.HasValue && l.ImagingPower.HasValue && l.ImagingSetpoint.HasValue && SameSetpoint(l.ImagingSetpoint.Value, imagingSetpoint)) {
@@ -338,6 +361,51 @@ namespace NINA.Plugin.TargetScheduler.Darks {
             }
 
             return null;
+        }
+
+        public static CoolerCapacity Capacity(IEnumerable<CoolerHold> holds, IEnumerable<CoolerLimit> limits) {
+            CoolerCapacity best = null;
+            bool full = false;
+            foreach (CoolerHold h in holds ?? Enumerable.Empty<CoolerHold>()) {
+                if (h == null || double.IsNaN(h.Ambient) || double.IsNaN(h.SetTemp)) {
+                    continue;
+                }
+                full |= h.PeakPower.HasValue && h.PeakPower.Value >= CapacityPowerPercent;
+                double drop = h.Ambient - h.SetTemp;
+                if (best == null || drop > best.DropC) {
+                    best = new CoolerCapacity { DropC = drop, Ambient = h.Ambient, Temperature = h.SetTemp, At = h.At, Held = true, PeakPower = h.PeakPower };
+                }
+            }
+            foreach (CoolerLimit l in limits ?? Enumerable.Empty<CoolerLimit>()) {
+                if (l == null || !l.Ambient.HasValue) {
+                    continue;
+                }
+                full = true;
+                if (!l.Reached.HasValue || double.IsNaN(l.Reached.Value)) {
+                    continue;
+                }
+                double drop = l.Ambient.Value - l.Reached.Value;
+                if (best == null || drop > best.DropC) {
+                    best = new CoolerCapacity { DropC = drop, Ambient = l.Ambient.Value, Temperature = l.Reached.Value, At = l.At, Held = false };
+                }
+            }
+            if (best == null || !full) {
+                return null;
+            }
+            return best;
+        }
+
+        public static string CapacityReason(CoolerCapacity capacity, double setTemp, double? ambient) {
+            if (capacity == null || !ambient.HasValue || double.IsNaN(ambient.Value)) {
+                return null;
+            }
+            double drop = ambient.Value - setTemp;
+            if (drop <= capacity.DropC + 0.05) {
+                return null;
+            }
+            return string.Format(CultureInfo.InvariantCulture,
+                "{0} °C is {1:0.#} °C below the {2:0.#} °C ambient, and the most the cooler has reached is {3:0.#} °C below ambient ({4}); it is left for a night with the ambient at {5:0.#} °C or lower",
+                setTemp, drop, ambient.Value, capacity.DropC, capacity, setTemp + capacity.DropC);
         }
 
         public static double? SecondsPerC(double from, double to, TimeSpan took) {

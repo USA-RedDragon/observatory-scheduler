@@ -4,6 +4,7 @@ using NUnit.Framework;
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Linq;
 
 namespace NINA.Plugin.TargetScheduler.Planning.Test {
 
@@ -180,15 +181,62 @@ namespace NINA.Plugin.TargetScheduler.Planning.Test {
             DarkPlanner.LimitReason(limits, -15, 17, -13, 90).Should().Contain("could not hold -15");
             DarkPlanner.LimitReason(limits, -20, 18, -13, 90).Should().NotBeNull();
             DarkPlanner.LimitReason(limits, -14, 17, -13, 90).Should().BeNull();
-            DarkPlanner.LimitReason(limits, -15, 16.5, -13, 90).Should().BeNull();
+            DarkPlanner.LimitReason(limits, -15, 16.5, -13, 90).Should().Contain("16 °C or lower");
+            DarkPlanner.LimitReason(limits, -15, 16, -13, 90).Should().BeNull();
+        }
+
+        private static List<CoolerHold> DawnHolds() {
+            return new List<CoolerHold> {
+                new CoolerHold { At = Now.AddMinutes(-40), Ambient = 19.1, SetTemp = -15, PeakPower = 100 },
+                new CoolerHold { At = Now.AddMinutes(-50), Ambient = 19.1, SetTemp = -4.24, PeakPower = 75 }
+            };
+        }
+
+        private static List<CoolerLimit> DawnLimits(bool reached) {
+            return new List<CoolerLimit> {
+                new CoolerLimit { At = Now.AddMinutes(-49), SetTemp = -20, Ambient = 19.1, Reached = reached ? -14.9 : (double?)null, Reason = "r" },
+                new CoolerLimit { At = Now.AddMinutes(-41), SetTemp = -17, Ambient = 19.1, Reached = reached ? -15.3 : (double?)null, Reason = "r" }
+            };
         }
 
         [Test]
-        public void CoolerLimitFallsBackToCoolerPowerAtTheImagingSetpoint() {
-            var limits = new List<CoolerLimit> { new CoolerLimit { SetTemp = -15, ImagingPower = 91, ImagingSetpoint = -13, Reason = "r" } };
-            DarkPlanner.LimitReason(limits, -15, null, -13, 91).Should().Contain("91%");
-            DarkPlanner.LimitReason(limits, -15, null, -13, 80).Should().BeNull();
-            DarkPlanner.LimitReason(limits, -15, null, -10, 50).Should().Contain("earlier this run");
+        public void CapacitySkipsSetpointsColderThanTheCoolerHasReachedAtThisAmbient() {
+            CoolerCapacity c = DarkPlanner.Capacity(DawnHolds(), DawnLimits(true));
+            c.DropC.Should().BeApproximately(34.4, 0.001);
+            DarkPlanner.CapacityReason(c, -20, 19.1).Should().Contain("left for a night with the ambient at 14.4 °C or lower");
+            DarkPlanner.CapacityReason(c, -17, 19.1).Should().Contain("36.1 °C below the 19.1 °C ambient");
+            DarkPlanner.CapacityReason(c, -16, 19.1).Should().NotBeNull();
+            DarkPlanner.CapacityReason(c, -15, 19.1).Should().BeNull();
+            DarkPlanner.CapacityReason(c, -17, 17.1).Should().BeNull();
+            DarkPlanner.CapacityReason(c, -3, 19.1).Should().BeNull();
+        }
+
+        [Test]
+        public void CapacityFromOldEvidenceUsesTheBestHold() {
+            CoolerCapacity c = DarkPlanner.Capacity(DawnHolds(), DawnLimits(false));
+            c.DropC.Should().BeApproximately(34.1, 0.001);
+            c.ToString().Should().Contain("held -15 °C at 19.1 °C ambient");
+            DarkPlanner.CapacityReason(c, -15, 19.1).Should().BeNull();
+            DarkPlanner.CapacityReason(c, -16, 19.1).Should().NotBeNull();
+        }
+
+        [Test]
+        public void CapacityIsUnknownUntilTheCoolerHasBeenPushedToItsLimit() {
+            var holds = new List<CoolerHold> { new CoolerHold { At = Now, Ambient = 19, SetTemp = -4, PeakPower = 80 } };
+            DarkPlanner.Capacity(holds, new List<CoolerLimit>()).Should().BeNull();
+            DarkPlanner.CapacityReason(null, -30, 19).Should().BeNull();
+            DarkPlanner.Capacity(new List<CoolerHold>(), DawnLimits(false)).Should().BeNull();
+            holds.Add(new CoolerHold { At = Now, Ambient = 19, SetTemp = -14, PeakPower = 99 });
+            DarkPlanner.Capacity(holds, null).DropC.Should().Be(33);
+            DarkPlanner.CapacityReason(DarkPlanner.Capacity(holds, null), -14, null).Should().BeNull();
+        }
+
+        [Test]
+        public void ALimitIsRetriedOnlyAfterTheAmbientDropsOneDegree() {
+            List<CoolerLimit> limits = DawnLimits(true);
+            DarkPlanner.LimitReason(limits, -17, 18.5, -4.24, null).Should().Contain("18.1 °C or lower");
+            DarkPlanner.LimitReason(limits, -17, 18.1, -4.24, null).Should().BeNull();
+            DarkPlanner.LimitReason(limits, -15, 19.1, -4.24, null).Should().BeNull();
         }
 
         [Test]

@@ -142,6 +142,20 @@ namespace NINA.Plugin.TargetScheduler.Planning.Test {
         }
 
         [Test]
+        public void ASetTemperatureBeyondTheMeasuredCapacityIsRefused() {
+            DarkReadyInput i = Input(Need("cold", -17));
+            i.Ambient = 19.1;
+            i.Holds.Add(new CoolerHold { At = Now.AddHours(-1), Ambient = 19.1, SetTemp = -15, PeakPower = 100 });
+            DarkReadyResult r = DarkReadiness.Check(i);
+            r.Ready.Should().BeFalse();
+            r.Reason.Should().Contain("most the cooler has reached is 34.1 °C below ambient");
+            i.Ambient = 17;
+            r = DarkReadiness.Check(i);
+            r.Ready.Should().BeTrue();
+            r.Learning.Should().BeFalse();
+        }
+
+        [Test]
         public void NightRunsFromNoonToNoon() {
             DarkReadiness.NightOf(new DateTime(2026, 10, 10, 19, 0, 0)).Should().Be("2026-10-10");
             DarkReadiness.NightOf(new DateTime(2026, 10, 11, 6, 0, 0)).Should().Be("2026-10-10");
