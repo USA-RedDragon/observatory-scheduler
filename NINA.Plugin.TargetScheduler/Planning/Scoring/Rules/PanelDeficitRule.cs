@@ -11,7 +11,9 @@ namespace NINA.Plugin.TargetScheduler.Planning.Scoring.Rules {
         public override double DefaultWeight { get { return DEFAULT_WEIGHT; } }
 
         public override double Score(IScoringEngine scoringEngine, ITarget potentialTarget) {
-            return MosaicCompletion.DeficitScore(potentialTarget);
+            return EvenPanelsRule.IsOn(potentialTarget?.Project)
+                ? MosaicCompletion.EvenScore(potentialTarget, scoringEngine.AtTime)
+                : MosaicCompletion.DeficitScore(potentialTarget);
         }
     }
 }
