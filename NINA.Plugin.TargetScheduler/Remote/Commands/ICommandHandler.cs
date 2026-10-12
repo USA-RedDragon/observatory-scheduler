@@ -21,6 +21,7 @@ namespace NINA.Plugin.TargetScheduler.Remote.Commands {
     public interface ICommandContext {
         DateTime Now { get; }
         string ProfileId { get; }
+        IReadOnlyCollection<string> ProfileFilters { get; }
         IReadOnlyDictionary<string, double> DefaultRuleWeights { get; }
         ISchedulerDatabase Database { get; }
         ISchedulerControl Control { get; }

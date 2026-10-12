@@ -128,9 +128,9 @@ namespace NINA.Plugin.TargetScheduler.Remote.Commands {
 
         ChangeOutcome DeleteTemplate(TemplateDeletePayload payload);
 
-        ChangeOutcome ApplyExposureSet(ApplySetPayload payload, bool undo);
+        ChangeOutcome ApplyExposureSet(ApplySetPayload payload, bool undo, string activeProfileId = null, IReadOnlyCollection<string> wheelFilters = null);
 
-        ChangeOutcome CreateProject(ProjectCreatePayload payload, string profileId, IReadOnlyDictionary<string, double> defaultRuleWeights, DateTime now);
+        ChangeOutcome CreateProject(ProjectCreatePayload payload, string profileId, IReadOnlyDictionary<string, double> defaultRuleWeights, DateTime now, IReadOnlyCollection<string> wheelFilters = null);
 
         ChangeOutcome DeleteProject(ProjectCreatePayload payload);
 

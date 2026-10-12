@@ -58,4 +58,35 @@ namespace NINA.Plugin.TargetScheduler.Goals {
             return string.Equals(row.Role?.Trim(), role, StringComparison.OrdinalIgnoreCase);
         }
     }
+
+    public static class ManagedTemplateSpec {
+        public const string Suffix = " (auto)";
+        public const int BroadbandGain = 0;
+        public const int NarrowbandGain = 100;
+        public const int Offset = -1;
+        public const int Bin = 1;
+        public const int ReadoutMode = -1;
+        public const int DitherEvery = -1;
+        public const double MaximumHumidity = 0;
+        public const int MinutesOffset = 0;
+        public const double BroadbandDefaultExposure = 300;
+        public const double NarrowbandDefaultExposure = 600;
+        public const int TwilightLevel = 1;
+
+        public static string Name(string filter) {
+            return (filter ?? "").Trim() + Suffix;
+        }
+
+        public static bool Narrowband(string filter) {
+            return FilterKind.IsNarrowband(filter);
+        }
+
+        public static int Gain(string filter) {
+            return Narrowband(filter) ? NarrowbandGain : BroadbandGain;
+        }
+
+        public static double DefaultExposure(string filter) {
+            return Narrowband(filter) ? NarrowbandDefaultExposure : BroadbandDefaultExposure;
+        }
+    }
 }

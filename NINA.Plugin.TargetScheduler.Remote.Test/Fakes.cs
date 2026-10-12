@@ -54,6 +54,7 @@ namespace NINA.Plugin.TargetScheduler.Remote.Test {
     public class FakeContext : ICommandContext {
         public DateTime Now { get; set; } = new DateTime(2026, 10, 10, 6, 52, 0, DateTimeKind.Utc);
         public string ProfileId { get; set; } = "p";
+        public IReadOnlyCollection<string> ProfileFilters { get; set; } = new List<string>();
         public IReadOnlyDictionary<string, double> DefaultRuleWeights { get; set; } = new Dictionary<string, double> {
             ["Meridian Flip Penalty"] = 0,
             ["Meridian Window Priority"] = 75,

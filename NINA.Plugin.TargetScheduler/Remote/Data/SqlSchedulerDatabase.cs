@@ -84,6 +84,9 @@ namespace NINA.Plugin.TargetScheduler.Remote.Data {
                         break;
                 }
             }
+            if (outcome.Conflicts.Count == 0 && table.Table == "exposuretemplate" && IsManagedTemplate(conn, tx, id)) {
+                outcome.Invalid = ManagedReason("edited");
+            }
             if (outcome.Conflicts.Count == 0 && table.Table == "project") {
                 outcome.Invalid = CheckAltitudes(conn, tx, id, changes);
             }

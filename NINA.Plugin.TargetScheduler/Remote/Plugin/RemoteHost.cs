@@ -62,6 +62,18 @@ namespace NINA.Plugin.TargetScheduler.Remote.Plugin {
 
         public DateTime Now => DateTime.UtcNow;
         public string ProfileId => profileService?.ActiveProfile?.Id.ToString();
+
+        public IReadOnlyCollection<string> ProfileFilters {
+            get {
+                try {
+                    var filters = profileService?.ActiveProfile?.FilterWheelSettings?.FilterWheelFilters;
+                    return filters == null ? Array.Empty<string>() : filters.Select(f => f?.Name).Where(n => !string.IsNullOrWhiteSpace(n)).ToList();
+                } catch (Exception e) {
+                    TSLogger.Warning($"could not read the profile's filter wheel filters, using the filters of its templates: {e.Message}");
+                    return Array.Empty<string>();
+                }
+            }
+        }
         public ISchedulerDatabase Database => database;
         public IReadOnlyDictionary<string, double> DefaultRuleWeights => Planning.Scoring.Rules.ScoringRule.GetDefaultRuleWeights().ToDictionary(w => w.name, w => w.weight);
         ISchedulerControl ICommandContext.Control => Control;

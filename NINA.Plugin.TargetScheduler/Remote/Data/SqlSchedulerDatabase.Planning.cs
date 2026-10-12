@@ -287,6 +287,9 @@ namespace NINA.Plugin.TargetScheduler.Remote.Data {
             if (src == null) {
                 return o.Reject($"{p.SourceName ?? "Template " + p.SourceId} no longer exists.");
             }
+            if (IsManagedTemplate(s, p.SourceId)) {
+                return o.Reject($"{p.SourceName ?? Str(src["name"])}: {ManagedReason("cloned")}.");
+            }
             if (s.Count("SELECT COUNT(*) FROM exposuretemplate WHERE profileId = @p AND name = @n", ("@p", src["profileId"]), ("@n", p.Name)) > 0) {
                 return o.Reject($"A template called {p.Name} already exists.");
             }
@@ -315,6 +318,9 @@ namespace NINA.Plugin.TargetScheduler.Remote.Data {
                 o.Message = $"{p.Name ?? "The template"} was already gone.";
                 return o;
             }
+            if (IsManagedTemplate(s, id.Value)) {
+                return o.Reject($"{p.Name ?? "The template"}: {ManagedReason("deleted")}.");
+            }
             var used = s.Count("SELECT COUNT(*) FROM exposureplan WHERE exposureTemplateId = @id", ("@id", id.Value));
             if (used > 0) {
                 return o.Reject($"{p.Name ?? "The template"} is used by {used} exposure {(used == 1 ? "plan" : "plans")}, so it was not removed.");
@@ -325,10 +331,11 @@ namespace NINA.Plugin.TargetScheduler.Remote.Data {
             return o;
         }
 
-        public ChangeOutcome ApplyExposureSet(ApplySetPayload p, bool undo) {
+        public ChangeOutcome ApplyExposureSet(ApplySetPayload p, bool undo, string activeProfileId = null, IReadOnlyCollection<string> wheelFilters = null) {
             var o = new ChangeOutcome();
             using var s = Open();
             var found = new Dictionary<ApplySetTarget, int?>();
+            var filters = new Dictionary<NewPlan, string>();
             foreach (var t in p.Targets) {
                 var label = t.TargetName ?? $"Target {t.TargetId}";
                 var row = s.Row("SELECT Id, projectid, guid FROM target WHERE Id = @id", ("@id", t.TargetId));
@@ -348,7 +355,13 @@ namespace NINA.Plugin.TargetScheduler.Remote.Data {
                 foreach (var c in t.Create) {
                     var existing = s.Row("SELECT targetid FROM exposureplan WHERE guid = @g", ("@g", c.Guid));
                     if (existing != null && Long(existing["targetid"]) != t.TargetId) {
-                        o.Conflict($"{label} {c.TemplateName} plan", $"on {label}", "on another target");
+                        o.Conflict($"{label} {c.TemplateName ?? c.Filter} plan", $"on {label}", "on another target");
+                    } else if (!undo && existing == null && c.UsesFilter) {
+                        var filter = ResolveFilter(s, SetProfile(s, t, found[t], null), c.Filter, activeProfileId, wheelFilters, out var error);
+                        if (filter == null) {
+                            return o.Reject($"{label}: {error}");
+                        }
+                        filters[c] = filter;
                     } else if (!undo && existing == null && s.Count("SELECT COUNT(*) FROM exposuretemplate WHERE Id = @id", ("@id", c.TemplateId)) == 0) {
                         o.Conflict($"{c.TemplateName ?? "Template " + c.TemplateId} template", "present", "removed");
                     }
@@ -357,6 +370,8 @@ namespace NINA.Plugin.TargetScheduler.Remote.Data {
             if (o.Conflicts.Count > 0) {
                 return o;
             }
+            var stamp = Stamp(DateTime.UtcNow);
+            var created = new List<string>();
             foreach (var t in p.Targets) {
                 bool added = false, toggled = false;
                 if (!undo) {
@@ -364,11 +379,10 @@ namespace NINA.Plugin.TargetScheduler.Remote.Data {
                         if (s.Count("SELECT COUNT(*) FROM exposureplan WHERE guid = @g", ("@g", c.Guid)) > 0) {
                             continue;
                         }
-                        var profile = s.Scalar("SELECT profileId FROM exposureplan WHERE targetid = @t ORDER BY Id LIMIT 1", ("@t", t.TargetId))
-                            ?? s.Scalar("SELECT profileId FROM project WHERE Id = @p", ("@p", Db(found[t])))
-                            ?? s.Scalar("SELECT profileId FROM exposuretemplate WHERE Id = @id", ("@id", c.TemplateId));
+                        var profile = SetProfile(s, t, found[t], filters.ContainsKey(c) ? (int?)null : c.TemplateId);
+                        long templateId = filters.TryGetValue(c, out var filter) ? ManagedTemplate(s, profile, filter, stamp, created) : c.TemplateId;
                         s.Exec("INSERT INTO exposureplan (profileId, exposure, desired, acquired, accepted, targetid, exposureTemplateId, enabled, guid) VALUES (@pr, @e, @d, 0, 0, @t, @tmpl, 1, @g)",
-                            ("@pr", profile), ("@e", c.Exposure), ("@d", c.Desired), ("@t", t.TargetId), ("@tmpl", c.TemplateId), ("@g", c.Guid));
+                            ("@pr", profile), ("@e", c.Exposure), ("@d", c.Desired), ("@t", t.TargetId), ("@tmpl", templateId), ("@g", c.Guid));
                         added = true;
                     }
                 } else {
@@ -403,7 +417,14 @@ namespace NINA.Plugin.TargetScheduler.Remote.Data {
                 }
             }
             s.Commit();
+            o.Message = CreatedText(created);
             return o;
+        }
+
+        private static string SetProfile(Session s, ApplySetTarget t, int? projectId, int? templateId) {
+            return Str(s.Scalar("SELECT profileId FROM exposureplan WHERE targetid = @t ORDER BY Id LIMIT 1", ("@t", t.TargetId))
+                ?? s.Scalar("SELECT profileId FROM project WHERE Id = @p", ("@p", Db(projectId)))
+                ?? (templateId.HasValue ? s.Scalar("SELECT profileId FROM exposuretemplate WHERE Id = @id", ("@id", templateId.Value)) : null));
         }
 
         private static void CheckPlanRef(Session s, ChangeOutcome o, ApplySetTarget t, PlanRef r) {
@@ -423,7 +444,7 @@ namespace NINA.Plugin.TargetScheduler.Remote.Data {
             return s.Exec("UPDATE exposureplan SET enabled = @v WHERE Id = @id AND COALESCE(enabled, 1) <> @v", ("@v", enabled ? 1 : 0), ("@id", planId)) > 0;
         }
 
-        public ChangeOutcome CreateProject(ProjectCreatePayload p, string profileId, IReadOnlyDictionary<string, double> defaultRuleWeights, DateTime now) {
+        public ChangeOutcome CreateProject(ProjectCreatePayload p, string profileId, IReadOnlyDictionary<string, double> defaultRuleWeights, DateTime now, IReadOnlyCollection<string> wheelFilters = null) {
             var o = new ChangeOutcome();
             using var s = Open();
             if (s.Count("SELECT COUNT(*) FROM project WHERE guid = @g", ("@g", p.Project.Guid)) > 0) {
@@ -432,7 +453,7 @@ namespace NINA.Plugin.TargetScheduler.Remote.Data {
             }
             var plans = p.Targets.SelectMany(t => t.Plans).ToList();
             var templateProfiles = new Dictionary<int, string>();
-            foreach (var pl in plans) {
+            foreach (var pl in plans.Where(pl => !pl.UsesFilter)) {
                 if (templateProfiles.ContainsKey(pl.TemplateId)) {
                     continue;
                 }
@@ -448,7 +469,7 @@ namespace NINA.Plugin.TargetScheduler.Remote.Data {
             if (string.IsNullOrEmpty(profile)) {
                 return o.Reject("The observatory has no profile to add the project to.");
             }
-            var foreign = plans.FirstOrDefault(pl => templateProfiles[pl.TemplateId] != profile);
+            var foreign = plans.FirstOrDefault(pl => !pl.UsesFilter && templateProfiles[pl.TemplateId] != profile);
             if (foreign != null) {
                 return o.Reject($"The {foreign.TemplateName ?? "template " + foreign.TemplateId} template belongs to another profile.");
             }
@@ -468,6 +489,16 @@ namespace NINA.Plugin.TargetScheduler.Remote.Data {
             if (p.Goals.Count > 0 && !s.TableExists("ts_goal")) {
                 return o.Reject("Goals are not set up on the observatory yet.");
             }
+            var filters = new Dictionary<NewPlan, string>();
+            foreach (var pl in plans.Where(pl => pl.UsesFilter)) {
+                var filter = ResolveFilter(s, profile, pl.Filter, profileId, wheelFilters, out var error);
+                if (filter == null) {
+                    return o.Reject(error);
+                }
+                filters[pl] = filter;
+            }
+            var createdTemplates = new List<string>();
+            var stamp = now.ToUniversalTime().ToString("yyyy-MM-dd'T'HH:mm:ss'Z'", CultureInfo.InvariantCulture);
             var settings = ProjectSettingValues(s, profile, p.Project, out var filled);
             object Setting(string field) {
                 var col = ProjectSettings.Column(field);
@@ -488,8 +519,9 @@ VALUES (@pr, @name, @desc, @state, @prio, @created, NULL, NULL, @mintime, @minal
                 var targetId = s.Insert("INSERT INTO target (name, active, ra, dec, epochcode, rotation, roi, projectid, guid) VALUES (@n, 1, @ra, @dec, 2, @rot, 100, @p, @g)",
                     ("@n", t.Name), ("@ra", t.RaHours), ("@dec", t.Dec), ("@rot", t.Rotation), ("@p", projectId), ("@g", t.Guid));
                 foreach (var pl in t.Plans) {
+                    long templateId = filters.TryGetValue(pl, out var filter) ? ManagedTemplate(s, profile, filter, stamp, createdTemplates) : pl.TemplateId;
                     s.Exec("INSERT INTO exposureplan (profileId, exposure, desired, acquired, accepted, targetid, exposureTemplateId, enabled, guid) VALUES (@pr, @e, @d, 0, 0, @t, @tmpl, 1, @g)",
-                        ("@pr", profile), ("@e", pl.Exposure), ("@d", pl.Desired), ("@t", targetId), ("@tmpl", pl.TemplateId), ("@g", pl.Guid));
+                        ("@pr", profile), ("@e", pl.Exposure), ("@d", pl.Desired), ("@t", targetId), ("@tmpl", templateId), ("@g", pl.Guid));
                 }
             }
             var weights = new Dictionary<string, double>(p.RuleWeights ?? new Dictionary<string, double>());
@@ -501,9 +533,10 @@ VALUES (@pr, @name, @desc, @state, @prio, @created, NULL, NULL, @mintime, @minal
             foreach (var kv in weights.OrderBy(kv => kv.Key, StringComparer.Ordinal)) {
                 s.Exec("INSERT INTO ruleweight (name, weight, projectid) VALUES (@n, @w, @p)", ("@n", kv.Key), ("@w", kv.Value), ("@p", projectId));
             }
-            var stamp = now.ToUniversalTime().ToString("yyyy-MM-dd'T'HH:mm:ss'Z'", CultureInfo.InvariantCulture);
+            var resolved = filters.Values.GroupBy(f => f.Trim().ToLowerInvariant()).ToDictionary(g => g.Key, g => g.First());
             foreach (var g in p.Goals) {
-                WriteGoal(s, g.TargetGuid, g.Filter, g.Setting, stamp);
+                var goalFilter = resolved.TryGetValue(g.Filter.Trim().ToLowerInvariant(), out var r) ? r : g.Filter;
+                WriteGoal(s, g.TargetGuid, goalFilter, g.Setting, stamp);
             }
             var bodies = p.Targets.Where(t => !string.IsNullOrWhiteSpace(t.Designation)).ToList();
             if (bodies.Count > 0) {
@@ -525,7 +558,10 @@ VALUES (@pr, @name, @desc, @state, @prio, @created, NULL, NULL, @mintime, @minal
             s.Commit();
             o.Touch((int)projectId, null);
             o.Changed = true;
-            o.Message = filled;
+            o.Message = string.Join(" ", new[] { filled, CreatedText(createdTemplates) }.Where(m => m != null));
+            if (o.Message.Length == 0) {
+                o.Message = null;
+            }
             return o;
         }
 

@@ -136,8 +136,8 @@ namespace NINA.Plugin.TargetScheduler.Remote.Commands {
         }
 
         public static string CheckPlan(NewPlan pl) {
-            if (pl == null || string.IsNullOrEmpty(pl.Guid) || pl.TemplateId <= 0 || pl.Desired < 0) {
-                return "a new plan needs guid, template_id and desired";
+            if (pl == null || string.IsNullOrEmpty(pl.Guid) || (pl.TemplateId <= 0 && !pl.UsesFilter) || pl.Desired < 0) {
+                return "a new plan needs guid, template_id or filter, and desired";
             }
             return null;
         }
@@ -299,7 +299,7 @@ namespace NINA.Plugin.TargetScheduler.Remote.Commands {
         }
 
         protected override ChangeOutcome Change(ApplySetPayload p, ICommandContext context) {
-            return context.Database.ApplyExposureSet(p, undo);
+            return context.Database.ApplyExposureSet(p, undo, context.ProfileId, context.ProfileFilters);
         }
     }
 
@@ -392,7 +392,7 @@ namespace NINA.Plugin.TargetScheduler.Remote.Commands {
         }
 
         protected override ChangeOutcome Change(ProjectCreatePayload p, ICommandContext context) {
-            return delete ? context.Database.DeleteProject(p) : context.Database.CreateProject(p, context.ProfileId, context.DefaultRuleWeights, context.Now);
+            return delete ? context.Database.DeleteProject(p) : context.Database.CreateProject(p, context.ProfileId, context.DefaultRuleWeights, context.Now, context.ProfileFilters);
         }
     }
 

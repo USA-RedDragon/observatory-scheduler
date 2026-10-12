@@ -133,6 +133,13 @@ namespace NINA.Plugin.TargetScheduler.Remote.Commands {
         [JsonPropertyName("template_name")]
         public string TemplateName { get; set; }
 
+        [JsonPropertyName("filter")]
+        [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+        public string Filter { get; set; }
+
+        [JsonIgnore]
+        public bool UsesFilter => !string.IsNullOrWhiteSpace(Filter);
+
         [JsonPropertyName("exposure")]
         public double Exposure { get; set; }
 
