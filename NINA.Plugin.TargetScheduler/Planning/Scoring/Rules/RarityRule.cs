@@ -1,5 +1,6 @@
 using NINA.Astrometry;
 using NINA.Plugin.TargetScheduler.Astrometry;
+using NINA.Plugin.TargetScheduler.Bodies;
 using NINA.Plugin.TargetScheduler.Goals;
 using NINA.Plugin.TargetScheduler.Planning.Interfaces;
 using NINA.Plugin.TargetScheduler.Shared.Utility;
@@ -29,14 +30,23 @@ namespace NINA.Plugin.TargetScheduler.Planning.Scoring.Rules {
         }
 
         public static SeasonEntry Lookup(IScoringEngine scoringEngine, ITarget target) {
-            if (string.IsNullOrWhiteSpace(target?.Guid)) { return null; }
+            if (string.IsNullOrWhiteSpace(target?.Guid) || BodyNightTrack.IsEvent(target.Designation)) { return null; }
 
             SeasonStore store = SeasonWorker.Store;
             if (!store.Seeded) {
                 SeasonWorker.SeedStore();
             }
 
-            SeasonEntry entry = store.Find(target.Guid, target.IsBody() ? null : Key(scoringEngine, target), Today());
+            if (target.IsBody()) {
+                SeasonEntry body = store.FindBody(target.Guid, Key(scoringEngine, target), Today(), out bool stale);
+                if (body == null && stale) {
+                    TSLogger.Debug($"rarity: season of {target.Name} is for other settings, scoring 0");
+                    SeasonWorker.Instance?.RequestPass($"settings changed for {target.Name}");
+                }
+                return body;
+            }
+
+            SeasonEntry entry = store.Find(target.Guid, Key(scoringEngine, target), Today());
             if (entry == null) {
                 TSLogger.Debug($"rarity: no season yet for {target.Name}, scoring 0");
                 SeasonWorker.Instance?.RequestPass($"no season for {target.Name}");
@@ -59,7 +69,9 @@ namespace NINA.Plugin.TargetScheduler.Planning.Scoring.Rules {
             SeasonConstraints constraints = SeasonCalculator.Constraints(project.MaximumAltitude, project.MeridianWindow,
                 plans.Select(p => SeasonCalculator.Moon(p.MoonAvoidanceEnabled, p.MoonAvoidanceSeparation, p.MoonAvoidanceWidth,
                     p.MoonRelaxScale, p.MoonRelaxMaxAltitude, p.MoonRelaxMinAltitude, p.MoonDownEnabled)));
-            return SeasonCalculator.Key(observerInfo, target.Coordinates, horizon, project.MinimumTime, level, constraints);
+            return target.IsBody()
+                ? SeasonCalculator.BodySettingsKey(observerInfo, target.Designation, horizon, project.MinimumTime, level, constraints)
+                : SeasonCalculator.Key(observerInfo, target.Coordinates, horizon, project.MinimumTime, level, constraints);
         }
     }
 }

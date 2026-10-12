@@ -32,10 +32,13 @@ namespace NINA.Plugin.TargetScheduler.Astrometry {
         }
 
         public static string BodyKey(ObserverInfo observerInfo, string designation, BodyNightTrack track, HorizonDefinition horizon, int minimumTime, TwilightLevel level, SeasonConstraints constraints) {
+            return SeasonStore.BodyKey(BodySettingsKey(observerInfo, designation, horizon, minimumTime, level, constraints), (track ?? BodyNightTrack.Empty).Version);
+        }
+
+        public static string BodySettingsKey(ObserverInfo observerInfo, string designation, HorizonDefinition horizon, int minimumTime, TwilightLevel level, SeasonConstraints constraints) {
             return string.Join("|",
                 "body",
                 designation?.Trim().ToLowerInvariant() ?? "",
-                (track ?? BodyNightTrack.Empty).Version,
                 horizon.GetCacheKey(),
                 minimumTime.ToString(CultureInfo.InvariantCulture),
                 level.ToString(),

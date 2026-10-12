@@ -56,6 +56,19 @@ namespace NINA.Plugin.TargetScheduler.Goals {
             return d == today.Date || d == today.Date.AddDays(-1) ? entry : null;
         }
 
+        public static string BodyKey(string settingsKey, string trackVersion) {
+            return settingsKey + "\u001f" + trackVersion;
+        }
+
+        public SeasonEntry FindBody(string targetGuid, string settingsKey, DateTime today, out bool stale) {
+            stale = false;
+            SeasonEntry entry = Find(targetGuid, null, today);
+            if (entry == null || entry.FromDatabase || settingsKey == null) { return entry; }
+            if (entry.Key != null && entry.Key.StartsWith(settingsKey + "\u001f", StringComparison.Ordinal)) { return entry; }
+            stale = true;
+            return null;
+        }
+
         public bool IsCurrent(string targetGuid, string key, DateTime nightDate) {
             string guid = SqliteGoalProgressSource.NormalizeGuid(targetGuid);
             return guid != null && entries.TryGetValue(guid, out SeasonEntry entry)

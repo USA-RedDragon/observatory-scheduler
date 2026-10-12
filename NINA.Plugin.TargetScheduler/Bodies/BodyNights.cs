@@ -65,6 +65,10 @@ namespace NINA.Plugin.TargetScheduler.Bodies {
             return ephemeris.At(time);
         }
 
+        public static bool IsEvent(string designation) {
+            return designation != null && designation.Trim().StartsWith("event:", StringComparison.OrdinalIgnoreCase);
+        }
+
         public static string NightKey(DateTime nightDate) {
             return nightDate.Date.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture);
         }

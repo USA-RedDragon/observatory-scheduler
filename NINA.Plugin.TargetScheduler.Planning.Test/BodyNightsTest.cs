@@ -161,6 +161,14 @@ namespace NINA.Plugin.TargetScheduler.Planning.Test {
         }
 
         [Test]
+        public void EventCentresAreNotBodiesWithSeasons() {
+            BodyNightTrack.IsEvent("event:abc").Should().BeTrue();
+            BodyNightTrack.IsEvent(" Event:abc").Should().BeTrue();
+            BodyNightTrack.IsEvent("161P").Should().BeFalse();
+            BodyNightTrack.IsEvent(null).Should().BeFalse();
+        }
+
+        [Test]
         public void ANewOrChangedNightTableAsksForAPass() {
             SeasonSchedule.BodyNightsChanged(null, "2|2026-10-12 20:00:00.000|2026-10-11|2026-10-12").Should().BeFalse();
             SeasonSchedule.BodyNightsChanged("absent", null).Should().BeFalse();

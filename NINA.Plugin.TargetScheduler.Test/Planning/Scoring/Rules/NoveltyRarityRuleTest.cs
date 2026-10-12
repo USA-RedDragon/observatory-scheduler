@@ -170,17 +170,26 @@ namespace NINA.Plugin.TargetScheduler.Test.Planning.Scoring.Rules {
             PlanningTarget body = BodyTarget(fixedTarget.Object.Project);
             new RarityRule().Score(engine, body).Should().Be(0);
 
+            string settings = RarityRule.Key(engine, body);
+            settings.Should().StartWith("body|161p|");
             SeasonWorker.Store.Put(new SeasonEntry {
                 TargetGuid = "G161",
-                Key = "body|161p|v1",
+                Key = SeasonStore.BodyKey(settings, "v1"),
                 Season = new SeasonResult { NightsLeft = 10, OutOfSeason = false },
                 ComputedFor = Today
             });
             new RarityRule().Score(engine, body).Should().Be(1);
             body.Coordinates = TestData.BETELGEUSE;
             new RarityRule().Score(engine, body).Should().Be(1);
+            body.Project.MinimumTime = 90;
+            new RarityRule().Score(engine, body).Should().Be(0);
+            body.Project.MinimumTime = 60;
 
-            SeasonWorker.Store.Put(new SeasonEntry { TargetGuid = "g161", Key = "body|161p|v2", Season = new SeasonResult { OutOfSeason = true }, ComputedFor = Today });
+            SeasonWorker.Store.Put(new SeasonEntry { TargetGuid = "g161", Key = SeasonStore.BodyKey(settings, "v2"), Season = new SeasonResult { OutOfSeason = true }, ComputedFor = Today });
+            new RarityRule().Score(engine, body).Should().Be(0);
+
+            body.Designation = "event:e1";
+            SeasonWorker.Store.Put(new SeasonEntry { TargetGuid = "g161", Key = SeasonStore.BodyKey(settings, "v3"), Season = new SeasonResult { NightsLeft = 10 }, ComputedFor = Today });
             new RarityRule().Score(engine, body).Should().Be(0);
         }
 

@@ -207,6 +207,7 @@ namespace NINA.Plugin.TargetScheduler.Planning {
                 foreach (Target target in project.Targets.Where(t => t.Enabled && !string.IsNullOrWhiteSpace(t.Guid))) {
                     if (token.IsCancellationRequested) { return; }
                     string designation = TargetBodyTable.Current.Designation(target.Guid);
+                    if (BodyNightTrack.IsEvent(designation)) { continue; }
 
                     List<ExposureTemplate> templates = target.ExposurePlans
                         .Where(ep => ep.IsEnabled && ep.ExposureTemplate != null)

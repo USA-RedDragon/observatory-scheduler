@@ -85,5 +85,26 @@ namespace NINA.Plugin.TargetScheduler.Planning.Test {
             DateTime? last = lastPass == null ? null : DateTime.Parse(lastPass);
             SeasonSchedule.DailyPassDue(n, night, last, imaging).Should().Be(due);
         }
-    }
+    
+        [Test]
+        public void BodiesMatchOnSettingsAndAcceptAnyTrackVersion() {
+            SeasonStore store = new SeasonStore();
+            DateTime today = new DateTime(2026, 10, 12);
+            store.Put(new SeasonEntry { TargetGuid = "G161", Key = SeasonStore.BodyKey("body|161p|h|60", "368:1:2:3"), Season = new SeasonResult { NightsLeft = 42 }, ComputedFor = today });
+            store.FindBody("g161", "body|161p|h|60", today, out bool stale).Season.NightsLeft.Should().Be(42);
+            stale.Should().BeFalse();
+            store.FindBody("g161", "body|161p|h|6", today, out stale).Should().BeNull();
+            stale.Should().BeTrue();
+            store.FindBody("g161", "body|161p|h|90", today, out stale).Should().BeNull();
+            stale.Should().BeTrue();
+            store.FindBody("g161", "body|161p|h|60", today.AddDays(2), out stale).Should().BeNull();
+            stale.Should().BeFalse();
+            store.FindBody("other", "body|161p|h|60", today, out stale).Should().BeNull();
+            stale.Should().BeFalse();
+            store.Clear();
+            store.Seed(new[] { new TargetSeasonRow { TargetGuid = "g161", NightsLeft = 7, ComputedFor = today } });
+            store.FindBody("G161", "body|161p|h|90", today, out stale).Season.NightsLeft.Should().Be(7);
+            stale.Should().BeFalse();
+        }
+}
 }
