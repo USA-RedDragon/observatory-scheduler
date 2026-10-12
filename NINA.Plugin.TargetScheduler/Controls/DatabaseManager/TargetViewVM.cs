@@ -185,7 +185,7 @@ namespace NINA.Plugin.TargetScheduler.Controls.DatabaseManager {
         }
 
         private void InitializeExposureTemplateList(IProfile profile) {
-            exposureTemplates = managerVM.GetExposureTemplates(profile);
+            exposureTemplates = managerVM.GetExposureTemplates(profile, TargetProxy?.Original?.ExposurePlans?.Select(ep => ep.ExposureTemplateId));
             ExposureTemplateChoices = new AsyncObservableCollection<KeyValuePair<int, string>>();
             exposureTemplates.ForEach(et => {
                 ExposureTemplateChoices.Add(new KeyValuePair<int, string>(et.Id, et.Name));

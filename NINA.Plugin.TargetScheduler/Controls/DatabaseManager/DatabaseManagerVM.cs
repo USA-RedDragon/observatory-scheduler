@@ -497,12 +497,13 @@ namespace NINA.Plugin.TargetScheduler.Controls.DatabaseManager {
             rootList.Add(profilesFolder);
 
             using (var context = database.GetContext()) {
+                Goals.ManagedTemplateTable roles = ForkDatabase.TemplateRoles(context);
                 foreach (ProfileMeta profile in profileService.Profiles) {
                     TreeDataItem profileItem = new TreeDataItem(TreeDataType.ExposureTemplateProfile, profile.Name, profile, profilesFolder);
                     profilesFolder.Items.Add(profileItem);
 
                     List<ExposureTemplate> exposureTemplates = context.GetExposureTemplates(profile.Id.ToString());
-                    foreach (ExposureTemplate exposureTemplate in exposureTemplates) {
+                    foreach (ExposureTemplate exposureTemplate in exposureTemplates.Where(et => !roles.IsManaged(et.Id) && !roles.IsRetired(et.Id))) {
                         TreeDataItem exposureTemplateItem = new TreeDataItem(TreeDataType.ExposureTemplate, exposureTemplate.Name, exposureTemplate, profileItem);
                         profileItem.Items.Add(exposureTemplateItem);
                     }
@@ -1156,16 +1157,20 @@ namespace NINA.Plugin.TargetScheduler.Controls.DatabaseManager {
             Clipboard.SetItem(activeTreeDataItem);
         }
 
-        public List<ExposureTemplate> GetExposureTemplates(IProfile profile) {
+        public List<ExposureTemplate> GetExposureTemplates(IProfile profile, IEnumerable<int> keep = null) {
             using (var context = database.GetContext()) {
-                return context.GetExposureTemplates(profile.Id.ToString());
+                List<ExposureTemplate> all = context.GetExposureTemplates(profile.Id.ToString());
+                Goals.ManagedTemplateTable roles = ForkDatabase.TemplateRoles(context);
+                HashSet<int> kept = new HashSet<int>(keep ?? Enumerable.Empty<int>());
+                bool migrated = all.Any(et => roles.IsRetired(et.Id));
+                return all.Where(et => !roles.IsRetired(et.Id) || kept.Contains(et.Id))
+                    .OrderBy(et => migrated && !roles.IsManaged(et.Id) ? 1 : 0)
+                    .ToList();
             }
         }
 
         public ExposureTemplate GetDefaultExposureTemplate(IProfile profile) {
-            using (var context = database.GetContext()) {
-                return context.GetExposureTemplates(profile.Id.ToString()).FirstOrDefault();
-            }
+            return GetExposureTemplates(profile).FirstOrDefault();
         }
 
         private TreeDataItem GetProfileItem(List<TreeDataItem> rootList, string profileId) {
