@@ -39,6 +39,9 @@
     <Compile Include="..\NINA.Plugin.TargetScheduler\Bodies\BodyNights.cs" Link="Linked\Bodies\BodyNights.cs" />
     <Compile Include="..\NINA.Plugin.TargetScheduler\Bodies\BodyNightStore.cs" Link="Linked\Bodies\BodyNightStore.cs" />
     <Compile Include="..\NINA.Plugin.TargetScheduler\Bodies\TargetWindows.cs" Link="Linked\Bodies\TargetWindows.cs" />
+    <Compile Include="..\NINA.Plugin.TargetScheduler\Goals\ManagedTemplates.cs" Link="Linked\Goals\ManagedTemplates.cs" />
+    <Compile Include="..\NINA.Plugin.TargetScheduler\Goals\TemplateRoleStore.cs" Link="Linked\Goals\TemplateRoleStore.cs" />
+    <Compile Include="..\NINA.Plugin.TargetScheduler\Goals\FilterKind.cs" Link="Linked\Goals\FilterKind.cs" />
     <Compile Include="..\NINA.Plugin.TargetScheduler\Bodies\TargetWindowStore.cs" Link="Linked\Bodies\TargetWindowStore.cs" />
   </ItemGroup>
 

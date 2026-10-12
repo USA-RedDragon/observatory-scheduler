@@ -38,6 +38,11 @@ namespace NINA.Plugin.TargetScheduler.Database {
                     } catch (Exception ex) {
                         TSLogger.Warning($"failed to create {BodyNightStore.Table}, moving bodies get no season: {ex.Message}");
                     }
+                    try {
+                        TemplateRoleStore.Ensure(context.Database.Connection);
+                    } catch (Exception ex) {
+                        TSLogger.Warning($"failed to create {TemplateRoleStore.RoleTable} and {TemplateRoleStore.MigrationTable}, no template is managed: {ex.Message}");
+                    }
                     ensured = true;
                     TSLogger.Info("fork goal schema ensured");
                     RefreshGoalSource(context);
@@ -56,9 +61,30 @@ namespace NINA.Plugin.TargetScheduler.Database {
             PlannerSignals.Current = signals;
             MosaicCompletion.GoalSource = source.Count == 0 ? null : source;
             RefreshSubLengths(context);
+            RefreshManagedTemplates(context);
             RefreshBodies(context);
             RefreshPanelHistory(context);
             return MosaicCompletion.GoalSource;
+        }
+
+        public static void RefreshManagedTemplates(SchedulerDatabaseContext context) {
+            try {
+                Stopwatch sw = Stopwatch.StartNew();
+                ManagedTemplateTable.Current = TemplateRoleStore.Load(context.Database.Connection);
+                TSLogger.Debug($"loaded template roles: {ManagedTemplateTable.Current.ManagedCount} managed of {ManagedTemplateTable.Current.Count} in {sw.ElapsedMilliseconds}ms");
+            } catch (Exception ex) {
+                ManagedTemplateTable.Current = ManagedTemplateTable.Empty;
+                TSLogger.Warning($"failed to load {TemplateRoleStore.RoleTable}, no template is managed: {ex.Message}");
+            }
+        }
+
+        public static ManagedTemplateTable TemplateRoles(SchedulerDatabaseContext context) {
+            try {
+                return TemplateRoleStore.Load(context.Database.Connection);
+            } catch (Exception ex) {
+                TSLogger.Warning($"failed to load {TemplateRoleStore.RoleTable}, showing every template: {ex.Message}");
+                return ManagedTemplateTable.Empty;
+            }
         }
 
         public static void RefreshSubLengths(SchedulerDatabaseContext context) {

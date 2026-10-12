@@ -312,6 +312,7 @@ namespace NINA.Plugin.TargetScheduler.Remote.Plugin {
             using (var context = new SchedulerDatabaseInteraction().GetContext()) {
                 ForkDatabase.RefreshPanelHistory(context);
                 ForkDatabase.RefreshSubLengths(context);
+                ForkDatabase.RefreshManagedTemplates(context);
                 ForkDatabase.RefreshBodies(context);
                 var projects = context.ProjectSet
                     .Include("targets.exposureplans.exposuretemplate")
