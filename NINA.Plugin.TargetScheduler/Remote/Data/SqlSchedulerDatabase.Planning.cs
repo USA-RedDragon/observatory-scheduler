@@ -375,6 +375,7 @@ namespace NINA.Plugin.TargetScheduler.Remote.Data {
             }
             var stamp = Stamp(DateTime.UtcNow);
             var created = new List<string>();
+            var redirected = new List<string>();
             foreach (var t in p.Targets) {
                 bool added = false, toggled = false;
                 if (!undo) {
@@ -383,7 +384,7 @@ namespace NINA.Plugin.TargetScheduler.Remote.Data {
                             continue;
                         }
                         var profile = SetProfile(s, t, found[t], filters.ContainsKey(c) ? (int?)null : c.TemplateId);
-                        long templateId = filters.TryGetValue(c, out var filter) ? ManagedTemplate(s, profile, filter, stamp, created) : c.TemplateId;
+                        long templateId = filters.TryGetValue(c, out var filter) ? ManagedTemplate(s, profile, filter, stamp, created) : Redirect(s, profile, c.TemplateId, stamp, created, redirected);
                         s.Exec("INSERT INTO exposureplan (profileId, exposure, desired, acquired, accepted, targetid, exposureTemplateId, enabled, guid) VALUES (@pr, @e, @d, 0, 0, @t, @tmpl, 1, @g)",
                             ("@pr", profile), ("@e", c.Exposure), ("@d", c.Desired), ("@t", t.TargetId), ("@tmpl", templateId), ("@g", c.Guid));
                         added = true;
@@ -422,7 +423,7 @@ namespace NINA.Plugin.TargetScheduler.Remote.Data {
             var filterTarget = p.Targets.FirstOrDefault(t => t.Create.Any(filters.ContainsKey));
             var notMigrated = filterTarget == null ? null : NotMigratedText(s, SetProfile(s, filterTarget, found[filterTarget], null), true);
             s.Commit();
-            o.Message = Join(CreatedText(created), notMigrated);
+            o.Message = Join(CreatedText(created), RedirectedText(redirected), notMigrated);
             return o;
         }
 
@@ -508,6 +509,7 @@ namespace NINA.Plugin.TargetScheduler.Remote.Data {
                 filters[pl] = filter;
             }
             var createdTemplates = new List<string>();
+            var redirected = new List<string>();
             var stamp = now.ToUniversalTime().ToString("yyyy-MM-dd'T'HH:mm:ss'Z'", CultureInfo.InvariantCulture);
             var settings = ProjectSettingValues(s, profile, p.Project, out var filled);
             object Setting(string field) {
@@ -529,7 +531,7 @@ VALUES (@pr, @name, @desc, @state, @prio, @created, NULL, NULL, @mintime, @minal
                 var targetId = s.Insert("INSERT INTO target (name, active, ra, dec, epochcode, rotation, roi, projectid, guid) VALUES (@n, 1, @ra, @dec, 2, @rot, 100, @p, @g)",
                     ("@n", t.Name), ("@ra", t.RaHours), ("@dec", t.Dec), ("@rot", t.Rotation), ("@p", projectId), ("@g", t.Guid));
                 foreach (var pl in t.Plans) {
-                    long templateId = filters.TryGetValue(pl, out var filter) ? ManagedTemplate(s, profile, filter, stamp, createdTemplates) : pl.TemplateId;
+                    long templateId = filters.TryGetValue(pl, out var filter) ? ManagedTemplate(s, profile, filter, stamp, createdTemplates) : Redirect(s, profile, pl.TemplateId, stamp, createdTemplates, redirected);
                     s.Exec("INSERT INTO exposureplan (profileId, exposure, desired, acquired, accepted, targetid, exposureTemplateId, enabled, guid) VALUES (@pr, @e, @d, 0, 0, @t, @tmpl, 1, @g)",
                         ("@pr", profile), ("@e", pl.Exposure), ("@d", pl.Desired), ("@t", targetId), ("@tmpl", templateId), ("@g", pl.Guid));
                 }
@@ -569,7 +571,7 @@ VALUES (@pr, @name, @desc, @state, @prio, @created, NULL, NULL, @mintime, @minal
             s.Commit();
             o.Touch((int)projectId, null);
             o.Changed = true;
-            o.Message = Join(filled, CreatedText(createdTemplates), notMigratedNote);
+            o.Message = Join(filled, CreatedText(createdTemplates), RedirectedText(redirected), notMigratedNote);
             return o;
         }
 

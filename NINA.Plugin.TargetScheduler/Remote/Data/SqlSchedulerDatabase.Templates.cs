@@ -147,6 +147,29 @@ namespace NINA.Plugin.TargetScheduler.Remote.Data {
             return AdoptOrCreateManagedTemplate(s, profile, filter, stamp);
         }
 
+        private static long Redirect(Session s, string profile, long templateId, string stamp, List<string> created, List<string> redirected) {
+            if (!s.TableExists(TemplateRoleStore.RoleTable)
+                || s.Count("SELECT COUNT(*) FROM ts_template_role WHERE template_id = @id AND role = @r", ("@id", templateId), ("@r", TemplateRoles.Retired)) == 0
+                || !IsMigrated(s, profile)) {
+                return templateId;
+            }
+            var t = s.Row("SELECT name, filtername FROM exposuretemplate WHERE Id = @id", ("@id", templateId));
+            var filter = t == null ? null : Str(t["filtername"]);
+            if (string.IsNullOrWhiteSpace(filter)) {
+                return templateId;
+            }
+            var id = ManagedTemplate(s, profile, filter, stamp, created);
+            var text = $"{Str(t["name"])} to {Str(s.Scalar("SELECT name FROM exposuretemplate WHERE Id = @id", ("@id", id)))}";
+            if (!redirected.Contains(text)) {
+                redirected.Add(text);
+            }
+            return id;
+        }
+
+        private static string RedirectedText(List<string> redirected) {
+            return redirected.Count == 0 ? null : $"Retired templates were replaced by managed templates: {string.Join(", ", redirected)}.";
+        }
+
         private static string CreatedText(List<string> created) {
             return created.Count == 0 ? null : $"Created managed {(created.Count == 1 ? "template" : "templates")} {string.Join(", ", created)}.";
         }

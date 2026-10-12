@@ -291,6 +291,26 @@ INSERT INTO overrideexposureorderitem (targetid, ""order"", action, referenceIdx
         }
 
         [Test]
+        public void RetiredTemplatesAreReplacedByManagedOnesWhileMigrated() {
+            var registry = CommandRegistry.Builtin();
+            var create = """{"project":{"guid":"pn","name":"NGC 7000","priority":1,"state":1,"minimumtime":60,"minimumaltitude":15},"targets":[{"guid":"tn","name":"NGC 7000","ra_hours":20.98,"dec":44.3,"rotation":0,"plans":[{"guid":"pn1","template_id":21,"template_name":"R 600","exposure":-1,"desired":30}]}]}""";
+            registry.Get(CommandKinds.ProjectCreate).Apply(Cmd.Of(CommandKinds.ProjectCreate, create), ctx).Status.Should().Be(CommandStatus.Applied);
+            db.Scalar("SELECT exposureTemplateId FROM exposureplan WHERE guid = 'pn1'").Should().Be(21L);
+
+            database.MigrateTemplates(false, Now);
+            var r = registry.Get(CommandKinds.ProjectCreate).Apply(Cmd.Of(CommandKinds.ProjectCreate, create.Replace("\"pn\"", "\"pm\"").Replace("\"tn\"", "\"tm\"").Replace("pn1", "pm1").Replace("NGC 7000", "NGC 7000 b")), ctx);
+            r.Status.Should().Be(CommandStatus.Applied);
+            r.Message.Should().Contain("Retired templates were replaced by managed templates: R 600 to Red (auto).");
+            db.Scalar("SELECT exposureTemplateId FROM exposureplan WHERE guid = 'pm1'").Should().Be(Managed("Red"));
+
+            var set = """{"set_name":"OIII","mode":"add","targets":[{"target_id":101,"create":[{"guid":"s15","template_id":15,"template_name":"O-III","exposure":-1,"desired":10}]}]}""";
+            r = registry.Get(CommandKinds.ApplySet).Apply(Cmd.Of(CommandKinds.ApplySet, set), ctx);
+            r.Status.Should().Be(CommandStatus.Applied);
+            r.Message.Should().Be("Created managed template O-III (auto). Retired templates were replaced by managed templates: O-III to O-III (auto).");
+            db.Scalar("SELECT exposureTemplateId FROM exposureplan WHERE guid = 's15'").Should().Be(Managed("O-III"));
+        }
+
+        [Test]
         public void CommandsRunThroughThePlanningHandler() {
             var registry = CommandRegistry.Builtin();
             var migrate = registry.Get(CommandKinds.TemplatesMigrate);
