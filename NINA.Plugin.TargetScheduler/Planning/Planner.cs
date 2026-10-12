@@ -7,6 +7,7 @@ using NINA.Plugin.TargetScheduler.Astrometry;
 using NINA.Plugin.TargetScheduler.Bodies;
 using NINA.Plugin.TargetScheduler.Database;
 using NINA.Plugin.TargetScheduler.Database.Schema;
+using NINA.Plugin.TargetScheduler.Goals;
 using NINA.Plugin.TargetScheduler.Planning.Exposures;
 using NINA.Plugin.TargetScheduler.Planning.Interfaces;
 using NINA.Plugin.TargetScheduler.Planning.Scoring;
@@ -398,6 +399,7 @@ namespace NINA.Plugin.TargetScheduler.Planning {
                     if (target.Rejected
                         && target.RejectedReason != Reasons.TargetNotYetVisible
                         && target.RejectedReason != Reasons.TargetMoonAvoidance
+                        && target.RejectedReason != Reasons.TargetMoonKeep
                         && target.RejectedReason != Reasons.TargetBeforeMeridianWindow
                         && target.RejectedReason != Reasons.TargetMeridianFlipClipped
                         && target.RejectedReason != Reasons.TargetMaxAltitude
@@ -651,6 +653,7 @@ namespace NINA.Plugin.TargetScheduler.Planning {
             if (target.ExposurePlans.All(ep => ep.RejectedReason == Reasons.FilterComplete)) { return Reasons.TargetComplete; }
             if (target.ExposurePlans.All(ep => ep.RejectedReason == Reasons.FilterTwilight)) { return Reasons.TargetTwilight; }
             if (target.ExposurePlans.All(ep => ep.RejectedReason == Reasons.FilterMoonAvoidance)) { return Reasons.TargetMoonAvoidance; }
+            if (MoonKeep.Waits(target.ExposurePlans.Select(ep => ep.RejectedReason), Reasons.FilterMoonAvoidance, Reasons.FilterTwilight, Reasons.FilterHumidity)) { return Reasons.TargetMoonKeep; }
             if (target.ExposurePlans.All(ep => ep.RejectedReason == Reasons.FilterBodyPositionUnknown)) { return Reasons.TargetBodyPositionUnknown; }
             if (target.ExposurePlans.All(ep => ep.RejectedReason == Reasons.FilterHumidity)) { return Reasons.TargetHumidity; }
             return Reasons.TargetAllExposurePlans; // implicit assumption that all are indeed rejected
@@ -750,6 +753,7 @@ namespace NINA.Plugin.TargetScheduler.Planning {
         public const string TargetMeridianFlipClipped = "clipped by meridian flip safety";
         public const string TargetTwilight = "all exposure plans rejected for twilight";
         public const string TargetMoonAvoidance = "all exposure plans rejected for moon avoidance";
+        public const string TargetMoonKeep = MoonKeep.TargetReason;
         public const string TargetHumidity = "all exposure plans rejected for humidity";
         public const string TargetLowerScore = "lower score";
         public const string TargetAllExposurePlans = "all exposure plans rejected";
@@ -759,6 +763,7 @@ namespace NINA.Plugin.TargetScheduler.Planning {
 
         public const string FilterComplete = "complete";
         public const string FilterMoonAvoidance = "moon avoidance";
+        public const string FilterMoonKeep = MoonKeep.FilterReason;
         public const string FilterBodyPositionUnknown = "moving body position unknown";
         public const string FilterTwilight = "twilight";
         public const string FilterHumidity = "humidity";

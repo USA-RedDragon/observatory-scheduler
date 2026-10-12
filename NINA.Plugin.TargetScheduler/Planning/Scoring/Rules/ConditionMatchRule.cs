@@ -28,6 +28,7 @@ namespace NINA.Plugin.TargetScheduler.Planning.Scoring.Rules {
                 }
 
                 double glare = SkyConditions.MoonGlare(observer, coordinates, at);
+                MoonState? moon = SkyConditions.KeepState(observer, coordinates, at);
 
                 List<IExposure> plans = (potentialTarget.ExposurePlans ?? new List<IExposure>()).Where(p => p != null && !p.Rejected).ToList();
                 if (plans.Count == 0 && potentialTarget.SelectedExposure != null) { plans.Add(potentialTarget.SelectedExposure); }
@@ -35,7 +36,7 @@ namespace NINA.Plugin.TargetScheduler.Planning.Scoring.Rules {
                 double altitude = AstrometryUtils.GetAltitude(observer, coordinates, at);
                 double peak = ConditionMatch.PeakAltitude(observer.Latitude, coordinates.Dec, potentialTarget.Project.MaximumAltitude);
                 double? quality = SkyConditions.NightQuality(at);
-                double score = ConditionMatch.Score(altitude, peak, plans.Select(p => PanelCondition(potentialTarget, p, glare, observer)), quality);
+                double score = ConditionMatch.Score(altitude, peak, plans.Select(p => PanelCondition(potentialTarget, p, glare, moon, observer)), quality);
                 TSLogger.Debug($"condition match {potentialTarget.Project.Name}/{potentialTarget.Name}: alt {altitude:0.0}/{peak:0.0}, glare {glare:0.00}, quality {(quality.HasValue ? quality.Value.ToString("0.00") : "unknown")}, score {score:0.000}");
                 return score;
             } catch (Exception ex) {
@@ -44,8 +45,8 @@ namespace NINA.Plugin.TargetScheduler.Planning.Scoring.Rules {
             }
         }
 
-        private static FilterCondition PanelCondition(ITarget target, IExposure plan, double glare, ObserverInfo observer) {
-            FilterCondition condition = SkyConditions.For(plan, glare);
+        private static FilterCondition PanelCondition(ITarget target, IExposure plan, double glare, MoonState? moon, ObserverInfo observer) {
+            FilterCondition condition = SkyConditions.For(plan, glare, SkyConditions.KeepApplies(target, plan) ? moon : null);
             condition.PanelMatch = PanelBalance.ConditionFactor(target, plan.FilterName, glare, observer);
             return condition;
         }

@@ -323,6 +323,21 @@ namespace NINA.Plugin.TargetScheduler.Planning {
             return rejected;
         }
 
+        public bool MoonKeepRejects(DateTime atTime, ITarget target, IExposure exposure) {
+            if (!SkyConditions.KeepApplies(target, exposure) || MoonKeepTable.Current.Count == 0) { return false; }
+            double seconds = SubLengthPlanning.Seconds(exposure, target, atTime);
+            DateTime mid = MoonFloor.MidExposure(atTime, seconds);
+            Coordinates coordinates = target.CoordinatesAt(mid);
+            if (coordinates == null) { return false; }
+            MoonState moon = SkyConditions.Moon(observerInfo, coordinates, mid);
+            MoonKeepRow row = MoonKeepTable.Current.Lookup(exposure.FilterName, moon);
+            bool rejected = MoonKeep.Skips(row, SkyConditions.NightQuality(atTime));
+            if (rejected) {
+                TSLogger.Debug($"managed {target.Name}/{exposure.FilterName} left for a bright Moon at {Utils.FormatDateTimeFull(mid)}: {MoonKeep.Explain(row, moon)}");
+            }
+            return rejected;
+        }
+
         /// <summary>
         /// Reject target exposures that are not suitable for the current level of humidity.
         /// </summary>
@@ -373,6 +388,8 @@ namespace NINA.Plugin.TargetScheduler.Planning {
                         SetRejected(exposure, Reasons.FilterMoonAvoidance);
                     } else if (MoonFloorRejects(atTime, target, exposure)) {
                         SetRejected(exposure, Reasons.FilterMoonAvoidance);
+                    } else if (MoonKeepRejects(atTime, target, exposure)) {
+                        SetRejected(exposure, Reasons.FilterMoonKeep);
                     }
                 }
             }
@@ -415,7 +432,8 @@ namespace NINA.Plugin.TargetScheduler.Planning {
                 if (!target.Rejected) {
                     MoonAvoidanceFilter(atTime, target, moonExpert);
                     if (AllExposurePlansRejected(target)) {
-                        SetRejected(target, target.ExposurePlans.All(e => e.RejectedReason == Reasons.FilterBodyPositionUnknown) ? Reasons.TargetBodyPositionUnknown : Reasons.TargetMoonAvoidance);
+                        SetRejected(target, target.ExposurePlans.All(e => e.RejectedReason == Reasons.FilterBodyPositionUnknown) ? Reasons.TargetBodyPositionUnknown
+                            : MoonKeep.Waits(target.ExposurePlans.Select(e => e.RejectedReason), Reasons.FilterMoonAvoidance) ? Reasons.TargetMoonKeep : Reasons.TargetMoonAvoidance);
                     }
                 }
 

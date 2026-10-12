@@ -32,6 +32,8 @@
     <Compile Include="..\NINA.Plugin.TargetScheduler\Flats\FlatRequestStore.cs" Link="Linked\Flats\FlatRequestStore.cs" />
     <Compile Include="..\NINA.Plugin.TargetScheduler\Goals\SubLength.cs" Link="Linked\Goals\SubLength.cs" />
     <Compile Include="..\NINA.Plugin.TargetScheduler\Goals\SubLengthStore.cs" Link="Linked\Goals\SubLengthStore.cs" />
+    <Compile Include="..\NINA.Plugin.TargetScheduler\Goals\MoonKeep.cs" Link="Linked\Goals\MoonKeep.cs" />
+    <Compile Include="..\NINA.Plugin.TargetScheduler\Goals\MoonKeepStore.cs" Link="Linked\Goals\MoonKeepStore.cs" />
     <Compile Include="..\NINA.Plugin.TargetScheduler\Bodies\BodyTables.cs" Link="Linked\Bodies\BodyTables.cs" />
     <Compile Include="..\NINA.Plugin.TargetScheduler\Bodies\BodyStore.cs" Link="Linked\Bodies\BodyStore.cs" />
     <Compile Include="..\NINA.Plugin.TargetScheduler\Bodies\BodyFraming.cs" Link="Linked\Bodies\BodyFraming.cs" />

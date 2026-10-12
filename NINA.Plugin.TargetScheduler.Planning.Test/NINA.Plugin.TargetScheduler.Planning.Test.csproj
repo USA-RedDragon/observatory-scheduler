@@ -23,6 +23,7 @@
     <Compile Include="..\NINA.Plugin.TargetScheduler\Goals\PlannerSignals.cs" Link="Linked\Goals\PlannerSignals.cs" />
     <Compile Include="..\NINA.Plugin.TargetScheduler\Goals\FilterKind.cs" Link="Linked\Goals\FilterKind.cs" />
     <Compile Include="..\NINA.Plugin.TargetScheduler\Goals\ConditionMatch.cs" Link="Linked\Goals\ConditionMatch.cs" />
+    <Compile Include="..\NINA.Plugin.TargetScheduler\Goals\MoonKeep.cs" Link="Linked\Goals\MoonKeep.cs" />
     <Compile Include="..\NINA.Plugin.TargetScheduler\Goals\SubLength.cs" Link="Linked\Goals\SubLength.cs" />
     <Compile Include="..\NINA.Plugin.TargetScheduler\Goals\SeasonalRunway.cs" Link="Linked\Goals\SeasonalRunway.cs" />
     <Compile Include="..\NINA.Plugin.TargetScheduler\Goals\GoalCompletionLog.cs" Link="Linked\Goals\GoalCompletionLog.cs" />

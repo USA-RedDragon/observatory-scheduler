@@ -40,6 +40,9 @@ namespace NINA.Plugin.TargetScheduler.Planning.Exposures {
             ObserverInfo observer = SkyConditions.CurrentObserver;
             Coordinates coordinates = target.CoordinatesAt(atTime);
             double glare = observer == null || (coordinates == null && target.IsBody()) ? 0 : SkyConditions.MoonGlare(observer, coordinates, atTime);
+            MoonState? moon = SkyConditions.KeepState(observer, coordinates, atTime);
+            MoonKeepTable keep = MoonKeepTable.Current;
+            double? broadbandWorth = moon.HasValue ? MoonKeep.Worth(keep.Broadband(moon.Value)) : null;
 
             List<SteeringCandidate> candidates = new List<SteeringCandidate>();
             int currentIndex = -1;
@@ -54,13 +57,15 @@ namespace NINA.Plugin.TargetScheduler.Planning.Exposures {
                     PercentComplete = helper.PercentComplete(plan),
                     Narrowband = FilterKind.IsNarrowband(plan.FilterName),
                     MoonGlare = glare,
+                    Worth = moon.HasValue && SkyConditions.KeepApplies(target, plan) ? MoonKeep.Worth(keep.Lookup(plan.FilterName, moon.Value)) : null,
+                    BroadbandWorth = SkyConditions.KeepApplies(target, plan) ? broadbandWorth : null,
                     PanelMatch = PanelBalance.ConditionFactor(target, plan.FilterName, glare, observer)
                 });
             }
 
             double? quality = SkyConditions.NightQuality(atTime);
             int chosen = FilterSteering.Choose(candidates, currentIndex, quality);
-            TSLogger.Debug($"filter steering conditions for {target.Name}: glare {glare:0.00}, quality {(quality.HasValue ? quality.Value.ToString("0.00") : "unknown")}, favors {(ConditionMatch.NarrowbandFavored(glare, quality) ? "narrowband" : "broadband")}, sibling panel match {string.Join(", ", candidates.Select(c => $"{c.Filter} {c.PanelMatch:0.00}"))}");
+            TSLogger.Debug($"filter steering conditions for {target.Name}: glare {glare:0.00}, quality {(quality.HasValue ? quality.Value.ToString("0.00") : "unknown")}, favors {(ConditionMatch.NarrowbandFavored(glare, quality, broadbandWorth) ? "narrowband" : "broadband")}{(moon.HasValue ? $", kept-rate worth {string.Join(", ", candidates.Select(c => $"{c.Filter} {(c.Worth.HasValue ? c.Worth.Value.ToString("0.00") : "none")}"))}" : "")}, sibling panel match {string.Join(", ", candidates.Select(c => $"{c.Filter} {c.PanelMatch:0.00}"))}");
             return chosen < 0 ? null : target.ExposurePlans[chosen];
         }
 

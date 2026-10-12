@@ -9,6 +9,8 @@ namespace NINA.Plugin.TargetScheduler.Goals {
         public bool Narrowband { get; set; }
         public double MoonGlare { get; set; }
         public double PanelMatch { get; set; } = 1;
+        public double? Worth { get; set; }
+        public double? BroadbandWorth { get; set; }
     }
 
     public static class ConditionMatch {
@@ -49,6 +51,11 @@ namespace NINA.Plugin.TargetScheduler.Goals {
             return narrowband ? 1 - NarrowbandMoonTolerance * g : 1 - g;
         }
 
+        public static double MoonScore(bool narrowband, double glare, double? worth) {
+            if (worth.HasValue && !double.IsNaN(worth.Value)) { return GoalCompletion.Clamp01(worth.Value); }
+            return MoonScore(narrowband, glare);
+        }
+
         public static double SkyScore(bool narrowband, double? quality) {
             if (!quality.HasValue) { return 1; }
             double q = GoalCompletion.Clamp01(quality.Value);
@@ -57,15 +64,19 @@ namespace NINA.Plugin.TargetScheduler.Goals {
 
         public static double FilterScore(FilterCondition filter, double? quality) {
             if (filter == null) { return 0; }
-            return MoonScore(filter.Narrowband, filter.MoonGlare) * SkyScore(filter.Narrowband, quality) * GoalCompletion.Clamp01(filter.PanelMatch);
+            return MoonScore(filter.Narrowband, filter.MoonGlare, filter.Worth) * SkyScore(filter.Narrowband, quality) * GoalCompletion.Clamp01(filter.PanelMatch);
         }
 
         public static bool NarrowbandFavored(double glare, double? quality) {
-            return MoonScore(false, glare) * SkyScore(false, quality) < BroadbandSuitableScore;
+            return NarrowbandFavored(glare, quality, null);
+        }
+
+        public static bool NarrowbandFavored(double glare, double? quality, double? broadbandWorth) {
+            return MoonScore(false, glare, broadbandWorth) * SkyScore(false, quality) < BroadbandSuitableScore;
         }
 
         public static bool Favored(FilterCondition filter, double? quality) {
-            return filter != null && filter.Narrowband == NarrowbandFavored(filter.MoonGlare, quality);
+            return filter != null && filter.Narrowband == NarrowbandFavored(filter.MoonGlare, quality, filter.BroadbandWorth);
         }
 
         public static double Score(double altitude, double peakAltitude, IEnumerable<FilterCondition> filters, double? quality) {

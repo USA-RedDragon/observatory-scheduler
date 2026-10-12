@@ -39,6 +39,11 @@ namespace NINA.Plugin.TargetScheduler.Database {
                         TSLogger.Warning($"failed to create {BodyNightStore.Table}, moving bodies get no season: {ex.Message}");
                     }
                     try {
+                        MoonKeepStore.Ensure(context.Database.Connection);
+                    } catch (Exception ex) {
+                        TSLogger.Warning($"failed to create {MoonKeepStore.Table}, bright-Moon exposures keep the moon glare rule: {ex.Message}");
+                    }
+                    try {
                         TemplateRoleStore.Ensure(context.Database.Connection);
                     } catch (Exception ex) {
                         TSLogger.Warning($"failed to create {TemplateRoleStore.RoleTable} and {TemplateRoleStore.MigrationTable}, no template is managed: {ex.Message}");
@@ -62,6 +67,7 @@ namespace NINA.Plugin.TargetScheduler.Database {
             MosaicCompletion.GoalSource = source.Count == 0 ? null : source;
             RefreshSubLengths(context);
             RefreshManagedTemplates(context);
+            RefreshMoonKeep(context);
             RefreshBodies(context);
             RefreshPanelHistory(context);
             return MosaicCompletion.GoalSource;
@@ -75,6 +81,17 @@ namespace NINA.Plugin.TargetScheduler.Database {
             } catch (Exception ex) {
                 ManagedTemplateTable.Current = ManagedTemplateTable.Empty;
                 TSLogger.Warning($"failed to load {TemplateRoleStore.RoleTable}, no template is managed: {ex.Message}");
+            }
+        }
+
+        public static void RefreshMoonKeep(SchedulerDatabaseContext context) {
+            try {
+                Stopwatch sw = Stopwatch.StartNew();
+                MoonKeepTable.Current = MoonKeepStore.Load(context.Database.Connection);
+                TSLogger.Debug($"loaded moon kept rates: {MoonKeepTable.Current.Count} rows in {sw.ElapsedMilliseconds}ms");
+            } catch (Exception ex) {
+                MoonKeepTable.Current = MoonKeepTable.Empty;
+                TSLogger.Warning($"failed to load {MoonKeepStore.Table}, bright-Moon exposures keep the moon glare rule: {ex.Message}");
             }
         }
 
