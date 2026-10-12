@@ -44,6 +44,7 @@
     <Compile Include="..\NINA.Plugin.TargetScheduler\Bodies\BodyMotion.cs" Link="Linked\Bodies\BodyMotion.cs" />
     <Compile Include="..\NINA.Plugin.TargetScheduler\Bodies\TargetWindows.cs" Link="Linked\Bodies\TargetWindows.cs" />
     <Compile Include="..\NINA.Plugin.TargetScheduler\Bodies\EventWindows.cs" Link="Linked\Bodies\EventWindows.cs" />
+    <Compile Include="..\NINA.Plugin.TargetScheduler.Shared\Utility\LogThrottle.cs" Link="Linked\Shared\LogThrottle.cs" />
   </ItemGroup>
 
   <ItemGroup>

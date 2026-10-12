@@ -468,23 +468,27 @@ namespace NINA.Plugin.TargetScheduler.Planning {
             if (probe.Count == 0) { return false; }
 
             PlanningState saved = new PlanningState(probe);
-            try {
-                List<IProject> filtered = FilterForSkips(probe);
-                filtered = FilterForIncomplete(filtered);
-                filtered = FilterForVisibility(filtered);
-                filtered = FilterForMoonAvoidance(filtered);
-                filtered = FilterForTwilight(filtered);
-                filtered = FilterForHumidity(filtered, weatherDataMediator);
-                List<ITarget> ready = GetTargetsReadyNow(filtered).Where(candidates.Contains).ToList();
-                SelectTargetExposures(ready);
-                FilterForSequenceEnd(ready);
-                if (ready.Count == 0) { return false; }
-                PreemptedBy = $"{ready[0].Project.Name}/{ready[0].Name}";
-                TSLogger.Info($"not continuing previous target at {atTime}, {previousTarget.Name}: high-priority event {PreemptedBy} is ready");
-                return true;
-            } finally {
-                saved.Restore();
+            ITarget ready = null;
+            using (TSLogger.Quiet("event probe")) {
+                try {
+                    List<IProject> filtered = FilterForSkips(probe);
+                    filtered = FilterForIncomplete(filtered);
+                    filtered = FilterForVisibility(filtered);
+                    filtered = FilterForMoonAvoidance(filtered);
+                    filtered = FilterForTwilight(filtered);
+                    filtered = FilterForHumidity(filtered, weatherDataMediator);
+                    List<ITarget> readyEvents = GetTargetsReadyNow(filtered).Where(candidates.Contains).ToList();
+                    SelectTargetExposures(readyEvents);
+                    FilterForSequenceEnd(readyEvents);
+                    ready = readyEvents.FirstOrDefault();
+                } finally {
+                    saved.Restore();
+                }
             }
+            if (ready == null) { return false; }
+            PreemptedBy = $"{ready.Project.Name}/{ready.Name}";
+            TSLogger.Info($"not continuing previous target at {atTime}, {previousTarget.Name}: high-priority event {PreemptedBy} is ready");
+            return true;
         }
 
         public void FilterForSequenceEnd(List<ITarget> readyTargets) {

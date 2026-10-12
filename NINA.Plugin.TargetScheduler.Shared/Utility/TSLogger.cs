@@ -130,6 +130,7 @@ namespace NINA.Plugin.TargetScheduler.Shared.Utility {
                 [CallerMemberName] string memberName = "",
                 [CallerFilePath] string sourceFilePath = "",
                 [CallerLineNumber] int lineNumber = 0) {
+            if (Throttled(message, sourceFilePath, memberName, lineNumber)) { return; }
             TSLog.Warning("{source}|{member}|{line}|{message}", ExtractFileName(sourceFilePath), memberName, lineNumber, message);
         }
 
@@ -137,7 +138,42 @@ namespace NINA.Plugin.TargetScheduler.Shared.Utility {
                 [CallerMemberName] string memberName = "",
                 [CallerFilePath] string sourceFilePath = "",
                 [CallerLineNumber] int lineNumber = 0) {
+            if (Throttled(message, sourceFilePath, memberName, lineNumber)) { return; }
             TSLog.Information("{source}|{member}|{line}|{message}", ExtractFileName(sourceFilePath), memberName, lineNumber, message);
+        }
+
+        public static readonly TimeSpan QuietInterval = TimeSpan.FromMinutes(30);
+
+        private static readonly LogThrottle quietThrottle = new LogThrottle(QuietInterval);
+
+        [ThreadStatic]
+        private static string? quietScope;
+
+        public static IDisposable Quiet(string scope) {
+            string? previous = quietScope;
+            quietScope = scope;
+            return new QuietScope(previous);
+        }
+
+        private sealed class QuietScope : IDisposable {
+            private readonly string? previous;
+
+            public QuietScope(string? previous) {
+                this.previous = previous;
+            }
+
+            public void Dispose() {
+                quietScope = previous;
+            }
+        }
+
+        private static bool Throttled(string message, string sourceFilePath, string memberName, int lineNumber) {
+            string? scope = quietScope;
+            if (scope == null) { return false; }
+            string source = ExtractFileName(sourceFilePath);
+            if (quietThrottle.Allow(LogThrottle.Key(scope, source, lineNumber, message), DateTime.UtcNow)) { return false; }
+            TSLog.Debug("{source}|{member}|{line}|{message}", source, memberName, lineNumber, $"(repeat within {QuietInterval.TotalMinutes:0} min, {scope}) {message}");
+            return true;
         }
 
         public static void Debug(string message,
