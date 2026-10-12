@@ -55,7 +55,8 @@ namespace NINA.Plugin.TargetScheduler.Planning.Exposures {
         }
 
         public static SubLengthChoice Apply(IExposure exposure, string targetGuid, string filter, int gain, double templateExposure, double? glare) {
-            SubLengthChoice choice = SubLength.Choose(SubLengthTable.Current, targetGuid, filter, gain, glare, exposure.PlanExposureLength, templateExposure);
+            bool planFirst = TargetWindowTable.Current.Get(targetGuid) != null;
+            SubLengthChoice choice = SubLength.Choose(SubLengthTable.Current, targetGuid, filter, gain, glare, exposure.PlanExposureLength, templateExposure, planFirst);
             exposure.ExposureLength = choice.Seconds;
             exposure.LengthSource = choice.Source;
             exposure.LengthBucket = choice.Bucket;

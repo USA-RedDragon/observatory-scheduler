@@ -80,9 +80,13 @@ namespace NINA.Plugin.TargetScheduler.Goals {
         }
 
         public static SubLengthChoice Choose(SubLengthTable table, string targetGuid, string filter, int gain, double? glare, double planExposure, double templateExposure) {
+            return Choose(table, targetGuid, filter, gain, glare, planExposure, templateExposure, false);
+        }
+
+        public static SubLengthChoice Choose(SubLengthTable table, string targetGuid, string filter, int gain, double? glare, double planExposure, double templateExposure, bool planFirst) {
             double? g = glare.HasValue && !double.IsNaN(glare.Value) && !double.IsInfinity(glare.Value) ? glare : null;
             string bucket = g.HasValue ? Bucket(g.Value) : null;
-            SubLengthRow row = bucket == null ? null : table?.Get(targetGuid, filter, gain, bucket);
+            SubLengthRow row = bucket == null || (planFirst && planExposure > 0) ? null : table?.Get(targetGuid, filter, gain, bucket);
             if (row != null && row.Exposure > 0 && !double.IsNaN(row.Exposure) && !double.IsInfinity(row.Exposure)) {
                 return new SubLengthChoice { Seconds = row.Exposure, Source = SourceSystem, Bucket = bucket, Glare = g };
             }
