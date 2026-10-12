@@ -1,4 +1,5 @@
-﻿using NINA.Core.Enum;
+﻿using NINA.Astrometry;
+using NINA.Core.Enum;
 using NINA.Plugin.TargetScheduler.Goals;
 using NINA.Plugin.TargetScheduler.Planning.Entities;
 using NINA.Plugin.TargetScheduler.Planning.Interfaces;
@@ -26,6 +27,7 @@ namespace NINA.Plugin.TargetScheduler.Planning {
         public DateTime? WaitForNextTargetTime { get; private set; }
         public bool IsWait { get => WaitForNextTargetTime.HasValue; }
         public bool IsEmulator { get; set; }
+        public Coordinates PlanCoordinates { get; set; }
         public string DetailsLog { get; private set; }
 
         public SchedulerPlan(DateTime planTime, List<IProject> projects, ITarget target, List<IInstruction> planInstructions, bool logPlan) {

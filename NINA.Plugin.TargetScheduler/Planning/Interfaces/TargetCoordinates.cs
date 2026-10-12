@@ -15,6 +15,11 @@ namespace NINA.Plugin.TargetScheduler.Planning.Interfaces {
             return target.BodyEphemeris ?? BodyPositionTable.Current.Ephemeris(target.Guid, target.Designation);
         }
 
+        public static string PositionUnknownReason(this ITarget target, DateTime time) {
+            if (target == null || !target.IsBody() || target.CoordinatesAt(time) != null) { return null; }
+            return $"moving body {target.Name} ({target.Designation}) has no position at {time}";
+        }
+
         public static Coordinates CoordinatesAt(this ITarget target, DateTime time) {
             if (target == null) { return null; }
             if (!target.IsBody()) { return target.Coordinates; }

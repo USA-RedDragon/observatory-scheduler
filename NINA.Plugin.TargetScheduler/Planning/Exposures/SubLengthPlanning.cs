@@ -21,7 +21,7 @@ namespace NINA.Plugin.TargetScheduler.Planning.Exposures {
 
         public static void Apply(ITarget target, DateTime atTime) {
             if (target == null) { return; }
-            double? glare = Glare(SkyConditions.CurrentObserver, target.Coordinates, atTime);
+            double? glare = Glare(SkyConditions.CurrentObserver, target.CoordinatesAt(atTime), atTime);
             foreach (IExposure exposure in Plans(target)) {
                 Apply(exposure, target.Guid, glare);
             }

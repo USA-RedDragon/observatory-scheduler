@@ -75,6 +75,16 @@ namespace NINA.Plugin.TargetScheduler.Test.Planning {
         }
 
         [Test]
+        public void UnknownPositionsAreReportedForBodiesOnly() {
+            Positions("C/2025 R2");
+            PlanningTarget body = new PlanningTarget { Name = "C/2025 R2", Guid = "g1", Coordinates = TestData.M42, Designation = "C/2025 R2" };
+            body.PositionUnknownReason(Start).Should().BeNull();
+            body.PositionUnknownReason(Start.AddHours(1)).Should().Contain("has no position");
+            PlanningTarget fixedTarget = new PlanningTarget { Name = "M42", Guid = "g1", Coordinates = null };
+            fixedTarget.PositionUnknownReason(Start.AddHours(1)).Should().BeNull();
+        }
+
+        [Test]
         public void StaleDesignationRowsAreIgnored() {
             Positions("C/2024 G3");
             PlanningTarget target = new PlanningTarget { Guid = "g1", Coordinates = TestData.M42, Designation = "C/2025 R2" };

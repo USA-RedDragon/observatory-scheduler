@@ -201,7 +201,7 @@ namespace NINA.Plugin.TargetScheduler.Sequencer {
 
                 if (instruction is PlanSlew) {
                     if (profilePreferences.EnableSlewCenter) {
-                        AddSlew((PlanSlew)instruction, plan.PlanTarget);
+                        AddSlew((PlanSlew)instruction, plan.PlanTarget, plan.PlanTime);
                     }
                     continue;
                 }
@@ -242,13 +242,18 @@ namespace NINA.Plugin.TargetScheduler.Sequencer {
             }
         }
 
-        private void AddSlew(PlanSlew instruction, ITarget target) {
+        private void AddSlew(PlanSlew instruction, ITarget target, DateTime planTime) {
             bool isPlateSolve = instruction.center;
-            InputCoordinates slewCoordinates = new InputCoordinates(target.Coordinates);
+            Coordinates coordinates = plan.PlanCoordinates ?? target.CoordinatesAt(planTime);
+            if (coordinates == null && target.IsBody()) {
+                TSLogger.Warning($"no slew/center added: {target.PositionUnknownReason(planTime)}");
+                return;
+            }
+            InputCoordinates slewCoordinates = new InputCoordinates(coordinates);
             SequenceItem slewCenter;
 
             string with = isPlateSolve ? "with" : "without";
-            TSLogger.Debug($"slew ({with} center): {Utils.FormatCoordinates(target.Coordinates)}");
+            TSLogger.Debug($"slew ({with} center): {Utils.FormatCoordinates(coordinates)}");
 
             if (isPlateSolve) {
                 if (rotatorMediator.GetInfo().Connected) {

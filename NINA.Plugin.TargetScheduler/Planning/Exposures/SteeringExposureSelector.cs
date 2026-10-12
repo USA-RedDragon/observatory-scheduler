@@ -38,7 +38,8 @@ namespace NINA.Plugin.TargetScheduler.Planning.Exposures {
             if (helper == null || target.ExposurePlans == null) { return null; }
 
             ObserverInfo observer = SkyConditions.CurrentObserver;
-            double glare = observer == null ? 0 : SkyConditions.MoonGlare(observer, target.Coordinates, atTime);
+            Coordinates coordinates = target.CoordinatesAt(atTime);
+            double glare = observer == null || (coordinates == null && target.IsBody()) ? 0 : SkyConditions.MoonGlare(observer, coordinates, atTime);
 
             List<SteeringCandidate> candidates = new List<SteeringCandidate>();
             int currentIndex = -1;

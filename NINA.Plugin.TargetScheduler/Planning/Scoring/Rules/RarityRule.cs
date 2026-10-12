@@ -29,7 +29,7 @@ namespace NINA.Plugin.TargetScheduler.Planning.Scoring.Rules {
         }
 
         public static SeasonEntry Lookup(IScoringEngine scoringEngine, ITarget target) {
-            if (string.IsNullOrWhiteSpace(target?.Guid)) { return null; }
+            if (string.IsNullOrWhiteSpace(target?.Guid) || target.IsBody()) { return null; }
 
             SeasonStore store = SeasonWorker.Store;
             if (!store.Seeded) {

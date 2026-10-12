@@ -100,6 +100,7 @@ namespace NINA.Plugin.TargetScheduler.Sequencer {
         private ProfilePreference profilePreferences;
 
         public object lockObj = new object();
+        private static readonly TimeSpan UnknownPositionRetry = TimeSpan.FromSeconds(10);
         public int TotalExposureCount { get; set; }
 
         public PlanExecutionHistory PlanExecutionHistory { get; private set; }
@@ -371,6 +372,12 @@ namespace NINA.Plugin.TargetScheduler.Sequencer {
                 } else {
                     try {
                         ITarget target = plan.PlanTarget;
+                        if (target.PositionUnknownReason(atTime) is string unknown) {
+                            TSLogger.Warning($"skipping the plan and planning again in {UnknownPositionRetry.TotalSeconds:0} s: {unknown}");
+                            await Task.Delay(UnknownPositionRetry, token);
+                            continue;
+                        }
+                        plan.PlanCoordinates = target.CoordinatesAt(atTime);
 
                         if (previousPlanTarget != null && !target.Equals(previousPlanTarget)) {
                             await ExecuteEventContainer(AfterTargetContainer, progress, token);
@@ -381,8 +388,8 @@ namespace NINA.Plugin.TargetScheduler.Sequencer {
                         var historyItem = new PlanExecutionHistoryItem(DateTime.Now, plan);
                         TSLogger.Info($"plan target: {target.Name}");
 
-                        SetTarget(atTime, target);
-                        ResetCenterAfterDrift(previousPlanTarget, target);
+                        SetTarget(atTime, target, plan.PlanCoordinates);
+                        ResetCenterAfterDrift(previousPlanTarget, target, plan);
                         SetTargetForCustomEventContainers();
 
                         // Create a container for this exposure, add the instructions, and execute
@@ -620,7 +627,13 @@ namespace NINA.Plugin.TargetScheduler.Sequencer {
             }
         }
 
-        public void SetTarget(DateTime atTime, ITarget planTarget) {
+        public void SetTarget(DateTime atTime, ITarget planTarget, Coordinates planCoordinates = null) {
+            Coordinates targetCoordinates = planCoordinates ?? planTarget.CoordinatesAt(atTime);
+            if (targetCoordinates == null && planTarget.IsBody()) {
+                TSLogger.Warning($"not setting the container target: {planTarget.PositionUnknownReason(atTime)}");
+                return;
+            }
+
             lock (lockObj) {
                 IProfile activeProfile = profileService.ActiveProfile;
                 DateTime referenceDate = NighttimeCalculator.GetReferenceDate(atTime);
@@ -633,9 +646,9 @@ namespace NINA.Plugin.TargetScheduler.Sequencer {
 
                 Coordinates coords = new Coordinates(Angle.ByDegree(15), Angle.ByDegree(5), Epoch.J2000);
 
-                inputTarget.DeepSkyObject = GetDeepSkyObject(referenceDate, activeProfile, planTarget, customHorizon);
+                inputTarget.DeepSkyObject = GetDeepSkyObject(referenceDate, activeProfile, planTarget, targetCoordinates, customHorizon);
                 inputTarget.TargetName = planTarget.Name;
-                inputTarget.InputCoordinates = new InputCoordinates(planTarget.Coordinates);
+                inputTarget.InputCoordinates = new InputCoordinates(targetCoordinates);
                 inputTarget.PositionAngle = planTarget.Rotation;
                 inputTarget.Expanded = true;
                 Target = inputTarget;
@@ -668,8 +681,8 @@ namespace NINA.Plugin.TargetScheduler.Sequencer {
             return inputTarget;
         }
 
-        private void ResetCenterAfterDrift(ITarget previousPlanTarget, ITarget target) {
-            if (previousPlanTarget != null && target.Equals(previousPlanTarget)) {
+        private void ResetCenterAfterDrift(ITarget previousPlanTarget, ITarget target, SchedulerPlan plan) {
+            if (previousPlanTarget != null && target.Equals(previousPlanTarget) && !(target.IsBody() && plan.PlanInstructions.Any(i => i is Planning.Entities.PlanSlew))) {
                 TSLogger.Debug($"target is same as previous, skipping CaD update");
                 return;
             }
@@ -843,8 +856,8 @@ namespace NINA.Plugin.TargetScheduler.Sequencer {
             return customHorizon;
         }
 
-        private DeepSkyObject GetDeepSkyObject(DateTime referenceDate, IProfile activeProfile, ITarget planTarget, CustomHorizon customHorizon) {
-            DeepSkyObject dso = new DeepSkyObject(string.Empty, planTarget.Coordinates, customHorizon);
+        private DeepSkyObject GetDeepSkyObject(DateTime referenceDate, IProfile activeProfile, ITarget planTarget, Coordinates coordinates, CustomHorizon customHorizon) {
+            DeepSkyObject dso = new DeepSkyObject(string.Empty, coordinates, customHorizon);
             dso.Name = planTarget.Name;
             dso.SetDateAndPosition(referenceDate, activeProfile.AstrometrySettings.Latitude, activeProfile.AstrometrySettings.Longitude);
             dso.Refresh();

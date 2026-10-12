@@ -55,9 +55,15 @@ namespace NINA.Plugin.TargetScheduler.Planning {
                 moonWidthParameter = moonWidthParameter * ((moonAltitude - exposure.MoonRelaxMinAltitude) / (exposure.MoonRelaxMaxAltitude - exposure.MoonRelaxMinAltitude));
             }
 
+            Coordinates targetCoordinates = target.CoordinatesAt(evaluationTime);
+            if (targetCoordinates == null && target.IsBody()) {
+                TSLogger.Debug($"moon avoidance {target.Name}/{exposure.FilterName} rejected: moving body position unknown at {evaluationTime}");
+                return true;
+            }
+
             // Determine avoidance
             double moonAge = GetMoonAge(evaluationTime);
-            double moonSeparation = GetMoonSeparationAngle(observerInfo, evaluationTime, target.Coordinates);
+            double moonSeparation = GetMoonSeparationAngle(observerInfo, evaluationTime, targetCoordinates);
             double moonAvoidanceSeparation = AstrometryUtils.GetMoonAvoidanceLorentzianSeparation(moonAge,
                 moonSeparationParameter, moonWidthParameter);
 

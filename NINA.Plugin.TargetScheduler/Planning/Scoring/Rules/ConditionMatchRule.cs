@@ -21,13 +21,19 @@ namespace NINA.Plugin.TargetScheduler.Planning.Scoring.Rules {
             try {
                 ObserverInfo observer = SkyConditions.Observer(scoringEngine.ActiveProfile);
                 DateTime at = scoringEngine.AtTime;
-                double glare = SkyConditions.MoonGlare(observer, potentialTarget.Coordinates, at);
+                Coordinates coordinates = potentialTarget.CoordinatesAt(at);
+                if (coordinates == null && potentialTarget.IsBody()) {
+                    TSLogger.Debug($"condition match {potentialTarget.Project.Name}/{potentialTarget.Name}: moving body position unknown, scoring 0");
+                    return 0;
+                }
+
+                double glare = SkyConditions.MoonGlare(observer, coordinates, at);
 
                 List<IExposure> plans = (potentialTarget.ExposurePlans ?? new List<IExposure>()).Where(p => p != null && !p.Rejected).ToList();
                 if (plans.Count == 0 && potentialTarget.SelectedExposure != null) { plans.Add(potentialTarget.SelectedExposure); }
 
-                double altitude = AstrometryUtils.GetAltitude(observer, potentialTarget.Coordinates, at);
-                double peak = ConditionMatch.PeakAltitude(observer.Latitude, potentialTarget.Coordinates.Dec, potentialTarget.Project.MaximumAltitude);
+                double altitude = AstrometryUtils.GetAltitude(observer, coordinates, at);
+                double peak = ConditionMatch.PeakAltitude(observer.Latitude, coordinates.Dec, potentialTarget.Project.MaximumAltitude);
                 double? quality = SkyConditions.NightQuality(at);
                 double score = ConditionMatch.Score(altitude, peak, plans.Select(p => PanelCondition(potentialTarget, p, glare, observer)), quality);
                 TSLogger.Debug($"condition match {potentialTarget.Project.Name}/{potentialTarget.Name}: alt {altitude:0.0}/{peak:0.0}, glare {glare:0.00}, quality {(quality.HasValue ? quality.Value.ToString("0.00") : "unknown")}, score {score:0.000}");

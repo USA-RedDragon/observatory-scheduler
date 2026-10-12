@@ -5,6 +5,7 @@ using NINA.Plugin.TargetScheduler.Util;
 using System;
 using System.Collections.Generic;
 using System.Globalization;
+using System.Linq;
 using System.Runtime.Caching;
 using System.Text;
 
@@ -27,6 +28,7 @@ namespace NINA.Plugin.TargetScheduler.Astrometry {
     public class TargetVisibility {
         private static readonly VisibilityDetermination NOT_VISIBLE = new VisibilityDetermination(false, null, null);
         public static readonly DateTime TRANSIT_TIME_NA = DateTime.MinValue;
+        private static readonly HorizontalCoordinate UnknownPosition = new HorizontalCoordinate(-90, 0);
 
         public string TargetName { get; private set; }
         public int TargetId { get; private set; }
@@ -38,10 +40,20 @@ namespace NINA.Plugin.TargetScheduler.Astrometry {
         public bool ImagingPossible { get; private set; }
         public IList<PositionAtTime> TargetPositions { get; private set; }
 
-        public TargetVisibility(ITarget target, ObserverInfo observerInfo, DateTime imagingDate, DateTime? sunset, DateTime? sunrise, int sampleInterval = 10) :
-            this(target.Name, target.DatabaseId, observerInfo, target.Coordinates, imagingDate, sunset, sunrise, sampleInterval) { }
+        public TargetVisibility(ITarget target, ObserverInfo observerInfo, DateTime imagingDate, DateTime? sunset, DateTime? sunrise, int sampleInterval = 10) {
+            if (target.IsBody()) {
+                string bodyKey = $"body_{target.Designation.Trim()}_{target.Ephemeris()?.Version ?? "none"}";
+                Init(target.Name, target.DatabaseId, observerInfo, null, t => target.CoordinatesAt(t), bodyKey, imagingDate, sunset, sunrise, sampleInterval);
+            } else {
+                Init(target.Name, target.DatabaseId, observerInfo, target.Coordinates, null, null, imagingDate, sunset, sunrise, sampleInterval);
+            }
+        }
 
         public TargetVisibility(string targetName, int targetId, ObserverInfo observerInfo, Coordinates coordinates, DateTime imagingDate, DateTime? sunset, DateTime? sunrise, int sampleInterval = 10) {
+            Init(targetName, targetId, observerInfo, coordinates, null, null, imagingDate, sunset, sunrise, sampleInterval);
+        }
+
+        private void Init(string targetName, int targetId, ObserverInfo observerInfo, Coordinates coordinates, Func<DateTime, Coordinates> coordinatesAt, string bodyKey, DateTime imagingDate, DateTime? sunset, DateTime? sunrise, int sampleInterval) {
             if (sunset >= sunrise) {
                 throw new ArgumentException("sunset is after sunrise");
             }
@@ -50,7 +62,9 @@ namespace NINA.Plugin.TargetScheduler.Astrometry {
                 throw new ArgumentException("no sunset/sunrise for this date/location");
             }
 
-            string cacheKey = GetCacheKey(targetId, observerInfo, coordinates, imagingDate, sampleInterval);
+            string cacheKey = coordinatesAt == null
+                ? GetCacheKey(targetId, observerInfo, coordinates, imagingDate, sampleInterval)
+                : GetCacheKey(targetId, observerInfo, bodyKey, imagingDate, sampleInterval);
             TargetVisibility cached = TargetVisibilityCache.Get(cacheKey);
 
             if (cached != null) {
@@ -86,13 +100,14 @@ namespace NINA.Plugin.TargetScheduler.Astrometry {
                 TargetPositions = new List<PositionAtTime>(numSamples);
                 DateTime sampleTime = Sunset;
                 for (int i = 0; i < numSamples; i++) {
-                    HorizontalCoordinate hc = AstrometryUtils.GetHorizontalCoordinates(observerInfo, coordinates, sampleTime);
+                    Coordinates sampleCoordinates = coordinatesAt == null ? coordinates : coordinatesAt(sampleTime);
+                    HorizontalCoordinate hc = sampleCoordinates == null ? UnknownPosition : AstrometryUtils.GetHorizontalCoordinates(observerInfo, sampleCoordinates, sampleTime);
                     TargetPositions.Add(new PositionAtTime(sampleTime, hc));
                     if (hc.Altitude > 0) { ImagingPossible = true; }
                     sampleTime = sampleTime.AddSeconds(sampleInterval);
                 }
 
-                TransitTime = GetImagingTransitTime(observerInfo, coordinates);
+                TransitTime = coordinatesAt == null ? GetImagingTransitTime(observerInfo, coordinates) : GetBodyTransitTime(observerInfo, coordinatesAt);
                 TargetPositions = TargetPositions.AsReadOnly();
 
                 //stopWatch.Stop();
@@ -227,6 +242,26 @@ namespace NINA.Plugin.TargetScheduler.Astrometry {
             return TRANSIT_TIME_NA;
         }
 
+        private DateTime GetBodyTransitTime(ObserverInfo location, Func<DateTime, Coordinates> coordinatesAt) {
+            if (!ImagingPossible) {
+                return TRANSIT_TIME_NA;
+            }
+
+            DateTime middle = Sunset.AddTicks((Sunrise - Sunset).Ticks / 2);
+            Coordinates coordinates = coordinatesAt(middle) ?? TargetPositions.Select(p => coordinatesAt(p.AtTime)).FirstOrDefault(c => c != null);
+            if (coordinates == null) {
+                return TRANSIT_TIME_NA;
+            }
+
+            DateTime transitTime = GetImagingTransitTime(location, coordinates);
+            if (transitTime == TRANSIT_TIME_NA) {
+                return transitTime;
+            }
+
+            Coordinates atTransit = coordinatesAt(transitTime);
+            return atTransit == null ? transitTime : GetImagingTransitTime(location, atTransit);
+        }
+
         /// <summary>
         /// Return true if the target transits the meridian during the imaging night samples (extended) and
         /// imaging is possible.
@@ -292,6 +327,16 @@ namespace NINA.Plugin.TargetScheduler.Astrometry {
                 sb.Append(item.AtTime.ToString("MM/dd/yyyy HH:mm:ss\n"));
             }
 
+            return sb.ToString();
+        }
+
+        private string GetCacheKey(int targetId, ObserverInfo observerInfo, string bodyKey, DateTime imagingDate, int sampleInterval) {
+            StringBuilder sb = new StringBuilder();
+            sb.Append($"{targetId}_{imagingDate:yyyy-MM-dd-HH-mm-ss}_");
+            sb.Append($"{observerInfo.Latitude.ToString("0.000000", CultureInfo.InvariantCulture)}_");
+            sb.Append($"{observerInfo.Longitude.ToString("0.000000", CultureInfo.InvariantCulture)}_");
+            sb.Append($"{bodyKey}_");
+            sb.Append(sampleInterval);
             return sb.ToString();
         }
 

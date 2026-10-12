@@ -602,6 +602,7 @@ namespace NINA.Plugin.TargetScheduler.Planning {
             if (target.ExposurePlans.All(ep => ep.RejectedReason == Reasons.FilterComplete)) { return Reasons.TargetComplete; }
             if (target.ExposurePlans.All(ep => ep.RejectedReason == Reasons.FilterTwilight)) { return Reasons.TargetTwilight; }
             if (target.ExposurePlans.All(ep => ep.RejectedReason == Reasons.FilterMoonAvoidance)) { return Reasons.TargetMoonAvoidance; }
+            if (target.ExposurePlans.All(ep => ep.RejectedReason == Reasons.FilterBodyPositionUnknown)) { return Reasons.TargetBodyPositionUnknown; }
             if (target.ExposurePlans.All(ep => ep.RejectedReason == Reasons.FilterHumidity)) { return Reasons.TargetHumidity; }
             return Reasons.TargetAllExposurePlans; // implicit assumption that all are indeed rejected
         }
@@ -632,6 +633,7 @@ namespace NINA.Plugin.TargetScheduler.Planning {
         public const string TargetComplete = "complete";
         public const string TargetNeverRises = "never rises at location";
         public const string TargetNotVisible = "not visible";
+        public const string TargetBodyPositionUnknown = "moving body position unknown";
         public const string TargetNotYetVisible = "not yet visible";
         public const string TargetMaxAltitude = "max altitude";
         public const string TargetMeridianWindowClipped = "clipped by meridian window";
@@ -646,6 +648,7 @@ namespace NINA.Plugin.TargetScheduler.Planning {
 
         public const string FilterComplete = "complete";
         public const string FilterMoonAvoidance = "moon avoidance";
+        public const string FilterBodyPositionUnknown = "moving body position unknown";
         public const string FilterTwilight = "twilight";
         public const string FilterHumidity = "humidity";
         public const string FilterNoExposuresPlanned = "no exposures planned";

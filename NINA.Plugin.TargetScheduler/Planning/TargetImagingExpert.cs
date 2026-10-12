@@ -1,12 +1,14 @@
 ﻿using NINA.Astrometry;
 using NINA.Equipment.Interfaces.Mediator;
 using NINA.Plugin.TargetScheduler.Astrometry;
+using NINA.Plugin.TargetScheduler.Bodies;
 using NINA.Plugin.TargetScheduler.Database.Schema;
 using NINA.Plugin.TargetScheduler.Planning.Interfaces;
 using NINA.Plugin.TargetScheduler.Shared.Utility;
 using NINA.Plugin.TargetScheduler.Util;
 using NINA.Profile.Interfaces;
 using System;
+using System.Linq;
 
 namespace NINA.Plugin.TargetScheduler.Planning {
 
@@ -62,7 +64,14 @@ namespace NINA.Plugin.TargetScheduler.Planning {
             if (target.Rejected) { return false; }
             IProject project = target.Project;
 
-            if (!AstrometryUtils.RisesAtLocation(observerInfo, target.Coordinates)) {
+            if (target.IsBody() && target.Ephemeris()?.Count is null or 0) {
+                TSLogger.Warning($"no position table for moving body {project.Name}/{target.Name} ({target.Designation}) - skipping");
+                SetRejected(target, Reasons.TargetBodyPositionUnknown);
+                return false;
+            }
+
+            Coordinates riseCoordinates = target.CoordinatesAt(atTime);
+            if ((!target.IsBody() || riseCoordinates != null) && !AstrometryUtils.RisesAtLocation(observerInfo, riseCoordinates)) {
                 TSLogger.Warning($"target {project.Name}/{target.Name} never rises at location - skipping");
                 SetRejected(target, Reasons.TargetNeverRises);
                 return false;
@@ -89,7 +98,7 @@ namespace NINA.Plugin.TargetScheduler.Planning {
 
             if (!targetVisibility.ImagingPossible) {
                 TSLogger.Warning($"Target not visible at all {project.Name}/{target.Name} on {Utils.FormatDateTimeFull(atTime)} at latitude {observerInfo.Latitude}");
-                SetRejected(target, Reasons.TargetNotVisible);
+                SetRejected(target, target.IsBody() && !BodyCovers(target, twilightSpan) ? Reasons.TargetBodyPositionUnknown : Reasons.TargetNotVisible);
                 return false;
             }
 
@@ -164,6 +173,12 @@ namespace NINA.Plugin.TargetScheduler.Planning {
                 return false;
             }
 
+            if (target.IsBody() && target.CoordinatesAt(actualStart) == null) {
+                TSLogger.Warning($"moving body {project.Name}/{target.Name} ({target.Designation}) has no position at {Utils.FormatDateTimeFull(actualStart)}");
+                SetRejected(target, Reasons.TargetBodyPositionUnknown);
+                return false;
+            }
+
             // Otherwise the target is a candidate
             target.StartTime = targetStartTime;
             target.EndTime = targetEndTime;
@@ -171,6 +186,11 @@ namespace NINA.Plugin.TargetScheduler.Planning {
             target.BonusTimeSpanEnd = target.MinimumTimeSpanEnd;
             target.CulminationTime = targetTransitTime;
             return true;
+        }
+
+        private static bool BodyCovers(ITarget target, TimeInterval span) {
+            BodyEphemeris ephemeris = target.Ephemeris();
+            return ephemeris?.Start != null && ephemeris.Start.Value <= span.EndTime.ToUniversalTime() && ephemeris.End.Value >= span.StartTime.ToUniversalTime();
         }
 
         /// <summary>
@@ -289,10 +309,13 @@ namespace NINA.Plugin.TargetScheduler.Planning {
         /// <param name="moonExpert"></param>
         public void MoonAvoidanceFilter(DateTime atTime, ITarget target, IMoonAvoidanceExpert moonExpert) {
             if (target.Rejected && target.RejectedReason != Reasons.TargetNotYetVisible) { return; }
+            bool positionUnknown = target.IsBody() && target.CoordinatesAt(atTime) == null;
 
             foreach (IExposure exposure in target.ExposurePlans) {
                 if (exposure.IsIncomplete()) {
-                    if (moonExpert.IsRejected(atTime, target, exposure)) {
+                    if (positionUnknown) {
+                        SetRejected(exposure, Reasons.FilterBodyPositionUnknown);
+                    } else if (moonExpert.IsRejected(atTime, target, exposure)) {
                         SetRejected(exposure, Reasons.FilterMoonAvoidance);
                     }
                 }
@@ -336,7 +359,7 @@ namespace NINA.Plugin.TargetScheduler.Planning {
                 if (!target.Rejected) {
                     MoonAvoidanceFilter(atTime, target, moonExpert);
                     if (AllExposurePlansRejected(target)) {
-                        SetRejected(target, Reasons.TargetMoonAvoidance);
+                        SetRejected(target, target.ExposurePlans.All(e => e.RejectedReason == Reasons.FilterBodyPositionUnknown) ? Reasons.TargetBodyPositionUnknown : Reasons.TargetMoonAvoidance);
                     }
                 }
 

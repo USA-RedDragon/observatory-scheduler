@@ -90,7 +90,8 @@ namespace NINA.Plugin.TargetScheduler.Sequencer {
                 this.exposureTemplate = GetExposureTemplate(context, exposurePlan);
             }
 
-            double? glare = SubLengthPlanning.Glare(SkyConditions.Observer(profileService.ActiveProfile), target.Coordinates, DateTime.Now);
+            DateTime now = DateTime.Now;
+            double? glare = SubLengthPlanning.Glare(SkyConditions.Observer(profileService.ActiveProfile), target.CoordinatesAt(now), now);
             SubLengthPlanning.Apply(exposure, target.Guid, exposureTemplate.FilterName, exposureTemplate.Gain, exposureTemplate.DefaultExposure, glare);
             TSLogger.Info($"SYNC client exposure: {exposureTemplate.FilterName} {SchedulerPlan.LengthText(exposure)}, server exposure {syncedExposure.ExposureLength} s");
         }

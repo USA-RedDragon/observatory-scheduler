@@ -1,5 +1,6 @@
 using NINA.Astrometry;
 using NINA.Plugin.TargetScheduler.Astrometry;
+using NINA.Plugin.TargetScheduler.Bodies;
 using NINA.Plugin.TargetScheduler.Database;
 using NINA.Plugin.TargetScheduler.Database.Schema;
 using NINA.Plugin.TargetScheduler.Goals;
@@ -178,7 +179,7 @@ namespace NINA.Plugin.TargetScheduler.Planning {
 
             foreach (Project project in projects ?? new List<Project>()) {
                 HorizonDefinition horizon = PlanningProject.DetermineHorizon(profile, project);
-                foreach (Target target in project.Targets.Where(t => t.Enabled && !string.IsNullOrWhiteSpace(t.Guid))) {
+                foreach (Target target in project.Targets.Where(t => t.Enabled && !string.IsNullOrWhiteSpace(t.Guid) && TargetBodyTable.Current.Designation(t.Guid) == null)) {
                     if (token.IsCancellationRequested) { return; }
 
                     List<ExposureTemplate> templates = target.ExposurePlans
