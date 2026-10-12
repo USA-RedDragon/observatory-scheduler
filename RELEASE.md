@@ -1,5 +1,5 @@
-Observatory Scheduler 5.8.2.217: framing for comets and other moving bodies.
+Observatory Scheduler 5.8.2.218: seasons for comets and asteroids.
 
-- **Framing**: a moving-body target can keep a frame rotation and a head offset; the mount and rotator frame the body that way and keep the offset as it moves.
+- **Seasons**: comet and asteroid targets get a season from the stacker's nightly positions and brightness, and score like fixed targets.
 
-On start-up the plugin adds `rotation_deg` and `offset_frac` to `ts_target_body`. The home database needs the same two columns, then a `sync-triggers ts_target_body` on the observatory so they sync. Requires NINA 3.1.2.9001 or later. Install like 5.8.2.216.
+On start-up the plugin adds `ts_body_night` to its SQLite database. The home database needs the same table with its SymmetricDS channel `bodynight` and trigger (install the plugin first). Requires NINA 3.1.2.9001 or later. Install like 5.8.2.217.

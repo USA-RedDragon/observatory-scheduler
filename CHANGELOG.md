@@ -1,5 +1,8 @@
 # Observatory Scheduler
 
+## 5.8.2.218 - 2026-10-12
+* Comets and asteroids get a season. The stacker publishes one row per night for each body target in the new table `ts_body_night` (position at local mean midnight, magnitude estimate and limit); the season worker counts the body's season from those rows with the same rules as fixed targets plus "the night's magnitude is no fainter than its limit", and writes it to `ts_target_season`. Rarity, Seasonal Runway and Season Priority score bodies from it. The worker recomputes a body within about 10 minutes when its nights change. Fixed targets are unchanged.
+
 ## 5.8.2.217 - 2026-10-12
 * Moving-body framing: a body target can store a frame rotation and a head offset (`ts_target_body.rotation_deg` and `offset_frac`, set by `project.create` or the new `target.framing` command). `rotation_deg` is the position angle of the frame's long side; `offset_frac` is where the body sits from the frame center along the long side, as a fraction of it (positive toward the `rotation_deg` end, at most 0.45 either way). Slew and center go to the body's position at that time shifted by the offset, the rotator lays the long side along `rotation_deg` (taken at the frame center), and drift re-centering keeps the same offset from the body. A framing change on the imaging target forces a new slew and rotate. The columns are added on start-up; if the database is locked the add is retried later and the plugin keeps running. Targets without framing behave as before.
 
