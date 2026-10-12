@@ -35,6 +35,7 @@
                         <Button Margin="6,0,0,0" Padding="8,0" Command="{Binding NewTokenCommand}" Content="New token" />
                     </StackPanel>
                     <CheckBox Margin="0,0,0,6" Content="Web editing (makes Target Management here read-only)" IsChecked="{Binding WebEditing}" IsEnabled="{Binding Available}" />
+                    <CheckBox Margin="0,0,0,6" Content="Live autofocus points for the web UI (reads the Hocus Focus autofocus window, NINA 3.1.2.9001 with Hocus Focus 3.0.0.21 only)" IsChecked="{Binding LiveAutofocus}" IsEnabled="{Binding Available}" />
                 </StackPanel>
             </Expander>
 

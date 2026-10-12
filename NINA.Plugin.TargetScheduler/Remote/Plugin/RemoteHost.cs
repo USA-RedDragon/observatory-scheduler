@@ -51,6 +51,8 @@ namespace NINA.Plugin.TargetScheduler.Remote.Plugin {
         private readonly IFocuserMediator focuserMediator;
         private readonly AutofocusLatest autofocus = new AutofocusLatest();
         private AutofocusObserver autofocusObserver;
+        private readonly IFilterWheelMediator filterWheelMediator;
+        private LiveAutofocusProbe liveAutofocus;
 
         public RemoteSettings Settings { get; }
         public SchedulerControl Control { get; }
@@ -64,13 +66,13 @@ namespace NINA.Plugin.TargetScheduler.Remote.Plugin {
         public IReadOnlyDictionary<string, double> DefaultRuleWeights => Planning.Scoring.Rules.ScoringRule.GetDefaultRuleWeights().ToDictionary(w => w.name, w => w.weight);
         ISchedulerControl ICommandContext.Control => Control;
 
-        public static void Start(IProfileService profileService, IFocuserMediator focuserMediator = null) {
+        public static void Start(IProfileService profileService, IFocuserMediator focuserMediator = null, IFilterWheelMediator filterWheelMediator = null) {
             lock (initLock) {
                 if (Instance != null) {
                     return;
                 }
                 try {
-                    Instance = new RemoteHost(profileService, focuserMediator);
+                    Instance = new RemoteHost(profileService, focuserMediator, filterWheelMediator);
                     Instance.Run();
                 } catch (Exception e) {
                     TSLogger.Error($"remote control failed to start: {e}");
@@ -86,9 +88,10 @@ namespace NINA.Plugin.TargetScheduler.Remote.Plugin {
             }
         }
 
-        private RemoteHost(IProfileService profileService, IFocuserMediator focuserMediator) {
+        private RemoteHost(IProfileService profileService, IFocuserMediator focuserMediator, IFilterWheelMediator filterWheelMediator) {
             this.profileService = profileService;
             this.focuserMediator = focuserMediator;
+            this.filterWheelMediator = filterWheelMediator;
             connectionString = $"Data Source={Path.Combine(Common.PLUGIN_HOME, "schedulerdb.sqlite")};";
             database = new SqlSchedulerDatabase(Connect);
             tracker = new ExposureTracker(null, (t, since) => database.CountAcquired(t, since));
@@ -141,6 +144,12 @@ namespace NINA.Plugin.TargetScheduler.Remote.Plugin {
             } catch (Exception e) {
                 TSLogger.Error($"autofocus observer failed to start: {e}");
             }
+            try {
+                liveAutofocus = new LiveAutofocusProbe(filterWheelMediator, () => Settings.Snapshot().LiveAutofocus, () => Push("status", null));
+                liveAutofocus.Start();
+            } catch (Exception e) {
+                TSLogger.Error($"live autofocus probe failed to start: {e}");
+            }
         }
 
         private (string Name, string Guid) CurrentTarget() {
@@ -150,6 +159,7 @@ namespace NINA.Plugin.TargetScheduler.Remote.Plugin {
         }
 
         private void Stop() {
+            liveAutofocus?.Stop();
             autofocusObserver?.Stop();
             timer?.Dispose();
             lock (sync) {
@@ -500,7 +510,7 @@ namespace NINA.Plugin.TargetScheduler.Remote.Plugin {
                     Skips = skips,
                     Pending = pending,
                     LastPlanAt = lastPlanAt,
-                    Autofocus = autofocus.Snapshot(),
+                    Autofocus = liveAutofocus?.Snapshot() ?? autofocus.Snapshot(),
                 };
             }
         }

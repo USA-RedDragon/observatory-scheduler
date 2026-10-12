@@ -48,6 +48,11 @@ namespace NINA.Plugin.TargetScheduler.Remote.Plugin {
             set => Update(d => d.WebEditing = value);
         }
 
+        public bool LiveAutofocus {
+            get => Data.LiveAutofocus;
+            set => Update(d => d.LiveAutofocus = value);
+        }
+
         public string Summary {
             get {
                 if (!Available) {

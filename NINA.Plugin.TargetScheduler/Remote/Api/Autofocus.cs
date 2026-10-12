@@ -10,6 +10,7 @@ using System.Text.Json.Serialization;
 namespace NINA.Plugin.TargetScheduler.Remote.Api {
 
     public static class AutofocusStates {
+        public const string Running = "running";
         public const string Finished = "finished";
         public const string Failed = "failed";
     }

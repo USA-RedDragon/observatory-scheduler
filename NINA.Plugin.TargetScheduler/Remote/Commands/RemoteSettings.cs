@@ -22,6 +22,9 @@ namespace NINA.Plugin.TargetScheduler.Remote.Commands {
 
         [JsonPropertyName("skips")]
         public string Skips { get; set; }
+
+        [JsonPropertyName("live_autofocus")]
+        public bool LiveAutofocus { get; set; } = true;
     }
 
     public class RemoteSettings {
@@ -57,7 +60,7 @@ namespace NINA.Plugin.TargetScheduler.Remote.Commands {
 
         public RemoteSettingsData Snapshot() {
             lock (sync) {
-                return new RemoteSettingsData { ApiEnabled = data.ApiEnabled, ApiPort = data.ApiPort, ApiToken = data.ApiToken, WebEditing = data.WebEditing, Skips = data.Skips };
+                return new RemoteSettingsData { ApiEnabled = data.ApiEnabled, ApiPort = data.ApiPort, ApiToken = data.ApiToken, WebEditing = data.WebEditing, Skips = data.Skips, LiveAutofocus = data.LiveAutofocus };
             }
         }
 
