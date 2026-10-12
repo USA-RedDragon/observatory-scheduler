@@ -1,3 +1,4 @@
+using NINA.Plugin.TargetScheduler.Bodies;
 using NINA.Plugin.TargetScheduler.Goals;
 using NINA.Plugin.TargetScheduler.Planning.Exposures;
 using NINA.Plugin.TargetScheduler.Remote.Commands;
@@ -25,6 +26,8 @@ namespace NINA.Plugin.TargetScheduler.Database {
                     Darks.BiasStore.Ensure(context.Database.Connection);
                     Flats.FlatRequestStore.Ensure(context.Database.Connection);
                     SubLengthStore.Ensure(context.Database.Connection);
+                    TargetBodyStore.Ensure(context.Database.Connection);
+                    BodyPositionStore.Ensure(context.Database.Connection);
                     ensured = true;
                     TSLogger.Info("fork goal schema ensured");
                     RefreshGoalSource(context);
@@ -43,6 +46,7 @@ namespace NINA.Plugin.TargetScheduler.Database {
             PlannerSignals.Current = signals;
             MosaicCompletion.GoalSource = source.Count == 0 ? null : source;
             RefreshSubLengths(context);
+            RefreshBodies(context);
             RefreshPanelHistory(context);
             return MosaicCompletion.GoalSource;
         }
@@ -55,6 +59,19 @@ namespace NINA.Plugin.TargetScheduler.Database {
             } catch (Exception ex) {
                 SubLengthTable.Current = SubLengthTable.Empty;
                 TSLogger.Warning($"failed to load {SubLengthStore.Table}, using the plan or template exposure lengths: {ex.Message}");
+            }
+        }
+
+        public static void RefreshBodies(SchedulerDatabaseContext context) {
+            try {
+                Stopwatch sw = Stopwatch.StartNew();
+                TargetBodyTable.Current = TargetBodyStore.Load(context.Database.Connection);
+                BodyPositionTable.Current = BodyPositionStore.Load(context.Database.Connection);
+                TSLogger.Debug($"loaded moving bodies: {TargetBodyTable.Current.Count} targets, {BodyPositionTable.Current.Count} positions in {sw.ElapsedMilliseconds}ms");
+            } catch (Exception ex) {
+                TargetBodyTable.Current = TargetBodyTable.Empty;
+                BodyPositionTable.Current = BodyPositionTable.Empty;
+                TSLogger.Warning($"failed to load {TargetBodyStore.Table} or {BodyPositionStore.Table}, moving-body targets are not imaged: {ex.Message}");
             }
         }
 
