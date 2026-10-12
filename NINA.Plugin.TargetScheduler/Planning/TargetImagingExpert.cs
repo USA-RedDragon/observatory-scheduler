@@ -293,15 +293,15 @@ namespace NINA.Plugin.TargetScheduler.Planning {
                 SetRejected(exposure, Reasons.FilterTwilight);
             }
 
-            if (!exposure.Rejected && ManagedTwilightRejects(exposure, atTime, currentTwilightLevel)) {
+            if (!exposure.Rejected && ManagedTwilightRejects(exposure, atTime)) {
                 SetRejected(exposure, Reasons.FilterTwilight);
             }
         }
 
-        public bool ManagedTwilightRejects(IExposure exposure, DateTime atTime, TwilightLevel currentTwilightLevel) {
-            if (!exposure.IsManaged || currentTwilightLevel == TwilightLevel.Nighttime || FilterKind.IsNarrowband(exposure.FilterName)) { return false; }
+        public bool ManagedTwilightRejects(IExposure exposure, DateTime atTime) {
+            if (!exposure.IsManaged || FilterKind.IsNarrowband(exposure.FilterName)) { return false; }
             double seconds = SubLengthPlanning.Seconds(exposure, exposure.PlanTarget, atTime);
-            bool rejected = TwilightRule.Rejects(true, exposure.FilterName, false, t => AstroUtil.GetSunAltitude(t, observerInfo), atTime, seconds);
+            bool rejected = TwilightRule.Rejects(true, exposure.FilterName, t => AstroUtil.GetSunAltitude(t, observerInfo), atTime, seconds);
             if (rejected) {
                 TSLogger.Debug($"managed broadband {exposure.PlanTarget?.Name}/{exposure.FilterName} rejected for twilight at {Utils.FormatDateTimeFull(atTime)}: sun above {TwilightRule.BroadbandSunLimit}° at the start or after {seconds:0.#} s");
             }

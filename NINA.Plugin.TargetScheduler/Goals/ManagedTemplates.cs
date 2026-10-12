@@ -98,14 +98,14 @@ namespace NINA.Plugin.TargetScheduler.Goals {
     public static class TwilightRule {
         public const double BroadbandSunLimit = -15;
 
-        public static bool Rejects(bool managed, string filter, bool nighttime, double sunAtStart, double sunAtEnd) {
-            if (!managed || nighttime || FilterKind.IsNarrowband(filter)) { return false; }
+        public static bool Rejects(bool managed, string filter, double sunAtStart, double sunAtEnd) {
+            if (!managed || FilterKind.IsNarrowband(filter)) { return false; }
             return sunAtStart > BroadbandSunLimit || sunAtEnd > BroadbandSunLimit;
         }
 
-        public static bool Rejects(bool managed, string filter, bool nighttime, Func<DateTime, double> sunAltitude, DateTime atTime, double exposureSeconds) {
-            if (!managed || nighttime || FilterKind.IsNarrowband(filter) || sunAltitude == null) { return false; }
-            return Rejects(true, filter, false, sunAltitude(atTime), sunAltitude(atTime.AddSeconds(Math.Max(0, exposureSeconds))));
+        public static bool Rejects(bool managed, string filter, Func<DateTime, double> sunAltitude, DateTime atTime, double exposureSeconds) {
+            if (!managed || FilterKind.IsNarrowband(filter) || sunAltitude == null) { return false; }
+            return Rejects(true, filter, sunAltitude(atTime), sunAltitude(atTime.AddSeconds(Math.Max(0, exposureSeconds))));
         }
     }
 

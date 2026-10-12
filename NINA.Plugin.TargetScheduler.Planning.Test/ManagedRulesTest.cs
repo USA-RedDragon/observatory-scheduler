@@ -30,39 +30,41 @@ namespace NINA.Plugin.TargetScheduler.Planning.Test {
         [TestCase(-15.0, false)]
         [TestCase(-14.9, true)]
         public void DuskBroadbandNeedsTheSunAtOrBelowTheLimit(double sun, bool rejected) {
-            TwilightRule.Rejects(true, "Red", false, Dusk(sun), T0, 300).Should().Be(rejected);
-            TwilightRule.Rejects(true, "Luminance", false, Dusk(sun), T0, 300).Should().Be(rejected);
+            TwilightRule.Rejects(true, "Red", Dusk(sun), T0, 300).Should().Be(rejected);
+            TwilightRule.Rejects(true, "Luminance", Dusk(sun), T0, 300).Should().Be(rejected);
         }
 
         [Test]
         public void DawnBroadbandIsRejectedWhenTheExposureEndsAboveTheLimit() {
-            TwilightRule.Rejects(true, "Red", false, Dawn(-16), T0, 240).Should().BeFalse();
-            TwilightRule.Rejects(true, "Red", false, Dawn(-16), T0, 300).Should().BeFalse();
-            TwilightRule.Rejects(true, "Red", false, Dawn(-16), T0, 303).Should().BeTrue();
-            TwilightRule.Rejects(true, "Red", false, Dawn(-16), T0, 600).Should().BeTrue();
-            TwilightRule.Rejects(true, "Red", false, Dawn(-14.9), T0, 1).Should().BeTrue();
-            TwilightRule.Rejects(true, "Blue", false, -16, -14.9).Should().BeTrue();
-            TwilightRule.Rejects(true, "Blue", false, -16, -15.1).Should().BeFalse();
+            TwilightRule.Rejects(true, "Red", Dawn(-16), T0, 240).Should().BeFalse();
+            TwilightRule.Rejects(true, "Red", Dawn(-16), T0, 300).Should().BeFalse();
+            TwilightRule.Rejects(true, "Red", Dawn(-16), T0, 303).Should().BeTrue();
+            TwilightRule.Rejects(true, "Red", Dawn(-16), T0, 600).Should().BeTrue();
+            TwilightRule.Rejects(true, "Red", Dawn(-14.9), T0, 1).Should().BeTrue();
+            TwilightRule.Rejects(true, "Blue", -16, -14.9).Should().BeTrue();
+            TwilightRule.Rejects(true, "Blue", -16, -15.1).Should().BeFalse();
         }
 
         [Test]
-        public void NighttimeIsNeverGated() {
-            TwilightRule.Rejects(true, "Red", true, Dawn(-14), T0, 600).Should().BeFalse();
+        public void ALongExposureStartingInDeepNightIsGatedAtItsEnd() {
+            TwilightRule.Rejects(true, "Red", Dawn(-18), T0, 600).Should().BeFalse();
+            TwilightRule.Rejects(true, "Red", Dawn(-18), T0, 1000).Should().BeTrue();
+            TwilightRule.Rejects(true, "Red", Dusk(-30), T0, 1000).Should().BeFalse();
         }
 
         [TestCase(-14.9)]
         [TestCase(-13.0)]
         [TestCase(-12.1)]
         public void NarrowbandIsAllowedInTwilight(double sun) {
-            TwilightRule.Rejects(true, "H-a", false, Dawn(sun), T0, 600).Should().BeFalse();
-            TwilightRule.Rejects(true, "O-III", false, Dusk(sun), T0, 600).Should().BeFalse();
-            TwilightRule.Rejects(true, "S-II", false, sun, sun + 2).Should().BeFalse();
+            TwilightRule.Rejects(true, "H-a", Dawn(sun), T0, 600).Should().BeFalse();
+            TwilightRule.Rejects(true, "O-III", Dusk(sun), T0, 600).Should().BeFalse();
+            TwilightRule.Rejects(true, "S-II", sun, sun + 2).Should().BeFalse();
         }
 
         [Test]
         public void NonManagedExposuresAreUnchanged() {
-            TwilightRule.Rejects(false, "Red", false, Dawn(-13), T0, 600).Should().BeFalse();
-            TwilightRule.Rejects(false, "Red", false, -13, -12).Should().BeFalse();
+            TwilightRule.Rejects(false, "Red", Dawn(-13), T0, 600).Should().BeFalse();
+            TwilightRule.Rejects(false, "Red", -13, -12).Should().BeFalse();
             MoonFloor.Rejects(false, false, 40, 1).Should().BeFalse();
         }
 
