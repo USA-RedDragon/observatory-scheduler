@@ -27,6 +27,11 @@ namespace NINA.Plugin.TargetScheduler.Database {
                     Flats.FlatRequestStore.Ensure(context.Database.Connection);
                     SubLengthStore.Ensure(context.Database.Connection);
                     BodySchema.TryEnsure(context.Database.Connection, m => TSLogger.Warning(m));
+                    try {
+                        TargetWindowStore.Ensure(context.Database.Connection);
+                    } catch (Exception ex) {
+                        TSLogger.Warning($"failed to create {TargetWindowStore.Table}, planning without event windows: {ex.Message}");
+                    }
                     ensured = true;
                     TSLogger.Info("fork goal schema ensured");
                     RefreshGoalSource(context);
@@ -66,6 +71,18 @@ namespace NINA.Plugin.TargetScheduler.Database {
             BodySnapshot snapshot = BodySchema.Load(context.Database.Connection, BodySnapshot.Current, m => TSLogger.Warning(m));
             BodySnapshot.Current = snapshot;
             TSLogger.Debug($"loaded moving bodies: {snapshot.Targets.Count} targets, {snapshot.Positions.Count} positions in {sw.ElapsedMilliseconds}ms");
+            RefreshTargetWindows(context);
+        }
+
+        public static void RefreshTargetWindows(SchedulerDatabaseContext context) {
+            try {
+                Stopwatch sw = Stopwatch.StartNew();
+                TargetWindowTable.Current = TargetWindowStore.Load(context.Database.Connection);
+                TSLogger.Debug($"loaded event windows: {TargetWindowTable.Current.Count} targets in {sw.ElapsedMilliseconds}ms");
+            } catch (Exception ex) {
+                TargetWindowTable.Current = TargetWindowTable.Empty;
+                TSLogger.Warning($"failed to load {TargetWindowStore.Table}, planning without event windows: {ex.Message}");
+            }
         }
 
         public static void RefreshPanelHistory(SchedulerDatabaseContext context) {
