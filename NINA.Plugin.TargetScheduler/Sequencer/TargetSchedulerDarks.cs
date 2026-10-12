@@ -28,7 +28,7 @@ using System.Threading.Tasks;
 namespace NINA.Plugin.TargetScheduler.Sequencer {
 
     [ExportMetadata("Name", "Target Scheduler Darks")]
-    [ExportMetadata("Description", "Takes the bias frames the stacker's bias backlog asks for, at the current setpoint and the camera's minimum exposure, and then the darks the stacker's dark backlog asks for, at each one's set temperature, while the cover is already closed and the sun is below the light-safe altitude. It uses only the camera, and when the profile has a flat device it reads the cover state without changing it and takes nothing unless the cover reports Closed.")]
+    [ExportMetadata("Description", "Takes the bias frames the stacker's bias backlog asks for, at the current setpoint and the camera's minimum exposure, and then the darks the stacker's dark backlog asks for, at each one's set temperature, while the cover is already closed and the sun is below the light-safe altitude. It uses only the camera, and when the profile has a flat device it reads the cover state without changing it and takes nothing unless the cover reports Closed with the light off, or, with the device powered off, was last reported so while connected.")]
     [ExportMetadata("Icon", "Scheduler.SchedulerSVG")]
     [ExportMetadata("Category", "Target Scheduler")]
     [Export(typeof(ISequenceItem))]
@@ -60,6 +60,7 @@ namespace NINA.Plugin.TargetScheduler.Sequencer {
             this.safetyMonitorMediator = safetyMonitorMediator;
             this.weatherDataMediator = weatherDataMediator;
             this.flatDeviceMediator = flatDeviceMediator;
+            CoverWatch.Ensure(flatDeviceMediator);
         }
 
         public TargetSchedulerDarks(TargetSchedulerDarks cloneMe) : this(
@@ -209,6 +210,7 @@ namespace NINA.Plugin.TargetScheduler.Sequencer {
                     c.Device = info.Name;
                 }
                 c.State = Enum.TryParse(info.CoverState.ToString(), out DarkCoverState state) ? state : DarkCoverState.Unknown;
+                return DarkRuntime.Cover.Apply(c);
             } catch (Exception ex) {
                 c.ReadError = ex.Message;
             }

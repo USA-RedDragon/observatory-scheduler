@@ -1,4 +1,5 @@
 using NINA.Equipment.Equipment.MyCamera;
+using NINA.Equipment.Equipment.MyFlatDevice;
 using NINA.Equipment.Interfaces.Mediator;
 using NINA.Plugin.TargetScheduler.Shared.Utility;
 using System;
@@ -17,6 +18,8 @@ namespace NINA.Plugin.TargetScheduler.Darks {
         private static readonly Lazy<BiasStore> biasStore = new Lazy<BiasStore>(() => new BiasStore(Connect));
         private static readonly Lazy<Flats.FlatRequestStore> flatRequestStore = new Lazy<Flats.FlatRequestStore>(() => new Flats.FlatRequestStore(Connect));
 
+        public static readonly CoverMemory Cover = new CoverMemory();
+
         public static DarkState State => state.Value;
         public static DarkStore Store => store.Value;
         public static BiasStore BiasStore => biasStore.Value;
@@ -26,6 +29,29 @@ namespace NINA.Plugin.TargetScheduler.Darks {
             var c = new SQLiteConnection($"Data Source={Path.Combine(Common.PLUGIN_HOME, "schedulerdb.sqlite")};") { BusyTimeout = 5000 };
             c.Open();
             return c;
+        }
+    }
+
+    public sealed class CoverWatch : IFlatDeviceConsumer {
+        private static readonly object sync = new object();
+        private static CoverWatch instance;
+
+        public static void Ensure(IFlatDeviceMediator flatDevice) {
+            if (flatDevice == null) { return; }
+            lock (sync) {
+                if (instance != null) { return; }
+                instance = new CoverWatch();
+                flatDevice.RegisterConsumer(instance);
+            }
+        }
+
+        public void UpdateDeviceInfo(FlatDeviceInfo info) {
+            if (info == null) { return; }
+            DarkCoverState state = Enum.TryParse(info.CoverState.ToString(), out DarkCoverState s) ? s : DarkCoverState.Unknown;
+            DarkRuntime.Cover.Observe(info.Connected, state, info.LightOn, DateTime.UtcNow);
+        }
+
+        public void Dispose() {
         }
     }
 

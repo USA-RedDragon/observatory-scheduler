@@ -94,6 +94,8 @@ namespace NINA.Plugin.TargetScheduler.Darks {
         public bool Connected { get; set; }
         public DarkCoverState State { get; set; }
         public bool LightOn { get; set; }
+        public bool Remembered { get; set; }
+        public DateTime? SeenAt { get; set; }
         public string ReadError { get; set; }
     }
 
@@ -188,7 +190,16 @@ namespace NINA.Plugin.TargetScheduler.Darks {
                 return $"{device} could not be read ({c.ReadError}), so the cover is not confirmed closed";
             }
             if (!c.Connected) {
-                return $"{device} is not connected, so the cover is not confirmed closed";
+                if (!c.Remembered) {
+                    return $"{device} is not connected and its cover has not been seen since NINA started, so the cover is not confirmed closed";
+                }
+                if (c.State != DarkCoverState.Closed) {
+                    return $"{device} is not connected and last reported its cover as {c.State}, not Closed";
+                }
+                if (c.LightOn) {
+                    return $"{device} is not connected and last reported its light on";
+                }
+                return null;
             }
             if (c.State != DarkCoverState.Closed) {
                 return $"{device} reports its cover as {c.State}, not Closed";
