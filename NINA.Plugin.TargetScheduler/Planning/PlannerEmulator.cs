@@ -193,6 +193,7 @@ namespace NINA.Plugin.TargetScheduler.Planning {
     internal class EmulatedExposure : IExposure {
         public string PlanId { get; set; }
         public bool IsEnabled { get; set; }
+        public bool IsManaged { get; set; }
         public string FilterName { get; set; }
         public double ExposureLength { get; set; }
         public double PlanExposureLength { get; set; }

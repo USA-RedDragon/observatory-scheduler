@@ -48,6 +48,19 @@ namespace NINA.Plugin.TargetScheduler.Planning.Exposures {
             }
         }
 
+        public static double Seconds(IExposure exposure, ITarget target, DateTime atTime) {
+            if (exposure == null) { return 0; }
+            double? glare = target == null ? null : Glare(SkyConditions.CurrentObserver, target.CoordinatesAt(atTime), atTime);
+            double template = exposure.TemplateExposureLength > 0 ? exposure.TemplateExposureLength : exposure.ExposureLength;
+            bool planFirst = target != null && TargetWindowTable.Current.Get(target.Guid) != null;
+            SubLengthChoice choice = SubLength.Choose(SubLengthTable.Current, target?.Guid, exposure.FilterName, exposure.Gain ?? -1, glare, exposure.PlanExposureLength, template, planFirst);
+            if (target != null && target.IsBody()) {
+                int binning = Math.Max(1, (int)(exposure.BinningMode?.X ?? 1));
+                BodyTrail.Cap(choice, BodyMaxSeconds(target, atTime, choice.Seconds, null, binning));
+            }
+            return choice.Seconds;
+        }
+
         public static SubLengthChoice Apply(IExposure exposure, string targetGuid, double? glare) {
             if (exposure == null) { return null; }
             double template = exposure.TemplateExposureLength > 0 ? exposure.TemplateExposureLength : exposure.ExposureLength;

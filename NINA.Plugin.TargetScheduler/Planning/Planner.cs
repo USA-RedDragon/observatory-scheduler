@@ -383,6 +383,10 @@ namespace NINA.Plugin.TargetScheduler.Planning {
         /// </summary>
         /// <param name="projects"></param>
         /// <returns></returns>
+        private static bool WaitsForManagedTwilight(ITarget target) {
+            return target.RejectedReason == Reasons.TargetTwilight && target.ExposurePlans.Any(e => e.IsManaged);
+        }
+
         public ITarget GetNextPossibleTarget(List<IProject> projects) {
             if (NoProjects(projects)) { return null; }
 
@@ -397,7 +401,8 @@ namespace NINA.Plugin.TargetScheduler.Planning {
                         && target.RejectedReason != Reasons.TargetBeforeMeridianWindow
                         && target.RejectedReason != Reasons.TargetMeridianFlipClipped
                         && target.RejectedReason != Reasons.TargetMaxAltitude
-                        && target.RejectedReason != Reasons.TargetBeforeEventWindow) {
+                        && target.RejectedReason != Reasons.TargetBeforeEventWindow
+                        && !WaitsForManagedTwilight(target)) {
                         continue;
                     }
 

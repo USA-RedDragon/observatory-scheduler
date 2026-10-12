@@ -89,4 +89,31 @@ namespace NINA.Plugin.TargetScheduler.Goals {
             return Narrowband(filter) ? NarrowbandDefaultExposure : BroadbandDefaultExposure;
         }
     }
+
+    public static class TwilightRule {
+        public const double BroadbandSunLimit = -15;
+
+        public static bool Rejects(bool managed, string filter, bool nighttime, double sunAtStart, double sunAtEnd) {
+            if (!managed || nighttime || FilterKind.IsNarrowband(filter)) { return false; }
+            return sunAtStart > BroadbandSunLimit || sunAtEnd > BroadbandSunLimit;
+        }
+
+        public static bool Rejects(bool managed, string filter, bool nighttime, Func<DateTime, double> sunAltitude, DateTime atTime, double exposureSeconds) {
+            if (!managed || nighttime || FilterKind.IsNarrowband(filter) || sunAltitude == null) { return false; }
+            return Rejects(true, filter, false, sunAltitude(atTime), sunAltitude(atTime.AddSeconds(Math.Max(0, exposureSeconds))));
+        }
+    }
+
+    public static class MoonFloor {
+        public const double Degrees = 20;
+
+        public static bool Rejects(bool managed, bool ignoreMoon, double moonAltitude, double separation) {
+            if (!managed || ignoreMoon) { return false; }
+            return moonAltitude > 0 && separation < Degrees;
+        }
+
+        public static DateTime MidExposure(DateTime atTime, double exposureSeconds) {
+            return atTime.AddSeconds(Math.Max(0, exposureSeconds) / 2);
+        }
+    }
 }

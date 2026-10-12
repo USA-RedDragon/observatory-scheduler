@@ -3,6 +3,8 @@ using NINA.Equipment.Interfaces.Mediator;
 using NINA.Plugin.TargetScheduler.Astrometry;
 using NINA.Plugin.TargetScheduler.Bodies;
 using NINA.Plugin.TargetScheduler.Database.Schema;
+using NINA.Plugin.TargetScheduler.Goals;
+using NINA.Plugin.TargetScheduler.Planning.Exposures;
 using NINA.Plugin.TargetScheduler.Planning.Interfaces;
 using NINA.Plugin.TargetScheduler.Shared.Utility;
 using NINA.Plugin.TargetScheduler.Util;
@@ -290,6 +292,35 @@ namespace NINA.Plugin.TargetScheduler.Planning {
             if (offset > 0 && !twilightCircumstances.CheckTwilightWithOffset(atTime, exposure.TwilightLevel, offset)) {
                 SetRejected(exposure, Reasons.FilterTwilight);
             }
+
+            if (!exposure.Rejected && ManagedTwilightRejects(exposure, atTime, currentTwilightLevel)) {
+                SetRejected(exposure, Reasons.FilterTwilight);
+            }
+        }
+
+        public bool ManagedTwilightRejects(IExposure exposure, DateTime atTime, TwilightLevel currentTwilightLevel) {
+            if (!exposure.IsManaged || currentTwilightLevel == TwilightLevel.Nighttime || FilterKind.IsNarrowband(exposure.FilterName)) { return false; }
+            double seconds = SubLengthPlanning.Seconds(exposure, exposure.PlanTarget, atTime);
+            bool rejected = TwilightRule.Rejects(true, exposure.FilterName, false, t => AstroUtil.GetSunAltitude(t, observerInfo), atTime, seconds);
+            if (rejected) {
+                TSLogger.Debug($"managed broadband {exposure.PlanTarget?.Name}/{exposure.FilterName} rejected for twilight at {Utils.FormatDateTimeFull(atTime)}: sun above {TwilightRule.BroadbandSunLimit}° at the start or after {seconds:0.#} s");
+            }
+            return rejected;
+        }
+
+        public bool MoonFloorRejects(DateTime atTime, ITarget target, IExposure exposure) {
+            if (!exposure.IsManaged || target.Window()?.IgnoreMoon == true) { return false; }
+            double seconds = SubLengthPlanning.Seconds(exposure, target, atTime);
+            DateTime mid = MoonFloor.MidExposure(atTime, seconds);
+            Coordinates coordinates = target.CoordinatesAt(mid);
+            if (coordinates == null) { return false; }
+            MoonSample moon = MoonEphemeris.At(observerInfo, mid);
+            double separation = MoonAvoidance.Separation(moon.RaDegrees, moon.Dec, AstroUtil.HoursToDegrees(coordinates.RA), coordinates.Dec);
+            bool rejected = MoonFloor.Rejects(true, false, moon.Altitude, separation);
+            if (rejected) {
+                TSLogger.Debug($"managed {target.Name}/{exposure.FilterName} rejected by the moon floor at {Utils.FormatDateTimeFull(mid)}: moon altitude {moon.Altitude:0.#}°, separation {separation:0.#}° < {MoonFloor.Degrees}°");
+            }
+            return rejected;
         }
 
         /// <summary>
@@ -339,6 +370,8 @@ namespace NINA.Plugin.TargetScheduler.Planning {
                     if (positionUnknown) {
                         SetRejected(exposure, Reasons.FilterBodyPositionUnknown);
                     } else if (moonExpert.IsRejected(atTime, target, exposure)) {
+                        SetRejected(exposure, Reasons.FilterMoonAvoidance);
+                    } else if (MoonFloorRejects(atTime, target, exposure)) {
                         SetRejected(exposure, Reasons.FilterMoonAvoidance);
                     }
                 }

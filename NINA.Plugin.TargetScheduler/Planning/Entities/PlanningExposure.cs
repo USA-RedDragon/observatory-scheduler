@@ -1,6 +1,7 @@
 ﻿using NINA.Core.Model.Equipment;
 using NINA.Plugin.TargetScheduler.Astrometry;
 using NINA.Plugin.TargetScheduler.Database.Schema;
+using NINA.Plugin.TargetScheduler.Goals;
 using NINA.Plugin.TargetScheduler.Planning.Exposures;
 using NINA.Plugin.TargetScheduler.Planning.Interfaces;
 using System;
@@ -13,6 +14,7 @@ namespace NINA.Plugin.TargetScheduler.Planning.Entities {
         public int DatabaseId { get; set; }
         public string Guid { get; set; }
         public bool IsEnabled { get; set; }
+        public bool IsManaged { get; set; }
         public string FilterName { get; set; }
         public double ExposureLength { get; set; }
         public double PlanExposureLength { get; set; }
@@ -53,6 +55,7 @@ namespace NINA.Plugin.TargetScheduler.Planning.Entities {
             this.DatabaseId = exposurePlan.Id;
             this.Guid = exposurePlan.Guid;
             this.IsEnabled = exposurePlan.IsEnabled;
+            this.IsManaged = ManagedTemplateTable.Current.IsManaged(exposureTemplate.Id);
             this.FilterName = exposureTemplate.FilterName;
             this.Gain = GetNullableIntValue(exposureTemplate.Gain);
             this.PlanExposureLength = exposurePlan.Exposure;
@@ -100,6 +103,7 @@ namespace NINA.Plugin.TargetScheduler.Planning.Entities {
             StringBuilder sb = new StringBuilder();
             sb.AppendLine($"Id: {PlanId}");
             sb.AppendLine($"Enabled: {IsEnabled}");
+            sb.AppendLine($"Managed: {IsManaged}");
             sb.AppendLine($"FilterName: {FilterName}");
             sb.AppendLine($"ExposureLength: {ExposureLength} ({LengthSource}, bucket {LengthBucket ?? "none"})");
             sb.AppendLine($"Gain: {Gain}");
