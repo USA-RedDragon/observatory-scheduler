@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Linq;
 
@@ -29,14 +30,31 @@ namespace NINA.Plugin.TargetScheduler.Bodies {
         public DateTime? ComputedAt { get; set; }
     }
 
+    public sealed class BodySnapshot {
+        public static readonly BodySnapshot Empty = new BodySnapshot(null, null);
+
+        private static volatile BodySnapshot current = Empty;
+
+        public static BodySnapshot Current {
+            get => current;
+            set => current = value ?? Empty;
+        }
+
+        public TargetBodyTable Targets { get; }
+        public BodyPositionTable Positions { get; }
+
+        public BodySnapshot(TargetBodyTable targets, BodyPositionTable positions) {
+            Targets = targets ?? TargetBodyTable.Empty;
+            Positions = positions ?? BodyPositionTable.Empty;
+        }
+    }
+
     public class TargetBodyTable {
         public static readonly TargetBodyTable Empty = new TargetBodyTable(null);
 
-        private static volatile TargetBodyTable current = Empty;
-
         public static TargetBodyTable Current {
-            get => current;
-            set => current = value ?? Empty;
+            get => BodySnapshot.Current.Targets;
+            set => BodySnapshot.Current = new BodySnapshot(value, BodySnapshot.Current.Positions);
         }
 
         private readonly Dictionary<string, TargetBodyRow> rows = new Dictionary<string, TargetBodyRow>(StringComparer.Ordinal);
@@ -73,14 +91,13 @@ namespace NINA.Plugin.TargetScheduler.Bodies {
     public class BodyPositionTable {
         public static readonly BodyPositionTable Empty = new BodyPositionTable(null);
 
-        private static volatile BodyPositionTable current = Empty;
-
         public static BodyPositionTable Current {
-            get => current;
-            set => current = value ?? Empty;
+            get => BodySnapshot.Current.Positions;
+            set => BodySnapshot.Current = new BodySnapshot(BodySnapshot.Current.Targets, value);
         }
 
         private readonly Dictionary<string, List<BodyPositionRow>> rows = new Dictionary<string, List<BodyPositionRow>>(StringComparer.Ordinal);
+        private readonly ConcurrentDictionary<string, BodyEphemeris> ephemerides = new ConcurrentDictionary<string, BodyEphemeris>(StringComparer.Ordinal);
 
         public BodyPositionTable(IEnumerable<BodyPositionRow> rows) {
             if (rows == null) { return; }
@@ -105,6 +122,12 @@ namespace NINA.Plugin.TargetScheduler.Bodies {
             if (string.IsNullOrWhiteSpace(targetGuid) || string.IsNullOrWhiteSpace(designation)) { return Array.Empty<BodyPositionRow>(); }
             if (!rows.TryGetValue(TargetBodyTable.Key(targetGuid), out List<BodyPositionRow> list)) { return Array.Empty<BodyPositionRow>(); }
             return list.Where(r => TargetBodyTable.SameDesignation(r.Designation, designation)).ToList();
+        }
+
+        public BodyEphemeris Ephemeris(string targetGuid, string designation) {
+            if (string.IsNullOrWhiteSpace(targetGuid) || string.IsNullOrWhiteSpace(designation)) { return null; }
+            string key = $"{TargetBodyTable.Key(targetGuid)}\u001f{designation.Trim().ToLowerInvariant()}";
+            return ephemerides.GetOrAdd(key, _ => new BodyEphemeris(Rows(targetGuid, designation)));
         }
 
         private static bool Valid(BodyPositionRow row) {

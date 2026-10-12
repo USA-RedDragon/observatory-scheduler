@@ -39,6 +39,8 @@
     <Compile Include="..\NINA.Plugin.TargetScheduler\Planning\Interfaces\IFilterCadenceItem.cs" Link="Linked\Planning\Interfaces\IFilterCadenceItem.cs" />
     <Compile Include="..\NINA.Plugin.TargetScheduler\Database\Schema\FilterCadenceItem.cs" Link="Linked\Database\Schema\FilterCadenceItem.cs" />
     <Compile Include="..\NINA.Plugin.TargetScheduler\Planning\Entities\PlanningFilterCadence.cs" Link="Linked\Planning\Entities\PlanningFilterCadence.cs" />
+    <Compile Include="..\NINA.Plugin.TargetScheduler\Bodies\BodyTables.cs" Link="Linked\Bodies\BodyTables.cs" />
+    <Compile Include="..\NINA.Plugin.TargetScheduler\Bodies\BodyEphemeris.cs" Link="Linked\Bodies\BodyEphemeris.cs" />
   </ItemGroup>
 
   <ItemGroup>

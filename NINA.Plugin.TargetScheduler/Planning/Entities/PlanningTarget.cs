@@ -1,4 +1,5 @@
 ﻿using NINA.Astrometry;
+using NINA.Plugin.TargetScheduler.Bodies;
 using NINA.Plugin.TargetScheduler.Database.Schema;
 using NINA.Plugin.TargetScheduler.Planning.Exposures;
 using NINA.Plugin.TargetScheduler.Planning.Interfaces;
@@ -17,6 +18,8 @@ namespace NINA.Plugin.TargetScheduler.Planning.Entities {
         public string Guid { get; set; }
         public string Name { get; set; }
         public Coordinates Coordinates { get; set; }
+        public string Designation { get; set; }
+        public BodyEphemeris BodyEphemeris { get; set; }
         public Epoch Epoch { get; set; }
         public double Rotation { get; set; }
         public double ROI { get; set; }
@@ -45,6 +48,9 @@ namespace NINA.Plugin.TargetScheduler.Planning.Entities {
             this.Guid = target.Guid;
             this.Name = target.Name;
             this.Coordinates = target.Coordinates;
+            BodySnapshot bodies = BodySnapshot.Current;
+            this.Designation = bodies.Targets.Designation(target.Guid);
+            this.BodyEphemeris = this.Designation == null ? null : bodies.Positions.Ephemeris(target.Guid, this.Designation);
             this.Epoch = target.Epoch;
             this.Rotation = target.Rotation;
             this.ROI = target.ROI;

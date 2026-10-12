@@ -34,6 +34,7 @@
     <Compile Include="..\NINA.Plugin.TargetScheduler\Goals\SubLengthStore.cs" Link="Linked\Goals\SubLengthStore.cs" />
     <Compile Include="..\NINA.Plugin.TargetScheduler\Bodies\BodyTables.cs" Link="Linked\Bodies\BodyTables.cs" />
     <Compile Include="..\NINA.Plugin.TargetScheduler\Bodies\BodyStore.cs" Link="Linked\Bodies\BodyStore.cs" />
+    <Compile Include="..\NINA.Plugin.TargetScheduler\Bodies\BodyEphemeris.cs" Link="Linked\Bodies\BodyEphemeris.cs" />
   </ItemGroup>
 
   <ItemGroup>

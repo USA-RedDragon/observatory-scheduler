@@ -7,6 +7,38 @@ using static NINA.Plugin.TargetScheduler.Darks.SqliteRows;
 
 namespace NINA.Plugin.TargetScheduler.Bodies {
 
+    public static class BodySchema {
+
+        public static bool TryEnsure(DbConnection connection, Action<string> warn) {
+            try {
+                TargetBodyStore.Ensure(connection);
+                BodyPositionStore.Ensure(connection);
+                return true;
+            } catch (Exception ex) {
+                warn?.Invoke($"failed to create {TargetBodyStore.Table} or {BodyPositionStore.Table}, moving-body targets are not imaged: {ex.Message}");
+                return false;
+            }
+        }
+
+        public static BodySnapshot Load(DbConnection connection, BodySnapshot previous, Action<string> warn) {
+            previous ??= BodySnapshot.Empty;
+            TargetBodyTable targets;
+            try {
+                targets = TargetBodyStore.Load(connection);
+            } catch (Exception ex) {
+                warn?.Invoke($"failed to load {TargetBodyStore.Table}, keeping the previous moving bodies ({previous.Targets.Count} targets, {previous.Positions.Count} positions): {ex.Message}");
+                return previous;
+            }
+
+            try {
+                return new BodySnapshot(targets, BodyPositionStore.Load(connection));
+            } catch (Exception ex) {
+                warn?.Invoke($"failed to load {BodyPositionStore.Table}, moving-body targets have no positions and are not imaged: {ex.Message}");
+                return new BodySnapshot(targets, BodyPositionTable.Empty);
+            }
+        }
+    }
+
     public static class TargetBodyStore {
         public const string Table = "ts_target_body";
 

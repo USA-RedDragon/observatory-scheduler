@@ -1,4 +1,5 @@
 ﻿using NINA.Astrometry;
+using NINA.Plugin.TargetScheduler.Bodies;
 using NINA.Plugin.TargetScheduler.Planning.Exposures;
 using NINA.Plugin.TargetScheduler.Planning.Scoring.Rules;
 using System;
@@ -12,6 +13,8 @@ namespace NINA.Plugin.TargetScheduler.Planning.Interfaces {
         string Guid { get; set; }
         string Name { get; set; }
         Coordinates Coordinates { get; set; }
+        string Designation => null;
+        BodyEphemeris BodyEphemeris => null;
         Epoch Epoch { get; set; }
         double Rotation { get; set; }
         double ROI { get; set; }
