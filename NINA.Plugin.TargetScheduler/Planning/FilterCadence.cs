@@ -1,9 +1,12 @@
-﻿using NINA.Plugin.TargetScheduler.Planning.Interfaces;
+﻿using NINA.Plugin.TargetScheduler.Database.Schema;
+using NINA.Plugin.TargetScheduler.Planning.Entities;
+using NINA.Plugin.TargetScheduler.Planning.Interfaces;
 using NINA.Plugin.TargetScheduler.Shared.Utility;
 using System;
 using System.Collections;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
+using System.Linq;
 using System.Text;
 
 namespace NINA.Plugin.TargetScheduler.Planning {
@@ -18,6 +21,34 @@ namespace NINA.Plugin.TargetScheduler.Planning {
                 ? new List<IFilterCadenceItem>(0)
                 : new List<IFilterCadenceItem>(filterCadenceList);
             AssertProper();
+        }
+
+        public static FilterCadence FromRows(IEnumerable<FilterCadenceItem> rows) {
+            return new FilterCadence(rows.Select(r => (IFilterCadenceItem)new PlanningFilterCadence(r)).ToList());
+        }
+
+        public static FilterCadence ForSwitchFrequency(int plans, int filterSwitchFrequency) {
+            var items = new List<IFilterCadenceItem>();
+            int order = 1;
+            for (int idx = 0; idx < plans; idx++) {
+                for (int i = 0; i < filterSwitchFrequency; i++) {
+                    items.Add(new PlanningFilterCadence(order, order == 1, FilterCadenceAction.Exposure, idx));
+                    order++;
+                }
+            }
+            return new FilterCadence(items);
+        }
+
+        public List<FilterCadenceItem> ToRows(int targetId) {
+            lock (lockObj) {
+                return filterCadenceList.Select(fci => new FilterCadenceItem {
+                    TargetId = targetId,
+                    Order = fci.Order,
+                    Next = fci.Next,
+                    Action = fci.Action,
+                    ReferenceIdx = fci.ReferenceIdx,
+                }).ToList();
+            }
         }
 
         public void SetLastSelected(IFilterCadenceItem item) {

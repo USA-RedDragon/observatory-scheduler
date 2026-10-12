@@ -57,16 +57,7 @@ namespace NINA.Plugin.TargetScheduler.Planning.Exposures {
             // PreviewPlanner) but must never persist it to the live database.
             if (Target.IsPreview) { return; }
 
-            List<FilterCadenceItem> items = new List<FilterCadenceItem>(filterCadence.Count);
-            filterCadence.List.ForEach(fci => {
-                items.Add(new FilterCadenceItem {
-                    TargetId = Target.DatabaseId,
-                    Order = fci.Order,
-                    Next = fci.Next,
-                    Action = fci.Action,
-                    ReferenceIdx = fci.ReferenceIdx,
-                });
-            });
+            List<FilterCadenceItem> items = filterCadence.ToRows(Target.DatabaseId);
 
             using (var context = GetSchedulerDatabaseContext()) {
                 context.ReplaceFilterCadences(Target.DatabaseId, items, false);

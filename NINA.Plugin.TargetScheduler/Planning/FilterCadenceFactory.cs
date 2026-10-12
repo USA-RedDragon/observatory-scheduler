@@ -18,8 +18,7 @@ namespace NINA.Plugin.TargetScheduler.Planning {
             // Restore from database records if available
             if (Common.IsNotEmpty(databaseTarget.FilterCadences)) {
                 try {
-                    databaseTarget.FilterCadences.ForEach(fc => { filterCadences.Add(new PlanningFilterCadence(fc)); });
-                    return new FilterCadence(filterCadences);
+                    return FilterCadence.FromRows(databaseTarget.FilterCadences);
                 } catch (ArgumentException ex) {
                     // Persisted cadence is corrupt (e.g. duplicated rows from a prior write race).  Discard it
                     // and regenerate below; the next persisted update will overwrite the bad rows with a clean set.
@@ -48,17 +47,7 @@ namespace NINA.Plugin.TargetScheduler.Planning {
             }
 
             // Otherwise, generate from (non-zero) filter switch frequency
-            int idx = 0;
-            order = 1;
-            target.AllExposurePlans.ForEach((ep) => {
-                for (int i = 0; i < filterSwitchFrequency; i++) {
-                    bool next = order == 1;
-                    filterCadences.Add(new PlanningFilterCadence(order++, next, FilterCadenceAction.Exposure, idx));
-                }
-                idx++;
-            });
-
-            return new FilterCadence(filterCadences);
+            return FilterCadence.ForSwitchFrequency(target.AllExposurePlans.Count, filterSwitchFrequency);
         }
     }
 }
