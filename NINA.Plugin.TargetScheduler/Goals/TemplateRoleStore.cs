@@ -21,7 +21,7 @@ namespace NINA.Plugin.TargetScheduler.Goals {
 )";
 
         public const string CreateMigrationTable = @"CREATE TABLE IF NOT EXISTS ts_template_migration (
-    plan_id INTEGER NOT NULL PRIMARY KEY,
+    plan_id INTEGER NOT NULL,
     plan_guid TEXT,
     target_id INTEGER,
     profile_id TEXT NOT NULL,
@@ -31,7 +31,8 @@ namespace NINA.Plugin.TargetScheduler.Goals {
     old_template_name TEXT,
     new_template_id INTEGER NOT NULL,
     migrated_at TEXT NOT NULL,
-    reverted_at TEXT
+    reverted_at TEXT,
+    PRIMARY KEY (plan_id, migrated_at)
 )";
 
         public static void Ensure(DbConnection connection) {

@@ -206,8 +206,10 @@ namespace NINA.Plugin.TargetScheduler.Remote.Data {
                         skipped.Add(new Dictionary<string, object> { ["plan_id"] = pl.Id, ["target_id"] = pl.TargetId, ["template_id"] = tmpl.Id, ["reason"] = "plan changed during the migration" });
                         continue;
                     }
-                    s.Exec("INSERT OR REPLACE INTO ts_template_migration (plan_id, plan_guid, target_id, profile_id, filter, old_template_id, old_template_guid, old_template_name, new_template_id, migrated_at, reverted_at) " +
-                        "VALUES (@id, @pg, @t, @p, @f, @old, @og, @on, @new, @at, NULL)",
+                    s.Exec("INSERT INTO ts_template_migration (plan_id, plan_guid, target_id, profile_id, filter, old_template_id, old_template_guid, old_template_name, new_template_id, migrated_at, reverted_at) " +
+                        "VALUES (@id, @pg, @t, @p, @f, @old, @og, @on, @new, @at, NULL) ON CONFLICT(plan_id, migrated_at) DO UPDATE SET plan_guid = excluded.plan_guid, target_id = excluded.target_id, " +
+                        "profile_id = excluded.profile_id, filter = excluded.filter, old_template_id = excluded.old_template_id, old_template_guid = excluded.old_template_guid, " +
+                        "old_template_name = excluded.old_template_name, new_template_id = excluded.new_template_id, reverted_at = NULL",
                         ("@id", pl.Id), ("@pg", Db(pl.Guid)), ("@t", Db(pl.TargetId)), ("@p", profile), ("@f", tmpl.Filter), ("@old", tmpl.Id),
                         ("@og", Db(tmpl.Guid)), ("@on", Db(tmpl.Name)), ("@new", target), ("@at", stamp));
                     if (pl.TargetId.HasValue && targetNames.TryGetValue(pl.TargetId.Value, out var tn)) {
@@ -283,7 +285,7 @@ namespace NINA.Plugin.TargetScheduler.Remote.Data {
                 return o;
             }
             var stamp = Stamp(now);
-            var rows = s.Rows("SELECT plan_id, target_id, profile_id, filter, old_template_id, old_template_name, new_template_id FROM ts_template_migration WHERE reverted_at IS NULL ORDER BY plan_id");
+            var rows = s.Rows("SELECT plan_id, target_id, profile_id, filter, old_template_id, old_template_name, new_template_id, migrated_at FROM ts_template_migration WHERE reverted_at IS NULL ORDER BY plan_id, migrated_at DESC");
             var targetProjects = new Dictionary<long, int?>();
             foreach (var r in s.Rows("SELECT Id, projectid FROM target")) {
                 targetProjects[Long(r["Id"]).Value] = (int?)Long(r["projectid"]);
@@ -309,7 +311,7 @@ namespace NINA.Plugin.TargetScheduler.Remote.Data {
                     if (s.Exec("UPDATE exposureplan SET exposureTemplateId = @old WHERE Id = @id AND exposureTemplateId = @new", ("@old", oldId), ("@id", planId), ("@new", newId)) == 0) {
                         reason = "plan changed during the revert";
                     } else {
-                        s.Exec("UPDATE ts_template_migration SET reverted_at = @at WHERE plan_id = @id", ("@at", stamp), ("@id", planId));
+                        s.Exec("UPDATE ts_template_migration SET reverted_at = @at WHERE plan_id = @id AND migrated_at = @m AND reverted_at IS NULL", ("@at", stamp), ("@id", planId), ("@m", Str(r["migrated_at"])));
                         var targetId = Long(plan["targetid"]);
                         if (targetId.HasValue) {
                             o.Touch(targetProjects.TryGetValue(targetId.Value, out var project) ? project : null, (int)targetId.Value);

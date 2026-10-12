@@ -209,6 +209,22 @@ INSERT INTO overrideexposureorderitem (targetid, ""order"", action, referenceIdx
         }
 
         [Test]
+        public void MigrationHistoryIsKeptAcrossRevertAndRemigrate() {
+            database.MigrateTemplates(false, Now);
+            database.RevertTemplates(false, Now.AddHours(1));
+            database.MigrateTemplates(false, Now.AddHours(2)).Changed.Should().BeTrue();
+
+            db.Count("SELECT COUNT(*) FROM ts_template_migration").Should().Be(12);
+            db.Count("SELECT COUNT(*) FROM ts_template_migration WHERE migrated_at = '2026-10-12T18:00:00Z' AND reverted_at = '2026-10-12T19:00:00Z'").Should().Be(6);
+            db.Count("SELECT COUNT(*) FROM ts_template_migration WHERE migrated_at = '2026-10-12T20:00:00Z' AND reverted_at IS NULL").Should().Be(6);
+
+            database.RevertTemplates(false, Now.AddHours(3));
+            db.Count("SELECT COUNT(*) FROM ts_template_migration WHERE migrated_at = '2026-10-12T18:00:00Z' AND reverted_at = '2026-10-12T19:00:00Z'").Should().Be(6);
+            db.Count("SELECT COUNT(*) FROM ts_template_migration WHERE migrated_at = '2026-10-12T20:00:00Z' AND reverted_at = '2026-10-12T21:00:00Z'").Should().Be(6);
+            db.Scalar("SELECT exposureTemplateId FROM exposureplan WHERE Id = 1002").Should().Be(21L);
+        }
+
+        [Test]
         public void RevertSkipsPlansThatMovedOn() {
             database.MigrateTemplates(false, Now);
             db.Exec("UPDATE exposureplan SET exposureTemplateId = 25 WHERE Id = 1001");
