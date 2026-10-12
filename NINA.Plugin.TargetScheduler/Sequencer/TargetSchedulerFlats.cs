@@ -20,7 +20,7 @@ using System.Threading.Tasks;
 namespace NINA.Plugin.TargetScheduler.Sequencer {
 
     [ExportMetadata("Name", "Target Scheduler Flats")]
-    [ExportMetadata("Description", "Flats automation for Target Scheduler. Also takes the flats requested from the web for a target's lights of one night, whatever the project's flats handling and flat history.")]
+    [ExportMetadata("Description", "Flats automation for Target Scheduler. Also takes the flats requested from the web for a target's lights of one night, whatever the project's flats handling and flat history. In the Target Scheduler container's Before Wait instructions it takes flats only when they fit before the wait ends, AfterWait included, and turns the light on only under a cover the flat device confirms Closed.")]
     [ExportMetadata("Icon", "Scheduler.SchedulerSVG")]
     [ExportMetadata("Category", "Target Scheduler")]
     [Export(typeof(ISequenceItem))]
@@ -63,6 +63,41 @@ namespace NINA.Plugin.TargetScheduler.Sequencer {
             return new TargetSchedulerFlats(this);
         }
 
+        private TargetSchedulerContainer FindContainer() {
+            NINA.Sequencer.Container.ISequenceContainer p = Parent;
+            while (p != null) {
+                if (p is TargetSchedulerContainer tsc) { return tsc; }
+                p = p.Parent;
+            }
+            return null;
+        }
+
+        private async Task LightOffAfterFailure() {
+            try {
+                var info = flatDeviceMediator.GetInfo();
+                if (info.Connected && info.LightOn) {
+                    TSLogger.Warning("TS Flats: the flat light is still on after the flats, turning it off");
+                    await flatDeviceMediator.ToggleLight(false, new Progress<ApplicationStatus>(), CancellationToken.None);
+                }
+            } catch (Exception ex) {
+                TSLogger.Error($"TS Flats: could not turn the flat light off: {ex.Message}");
+            }
+        }
+
+        private string WaitStopReason(List<LightSession> neededFlats) {
+            DateTime? until = FindContainer()?.CurrentWaitUntil;
+            if (!until.HasValue) { return null; }
+            List<double> exposures = new List<double>();
+            List<FlatSpec> seen = new List<FlatSpec>();
+            foreach (LightSession flat in neededFlats) {
+                if (!AlwaysRepeatFlatSet && seen.Contains(flat.FlatSpec)) { continue; }
+                seen.Add(flat.FlatSpec);
+                exposures.Add(flatsExpert.GetTrainedFlatExposureSetting(profileService.ActiveProfile, flat.FlatSpec)?.Time ?? 0);
+            }
+            TimeSpan estimate = FlatWaitFit.Estimate(exposures, FlatCount);
+            return FlatWaitFit.StopReason(DateTime.UtcNow, until.Value.ToUniversalTime(), DarkRuntime.State.AfterWait(), estimate);
+        }
+
         public override async Task Execute(IProgress<ApplicationStatus> progress, CancellationToken token) {
             try {
                 InitSync();
@@ -85,6 +120,16 @@ namespace NINA.Plugin.TargetScheduler.Sequencer {
                     return;
                 }
 
+                if (FindContainer()?.CurrentWaitUntil != null && Remote.Plugin.RemoteHost.Instance?.ReplanOrPauseRequested == true) {
+                    TSLogger.Info("TS Flats: not taking flats in this wait: a re-plan or pause was requested");
+                    return;
+                }
+                if (WaitStopReason(neededFlats) is string stop) {
+                    TSLogger.Info($"TS Flats: not taking flats in this wait: {stop}");
+                    DisplayText = $"Not taken: {stop}";
+                    return;
+                }
+
                 TotalFlatSets = neededFlats.Count;
                 CompletedFlatSets = 0;
 
@@ -93,6 +138,14 @@ namespace NINA.Plugin.TargetScheduler.Sequencer {
                 // Prep the flat device
                 DisplayText = "Preparing flat device";
                 await CloseCover(progress, token);
+                if (FindContainer()?.CurrentWaitUntil != null) {
+                    var info = flatDeviceMediator.GetInfo();
+                    if (FlatWaitFit.CoverStopReason(info.Connected, info.SupportsOpenClose, info.CoverState.ToString()) is string coverStop) {
+                        TSLogger.Warning($"TS Flats: not taking flats in this wait: {coverStop}");
+                        DisplayText = $"Not taken: {coverStop}";
+                        return;
+                    }
+                }
                 await ToggleLight(true, progress, token);
 
                 // Get the unique set of target ids over all neededFlats
@@ -152,6 +205,7 @@ namespace NINA.Plugin.TargetScheduler.Sequencer {
 
                 throw new SequenceEntityFailedException($"exception taking flats: {ex.Message}", ex);
             } finally {
+                await LightOffAfterFailure();
                 DisplayText = "";
                 TotalFlatSets = 0;
                 CompletedFlatSets = 0;

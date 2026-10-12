@@ -93,6 +93,7 @@ namespace NINA.Plugin.TargetScheduler.Darks {
         public string Device { get; set; }
         public bool Connected { get; set; }
         public DarkCoverState State { get; set; }
+        public bool LightOn { get; set; }
         public string ReadError { get; set; }
     }
 
@@ -191,6 +192,9 @@ namespace NINA.Plugin.TargetScheduler.Darks {
             }
             if (c.State != DarkCoverState.Closed) {
                 return $"{device} reports its cover as {c.State}, not Closed";
+            }
+            if (c.LightOn) {
+                return $"{device} reports its light on";
             }
             return null;
         }

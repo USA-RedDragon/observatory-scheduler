@@ -204,6 +204,7 @@ namespace NINA.Plugin.TargetScheduler.Sequencer {
                     return c;
                 }
                 c.Connected = info.Connected;
+                c.LightOn = info.LightOn;
                 if (!string.IsNullOrWhiteSpace(info.Name)) {
                     c.Device = info.Name;
                 }

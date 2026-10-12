@@ -137,6 +137,7 @@ namespace NINA.Plugin.TargetScheduler.Planning.Test {
             MoonKeep.Waits(new[] { "bright Moon", "twilight" }, "moon avoidance", "twilight").Should().BeTrue();
             MoonKeep.Waits(new[] { "bright Moon", "humidity" }, "moon avoidance", "twilight").Should().BeFalse();
             MoonKeep.Waits(new[] { "bright Moon", "humidity" }, "moon avoidance", "twilight", "humidity").Should().BeTrue();
+            MoonKeep.Waits(new[] { "bright Moon", "complete" }, "moon avoidance", "twilight", "humidity", "complete").Should().BeTrue();
             MoonKeep.Waits(new[] { "moon avoidance", "twilight" }, "moon avoidance", "twilight").Should().BeFalse();
             MoonKeep.Waits(new List<string>(), "moon avoidance").Should().BeFalse();
             MoonKeep.Waits(null).Should().BeFalse();

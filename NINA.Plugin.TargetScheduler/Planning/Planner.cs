@@ -653,7 +653,7 @@ namespace NINA.Plugin.TargetScheduler.Planning {
             if (target.ExposurePlans.All(ep => ep.RejectedReason == Reasons.FilterComplete)) { return Reasons.TargetComplete; }
             if (target.ExposurePlans.All(ep => ep.RejectedReason == Reasons.FilterTwilight)) { return Reasons.TargetTwilight; }
             if (target.ExposurePlans.All(ep => ep.RejectedReason == Reasons.FilterMoonAvoidance)) { return Reasons.TargetMoonAvoidance; }
-            if (MoonKeep.Waits(target.ExposurePlans.Select(ep => ep.RejectedReason), Reasons.FilterMoonAvoidance, Reasons.FilterTwilight, Reasons.FilterHumidity)) { return Reasons.TargetMoonKeep; }
+            if (MoonKeep.Waits(target.ExposurePlans.Select(ep => ep.RejectedReason), Reasons.FilterMoonAvoidance, Reasons.FilterTwilight, Reasons.FilterHumidity, Reasons.FilterComplete)) { return Reasons.TargetMoonKeep; }
             if (target.ExposurePlans.All(ep => ep.RejectedReason == Reasons.FilterBodyPositionUnknown)) { return Reasons.TargetBodyPositionUnknown; }
             if (target.ExposurePlans.All(ep => ep.RejectedReason == Reasons.FilterHumidity)) { return Reasons.TargetHumidity; }
             return Reasons.TargetAllExposurePlans; // implicit assumption that all are indeed rejected

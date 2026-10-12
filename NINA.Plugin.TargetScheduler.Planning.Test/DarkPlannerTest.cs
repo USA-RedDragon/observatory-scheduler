@@ -172,6 +172,13 @@ namespace NINA.Plugin.TargetScheduler.Planning.Test {
         }
 
         [Test]
+        public void ALitPanelStopsDarksUnderAClosedCover() {
+            var c = Flat(true, DarkCoverState.Closed);
+            c.LightOn = true;
+            DarkPlanner.CoverStopReason(c).Should().Contain("light on");
+        }
+
+        [Test]
         public void NoFlatDeviceInTheProfileKeepsTheOldBehavior() {
             var w = new DarkWindow { Placement = DarkPlacement.EndOfSequence, Now = Now, SunAltitudeAt = Night, Cover = new DarkCover { Configured = false } };
             DarkPlanner.StopReason(w).Should().BeNull();
