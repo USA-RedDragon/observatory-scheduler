@@ -37,10 +37,14 @@ namespace NINA.Plugin.TargetScheduler.Planning.Interfaces {
             return new Coordinates(Angle.ByDegree(center.Ra), Angle.ByDegree(center.Dec), Epoch.J2000);
         }
 
-        public static double FramedRotation(this ITarget target, BodyField field = null) {
+        public static double FramedRotation(this ITarget target, DateTime? time = null, BodyField field = null) {
             BodyFrame frame = target?.Frame();
+            if (frame == null) { return target.Rotation; }
             BodyField f = field ?? BodyField.Current;
-            return frame == null ? target.Rotation : frame.NinaPositionAngle(f.WidthPx, f.HeightPx);
+            Coordinates body = time.HasValue ? target.CoordinatesAt(time.Value) : null;
+            return body == null
+                ? frame.NinaPositionAngle(f.WidthPx, f.HeightPx)
+                : frame.NinaPositionAngleAt(new BodyPosition(body.RADegrees, body.Dec), f.LongSideDegrees, f.WidthPx, f.HeightPx);
         }
 
         public static Coordinates CoordinatesAt(this ITarget target, DateTime time) {

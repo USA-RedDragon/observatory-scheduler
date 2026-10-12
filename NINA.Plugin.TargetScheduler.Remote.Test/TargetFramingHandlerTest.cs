@@ -56,6 +56,8 @@ namespace NINA.Plugin.TargetScheduler.Remote.Test {
             var h = registry.Get("target.framing");
             h.Validate(Cmd.Of("target.framing", """{"framing":null}""")).Should().Contain("target_guid");
             h.Validate(Cmd.Of("target.framing", """{"target_guid":"g13","framing":{}}""")).Should().Contain("framing");
+            h.Validate(Cmd.Of("target.framing", """{"target_guid":"g13"}""")).Should().NotBeNull();
+            h.Validate(Cmd.Of("target.framing", """{"target_guid":"g13","framing":{"rotation_deg":10,"offset_frac":0.5}}""")).Should().Contain("offset_frac");
             h.Validate(Cmd.Of("target.framing", """{"target_guid":"g13","framing":{"rotation_deg":84}}""")).Should().Contain("together");
             h.Validate(Cmd.Of("target.framing", """{"target_guid":"g13","framing":{"rotation_deg":360,"offset_frac":0}}""")).Should().Contain("rotation_deg");
             h.Validate(Cmd.Of("target.framing", """{"target_guid":"g13","framing":{"rotation_deg":10,"offset_frac":0.6}}""")).Should().Contain("offset_frac");

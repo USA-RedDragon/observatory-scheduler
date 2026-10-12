@@ -654,7 +654,7 @@ namespace NINA.Plugin.TargetScheduler.Sequencer {
                 inputTarget.DeepSkyObject = GetDeepSkyObject(referenceDate, activeProfile, planTarget, targetCoordinates, customHorizon);
                 inputTarget.TargetName = planTarget.Name;
                 inputTarget.InputCoordinates = new InputCoordinates(targetCoordinates);
-                inputTarget.PositionAngle = planTarget.FramedRotation();
+                inputTarget.PositionAngle = planTarget.FramedRotation(atTime);
                 inputTarget.Expanded = true;
                 Target = inputTarget;
 

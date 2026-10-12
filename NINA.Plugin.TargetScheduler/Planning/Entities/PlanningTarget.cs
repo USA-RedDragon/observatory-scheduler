@@ -147,7 +147,8 @@ namespace NINA.Plugin.TargetScheduler.Planning.Entities {
             return this.Name.Equals(p.Name) &&
                    this.Coordinates.RA.Equals(p.Coordinates.RA) &&
                    this.Coordinates.Dec.Equals(p.Coordinates.Dec) &&
-                   this.Rotation.Equals(p.Rotation);
+                   this.Rotation.Equals(p.Rotation) &&
+                   (this.BodyFrame == null ? p.BodyFrame == null : this.BodyFrame.Same(p.BodyFrame));
         }
 
         public override int GetHashCode() {

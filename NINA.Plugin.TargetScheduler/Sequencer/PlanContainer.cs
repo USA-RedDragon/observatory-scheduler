@@ -265,7 +265,7 @@ namespace NINA.Plugin.TargetScheduler.Sequencer {
 
                     slewCenter.Name = nameof(CenterAndRotate);
                     (slewCenter as Center).Coordinates = slewCoordinates;
-                    (slewCenter as CenterAndRotate).PositionAngle = target.FramedRotation();
+                    (slewCenter as CenterAndRotate).PositionAngle = target.FramedRotation(planTime);
                 } else {
                     slewCenter = new Center(profileService, telescopeMediator, imagingMediator, filterWheelMediator, guiderMediator, domeMediator, domeFollower, plateSolverFactory, windowServiceFactory);
                     slewCenter.Name = nameof(Center);

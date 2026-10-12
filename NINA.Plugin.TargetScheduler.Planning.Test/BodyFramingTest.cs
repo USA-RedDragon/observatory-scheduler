@@ -82,11 +82,33 @@ namespace NINA.Plugin.TargetScheduler.Planning.Test {
         }
 
         [Test]
+        public void TheRotatorAngleFollowsTheLongAxisAtTheFrameCentre() {
+            foreach (double dec in new[] { 4.8, 60.0, 80.0, -80.0 }) {
+                BodyPosition head = new BodyPosition(321.3, dec);
+                BodyFrame f = BodyFrame.From(84, -0.25);
+                BodyPosition center = f.Center(head, Long);
+                double axis = f.AxisAtCenter(head, Long);
+                double toHead = BodyFraming.PositionAngle(center, head);
+                double d = BodyFraming.Normalize(axis - toHead);
+                Math.Min(Math.Abs(d - 180), Math.Min(d, 360 - d)).Should().BeLessThan(1e-6);
+                double off = BodyFraming.Normalize(axis - 84);
+                Math.Min(off, 360 - off).Should().BeLessThan(dec > 70 || dec < -70 ? 6 : 2);
+                f.NinaPositionAngleAt(head, Long, 6248, 4176).Should().BeApproximately(BodyFraming.Normalize(axis + 90), 1e-9);
+            }
+            BodyFrame centred = BodyFrame.From(84, 0);
+            centred.AxisAtCenter(new BodyPosition(10, 80), Long).Should().Be(84);
+            BodyFrame.From(84, -0.25).Same(BodyFrame.From(84, -0.25)).Should().BeTrue();
+            BodyFrame.From(84, -0.25).Same(BodyFrame.From(84, 0)).Should().BeFalse();
+            BodyFrame.From(84, -0.25).Same(null).Should().BeFalse();
+        }
+
+        [Test]
         public void ChecksTheRanges() {
             BodyFrame.Check(null, null).Should().BeNull();
             BodyFrame.Check(84, -0.25).Should().BeNull();
-            BodyFrame.Check(0, 0.5).Should().BeNull();
-            BodyFrame.Check(359.99, -0.5).Should().BeNull();
+            BodyFrame.Check(0, 0.45).Should().BeNull();
+            BodyFrame.Check(359.99, -0.45).Should().BeNull();
+            BodyFrame.Check(0, 0.5).Should().Contain("offset_frac");
             BodyFrame.Check(84, null).Should().Contain("together");
             BodyFrame.Check(null, 0.1).Should().Contain("together");
             BodyFrame.Check(360, 0).Should().Contain("rotation_deg");

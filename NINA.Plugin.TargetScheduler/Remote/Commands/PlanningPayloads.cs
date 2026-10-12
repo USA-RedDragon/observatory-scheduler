@@ -322,6 +322,7 @@ namespace NINA.Plugin.TargetScheduler.Remote.Commands {
         public string TargetName { get; set; }
 
         [JsonPropertyName("framing")]
+        [JsonRequired]
         public TargetFraming Framing { get; set; }
     }
 

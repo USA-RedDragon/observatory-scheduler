@@ -11,7 +11,7 @@ namespace NINA.Plugin.TargetScheduler.Bodies {
 
         public static bool TryEnsure(DbConnection connection, Action<string> warn) {
             try {
-                TargetBodyStore.Ensure(connection);
+                TargetBodyStore.Ensure(connection, warn);
                 BodyPositionStore.Ensure(connection);
                 return true;
             } catch (Exception ex) {
@@ -59,8 +59,16 @@ namespace NINA.Plugin.TargetScheduler.Bodies {
             return $"ALTER TABLE ts_target_body ADD COLUMN {column} REAL";
         }
 
-        public static void Ensure(DbConnection connection) {
+        public static void Ensure(DbConnection connection, Action<string> warn = null) {
             SqliteRows.Ensure(connection, CreateTable);
+            try {
+                AddFramingColumns(connection);
+            } catch (Exception ex) {
+                warn?.Invoke($"could not add the framing columns to {Table}, framed moving bodies stay centered until the next start or body command: {ex.Message}");
+            }
+        }
+
+        private static void AddFramingColumns(DbConnection connection) {
             bool opened = false;
             if (connection.State != ConnectionState.Open) {
                 connection.Open();

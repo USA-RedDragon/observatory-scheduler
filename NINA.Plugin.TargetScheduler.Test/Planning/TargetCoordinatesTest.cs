@@ -102,7 +102,7 @@ namespace NINA.Plugin.TargetScheduler.Test.Planning {
             TargetBodyTable.Current = new TargetBodyTable(new[] { new TargetBodyRow { TargetGuid = "g1", Designation = "C/2025 R2", RotationDeg = 84, OffsetFrac = -0.25 } });
             fixedTarget.Frame().Should().BeNull();
             fixedTarget.FramedCoordinatesAt(Start).Should().BeSameAs(TestData.M42);
-            fixedTarget.FramedRotation().Should().Be(33);
+            fixedTarget.FramedRotation(Start).Should().Be(33);
 
             TargetBodyTable.Current = new TargetBodyTable(new[] { new TargetBodyRow { TargetGuid = "g1", Designation = "C/2025 R2" } });
             PlanningTarget body = new PlanningTarget { Guid = "g1", Coordinates = TestData.M42, Designation = "C/2025 R2", Rotation = 33 };
@@ -110,7 +110,7 @@ namespace NINA.Plugin.TargetScheduler.Test.Planning {
             body.FramedCoordinatesAt(Start).RADegrees.Should().Be(body.CoordinatesAt(Start).RADegrees);
             body.FramedCoordinatesAt(Start).Dec.Should().Be(body.CoordinatesAt(Start).Dec);
             body.FramedCoordinatesAt(Start.AddHours(1)).Should().BeNull();
-            body.FramedRotation().Should().Be(33);
+            body.FramedRotation(Start).Should().Be(33);
         }
 
         [Test]
@@ -124,15 +124,20 @@ namespace NINA.Plugin.TargetScheduler.Test.Planning {
             center.Epoch.Should().Be(Epoch.J2000);
             BodyDrift.SeparationDegrees(At(head), At(center)).Should().BeApproximately(0.25 * wide.LongSideDegrees, 1e-9);
             BodyFraming.PositionAngle(At(head), At(center)).Should().BeApproximately(84, 1e-6);
-            body.FramedRotation(wide).Should().Be(174);
-            body.FramedRotation(BodyField.From(3.76, 405, 4176, 6248)).Should().Be(84);
+            body.FramedRotation(null, wide).Should().Be(174);
+            body.FramedRotation(null, BodyField.From(3.76, 405, 4176, 6248)).Should().Be(84);
+            double atCentre = body.FramedRotation(Start, wide);
+            atCentre.Should().BeApproximately(174, 0.5);
+            double axis = BodyFraming.Normalize(atCentre - 90);
+            double toHead = BodyFraming.PositionAngle(At(center), At(head));
+            BodyFraming.Normalize(axis - toHead).Should().BeApproximately(180, 1e-6);
 
             Coordinates later = body.FramedCoordinatesAt(Start.AddMinutes(10), wide);
             BodyDrift.SeparationDegrees(At(body.CoordinatesAt(Start.AddMinutes(10))), At(later)).Should().BeApproximately(0.25 * wide.LongSideDegrees, 1e-9);
 
             PlanningTarget other = new PlanningTarget { Guid = "g1", Coordinates = TestData.M42, Designation = "C/2024 G3", Rotation = 33 };
             other.Frame().Should().BeNull();
-            other.FramedRotation(wide).Should().Be(33);
+            other.FramedRotation(Start, wide).Should().Be(33);
         }
 
         [Test]
@@ -148,6 +153,17 @@ namespace NINA.Plugin.TargetScheduler.Test.Planning {
 
             PlanningTarget fixedTarget = new PlanningTarget(project, new Target { Id = 8, Name = "M42", Guid = "g2", ra = 5, dec = 10, OverrideExposureOrders = new List<OverrideExposureOrderItem>(), FilterCadences = new List<FilterCadenceItem>() });
             fixedTarget.BodyFrame.Should().BeNull();
+
+            PlanningTarget unframed = new PlanningTarget(project, entity);
+            target.Equals(unframed).Should().BeFalse();
+            TargetBodyTable.Current = new TargetBodyTable(new[] { new TargetBodyRow { TargetGuid = "g1", Designation = "C/2025 R2", RotationDeg = 84, OffsetFrac = -0.25 } });
+            PlanningTarget again = new PlanningTarget(project, entity);
+            target.Equals(again).Should().BeTrue();
+            again.BodyFrame = BodyFrame.From(84, 0);
+            target.Equals(again).Should().BeFalse();
+            again.BodyFrame = null;
+            target.Equals(again).Should().BeFalse();
+            unframed.Equals(again).Should().BeTrue();
         }
     }
 }

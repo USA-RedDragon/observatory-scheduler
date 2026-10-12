@@ -3,7 +3,7 @@ using System;
 namespace NINA.Plugin.TargetScheduler.Bodies {
 
     public sealed class BodyFrame {
-        public const double MaxOffsetFrac = 0.5;
+        public const double MaxOffsetFrac = 0.45;
 
         public double RotationDeg { get; }
         public double OffsetFrac { get; }
@@ -31,8 +31,28 @@ namespace NINA.Plugin.TargetScheduler.Bodies {
         }
 
         public double NinaPositionAngle(int? widthPx, int? heightPx) {
+            return NinaPositionAngle(RotationDeg, widthPx, heightPx);
+        }
+
+        public double AxisAtCenter(BodyPosition body, double longSideDegrees) {
+            if (OffsetFrac == 0) { return RotationDeg; }
+            BodyPosition center = Center(body, longSideDegrees);
+            double axis = BodyFraming.PositionAngle(center, body);
+            double d = BodyFraming.Normalize(axis - RotationDeg);
+            return d > 90 && d < 270 ? BodyFraming.Normalize(axis + 180) : axis;
+        }
+
+        public double NinaPositionAngleAt(BodyPosition body, double longSideDegrees, int? widthPx, int? heightPx) {
+            return NinaPositionAngle(AxisAtCenter(body, longSideDegrees), widthPx, heightPx);
+        }
+
+        public bool Same(BodyFrame other) {
+            return other != null && RotationDeg == other.RotationDeg && OffsetFrac == other.OffsetFrac;
+        }
+
+        private static double NinaPositionAngle(double axisDeg, int? widthPx, int? heightPx) {
             bool tall = widthPx.HasValue && heightPx.HasValue && heightPx.Value > widthPx.Value;
-            return BodyFraming.Normalize(tall ? RotationDeg : RotationDeg + 90);
+            return BodyFraming.Normalize(tall ? axisDeg : axisDeg + 90);
         }
 
         private static bool Finite(double v) {
