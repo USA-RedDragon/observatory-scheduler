@@ -4,6 +4,7 @@ using NINA.Core.Locale;
 using NINA.Core.Model;
 using NINA.Core.Model.Equipment;
 using NINA.Equipment.Equipment.MyCamera;
+using NINA.Equipment.Equipment.MyFlatDevice;
 using NINA.Equipment.Interfaces.Mediator;
 using NINA.Equipment.Interfaces.ViewModel;
 using NINA.Equipment.Model;
@@ -27,7 +28,7 @@ using System.Threading.Tasks;
 namespace NINA.Plugin.TargetScheduler.Sequencer {
 
     [ExportMetadata("Name", "Target Scheduler Darks")]
-    [ExportMetadata("Description", "Takes the bias frames the stacker's bias backlog asks for, at the current setpoint and the camera's minimum exposure, and then the darks the stacker's dark backlog asks for, at each one's set temperature, while the cover is already closed and the sun is below the light-safe altitude. It uses only the camera.")]
+    [ExportMetadata("Description", "Takes the bias frames the stacker's bias backlog asks for, at the current setpoint and the camera's minimum exposure, and then the darks the stacker's dark backlog asks for, at each one's set temperature, while the cover is already closed and the sun is below the light-safe altitude. It uses only the camera, and when the profile has a flat device it reads the cover state without changing it and takes nothing unless the cover reports Closed.")]
     [ExportMetadata("Icon", "Scheduler.SchedulerSVG")]
     [ExportMetadata("Category", "Target Scheduler")]
     [Export(typeof(ISequenceItem))]
@@ -40,6 +41,7 @@ namespace NINA.Plugin.TargetScheduler.Sequencer {
         private readonly IImageHistoryVM imageHistoryVM;
         private readonly ISafetyMonitorMediator safetyMonitorMediator;
         private readonly IWeatherDataMediator weatherDataMediator;
+        private readonly IFlatDeviceMediator flatDeviceMediator;
 
         [ImportingConstructor]
         public TargetSchedulerDarks(IProfileService profileService,
@@ -48,7 +50,8 @@ namespace NINA.Plugin.TargetScheduler.Sequencer {
                                     IImageSaveMediator imageSaveMediator,
                                     IImageHistoryVM imageHistoryVM,
                                     ISafetyMonitorMediator safetyMonitorMediator,
-                                    IWeatherDataMediator weatherDataMediator) {
+                                    IWeatherDataMediator weatherDataMediator,
+                                    IFlatDeviceMediator flatDeviceMediator) {
             this.profileService = profileService;
             this.cameraMediator = cameraMediator;
             this.imagingMediator = imagingMediator;
@@ -56,6 +59,7 @@ namespace NINA.Plugin.TargetScheduler.Sequencer {
             this.imageHistoryVM = imageHistoryVM;
             this.safetyMonitorMediator = safetyMonitorMediator;
             this.weatherDataMediator = weatherDataMediator;
+            this.flatDeviceMediator = flatDeviceMediator;
         }
 
         public TargetSchedulerDarks(TargetSchedulerDarks cloneMe) : this(
@@ -65,7 +69,8 @@ namespace NINA.Plugin.TargetScheduler.Sequencer {
             cloneMe.imageSaveMediator,
             cloneMe.imageHistoryVM,
             cloneMe.safetyMonitorMediator,
-            cloneMe.weatherDataMediator) {
+            cloneMe.weatherDataMediator,
+            cloneMe.flatDeviceMediator) {
             CopyMetaData(cloneMe);
             Placement = cloneMe.Placement;
             StopAfterMinutes = cloneMe.StopAfterMinutes;
@@ -100,6 +105,7 @@ namespace NINA.Plugin.TargetScheduler.Sequencer {
 
         private DateTime? stopBy;
         private int biasDone;
+        private string coverStop;
         private CancellationTokenSource yieldCts;
 
         public IList<DarkPlacement> Placements => Enum.GetValues(typeof(DarkPlacement)).Cast<DarkPlacement>().ToList();
@@ -171,7 +177,7 @@ namespace NINA.Plugin.TargetScheduler.Sequencer {
         }
 
         private DarkWindow Window() {
-            var w = new DarkWindow { Placement = Placement, Now = DateTime.UtcNow, StopBy = stopBy, SunAltitudeAt = SunAltitude() };
+            var w = new DarkWindow { Placement = Placement, Now = DateTime.UtcNow, StopBy = stopBy, SunAltitudeAt = SunAltitude(), Cover = ReadCover() };
             if (Placement == DarkPlacement.BeforeWait) {
                 DateTime? until = FindContainer()?.CurrentWaitUntil;
                 w.WaitUntil = until?.ToUniversalTime();
@@ -183,6 +189,39 @@ namespace NINA.Plugin.TargetScheduler.Sequencer {
                 w.Safe = s.Connected ? s.IsSafe : (bool?)null;
             }
             return w;
+        }
+
+        public DarkCover ReadCover() {
+            string id = profileService.ActiveProfile?.FlatDeviceSettings?.Id;
+            if (string.IsNullOrWhiteSpace(id) || id == "No_Device") {
+                return new DarkCover { Configured = false };
+            }
+            var c = new DarkCover { Configured = true, Device = id, State = DarkCoverState.Unknown };
+            try {
+                FlatDeviceInfo info = flatDeviceMediator.GetInfo();
+                if (info == null) {
+                    c.ReadError = "no device info";
+                    return c;
+                }
+                c.Connected = info.Connected;
+                if (!string.IsNullOrWhiteSpace(info.Name)) {
+                    c.Device = info.Name;
+                }
+                c.State = Enum.TryParse(info.CoverState.ToString(), out DarkCoverState state) ? state : DarkCoverState.Unknown;
+            } catch (Exception ex) {
+                c.ReadError = ex.Message;
+            }
+            return c;
+        }
+
+        private void LogStop(DarkWindow w, string message) {
+            string cover = DarkPlanner.CoverStopReason(w.Cover);
+            if (cover != null) {
+                coverStop = cover;
+                TSLogger.Warning(message);
+            } else {
+                TSLogger.Info(message);
+            }
         }
 
         private Func<DateTime, double?> SunAltitude() {
@@ -211,6 +250,8 @@ namespace NINA.Plugin.TargetScheduler.Sequencer {
 
         public override async Task Execute(IProgress<ApplicationStatus> progress, CancellationToken token) {
             stopBy = StopAfterMinutes > 0 ? DateTime.UtcNow.AddMinutes(StopAfterMinutes) : (DateTime?)null;
+            coverStop = null;
+            DisplayText = "";
             using var yieldSource = new CancellationTokenSource();
             yieldCts = yieldSource;
             if (Placement == DarkPlacement.WhileUnsafe) {
@@ -232,9 +273,13 @@ namespace NINA.Plugin.TargetScheduler.Sequencer {
             }
 
             TSLogger.Info($"TS Darks: light-safe sun limit {DarkPlanner.SunLimitDegrees:0.0}°: {DarkPlanner.SunLimitBasis}");
-            string stop = DarkPlanner.StopReason(Window());
+            DarkWindow first = Window();
+            string stop = DarkPlanner.StopReason(first);
             if (stop != null) {
-                TSLogger.Info($"TS Darks: not taking darks or bias frames: {stop}");
+                LogStop(first, $"TS Darks: not taking darks or bias frames: {stop}");
+                if (coverStop != null) {
+                    DisplayText = $"Not taken: {coverStop}";
+                }
                 return;
             }
 
@@ -304,7 +349,7 @@ namespace NINA.Plugin.TargetScheduler.Sequencer {
                         DarkWindow w = Window();
                         stop = DarkPlanner.StopReason(w);
                         if (stop != null) {
-                            TSLogger.Info($"TS Darks: stopping after {done} darks: {stop}");
+                            LogStop(w, $"TS Darks: stopping after {done} darks: {stop}");
                             return;
                         }
 
@@ -341,9 +386,10 @@ namespace NINA.Plugin.TargetScheduler.Sequencer {
                             break;
                         }
 
-                        stop = DarkPlanner.StopReason(Window());
+                        DarkWindow beforeDark = Window();
+                        stop = DarkPlanner.StopReason(beforeDark);
                         if (stop != null) {
-                            TSLogger.Info($"TS Darks: stopping after {done} darks: {stop}");
+                            LogStop(beforeDark, $"TS Darks: stopping after {done} darks: {stop}");
                             return;
                         }
 
@@ -388,7 +434,7 @@ namespace NINA.Plugin.TargetScheduler.Sequencer {
                 } catch (Exception ex) {
                     TSLogger.Error($"TS Darks: restoring the imaging setpoint {imagingSetpoint} °C failed: {ex.Message}");
                 }
-                DisplayText = "";
+                DisplayText = coverStop != null ? $"Stopped: {coverStop}" : "";
                 ProgressText = "...";
             }
         }
@@ -602,7 +648,7 @@ namespace NINA.Plugin.TargetScheduler.Sequencer {
                     DarkWindow w = Window();
                     string stop = DarkPlanner.StopReason(w);
                     if (stop != null) {
-                        TSLogger.Info($"TS Bias: stopping after {biasDone} bias frames: {stop}");
+                        LogStop(w, $"TS Bias: stopping after {biasDone} bias frames: {stop}");
                         return true;
                     }
 

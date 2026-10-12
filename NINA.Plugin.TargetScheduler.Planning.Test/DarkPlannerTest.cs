@@ -134,6 +134,71 @@ namespace NINA.Plugin.TargetScheduler.Planning.Test {
             DarkPlanner.StopReason(w).Should().Contain("time limit");
         }
 
+        private static DarkCover Flat(bool connected, DarkCoverState state) {
+            return new DarkCover { Configured = true, Device = "ASCOM.DeepSkyDad.FP.CoverCalibrator1", Connected = connected, State = state };
+        }
+
+        [Test]
+        public void FlatDeviceNotConnectedStopsEveryPlacement() {
+            foreach (DarkPlacement p in Enum.GetValues(typeof(DarkPlacement))) {
+                var w = new DarkWindow { Placement = p, Now = Now, WaitUntil = Now.AddHours(1), AfterWait = TimeSpan.Zero, Safe = false, SunAltitudeAt = Night, Cover = Flat(false, DarkCoverState.Closed) };
+                DarkPlanner.StopReason(w).Should().Contain("not connected").And.Contain("ASCOM.DeepSkyDad.FP.CoverCalibrator1");
+            }
+        }
+
+        [TestCase(DarkCoverState.Open)]
+        [TestCase(DarkCoverState.NeitherOpenNorClosed)]
+        [TestCase(DarkCoverState.Unknown)]
+        [TestCase(DarkCoverState.Error)]
+        [TestCase(DarkCoverState.NotPresent)]
+        public void CoverNotClosedStops(DarkCoverState state) {
+            var w = new DarkWindow { Placement = DarkPlacement.EndOfSequence, Now = Now, SunAltitudeAt = Night, Cover = Flat(true, state) };
+            DarkPlanner.StopReason(w).Should().Contain($"reports its cover as {state}, not Closed");
+        }
+
+        [Test]
+        public void UnreadableFlatDeviceStops() {
+            var c = Flat(true, DarkCoverState.Closed);
+            c.ReadError = "driver threw";
+            var w = new DarkWindow { Placement = DarkPlacement.EndOfSequence, Now = Now, SunAltitudeAt = Night, Cover = c };
+            DarkPlanner.StopReason(w).Should().Contain("could not be read").And.Contain("driver threw");
+        }
+
+        [Test]
+        public void ClosedCoverAllowsDarks() {
+            var w = new DarkWindow { Placement = DarkPlacement.EndOfSequence, Now = Now, SunAltitudeAt = Night, Cover = Flat(true, DarkCoverState.Closed) };
+            DarkPlanner.CoverStopReason(w.Cover).Should().BeNull();
+            DarkPlanner.StopReason(w).Should().BeNull();
+        }
+
+        [Test]
+        public void NoFlatDeviceInTheProfileKeepsTheOldBehavior() {
+            var w = new DarkWindow { Placement = DarkPlacement.EndOfSequence, Now = Now, SunAltitudeAt = Night, Cover = new DarkCover { Configured = false } };
+            DarkPlanner.StopReason(w).Should().BeNull();
+            w.Cover = null;
+            DarkPlanner.StopReason(w).Should().BeNull();
+        }
+
+        [Test]
+        public void CoverOpeningMidRunStopsBeforeTheNextFrame() {
+            DarkCover cover = Flat(true, DarkCoverState.Closed);
+            int captured = 0;
+            string stop = null;
+            for (int frame = 0; frame < 10; frame++) {
+                var w = new DarkWindow { Placement = DarkPlacement.EndOfSequence, Now = Now, SunAltitudeAt = Night, Cover = cover };
+                stop = DarkPlanner.StopReason(w);
+                if (stop != null) {
+                    break;
+                }
+                captured++;
+                if (captured == 2) {
+                    cover.State = DarkCoverState.Open;
+                }
+            }
+            captured.Should().Be(2);
+            stop.Should().Contain("reports its cover as Open");
+        }
+
         [Test]
         public void EveryPlacementStopsWhenTheSunIsAtTheLimitOrUnknown() {
             foreach (DarkPlacement p in Enum.GetValues(typeof(DarkPlacement))) {

@@ -79,8 +79,26 @@ namespace NINA.Plugin.TargetScheduler.Darks {
         public double? PeakPower { get; set; }
     }
 
+    public enum DarkCoverState {
+        Unknown = 0,
+        NeitherOpenNorClosed = 1,
+        Closed = 2,
+        Open = 3,
+        Error = 4,
+        NotPresent = 5
+    }
+
+    public class DarkCover {
+        public bool Configured { get; set; }
+        public string Device { get; set; }
+        public bool Connected { get; set; }
+        public DarkCoverState State { get; set; }
+        public string ReadError { get; set; }
+    }
+
     public class DarkWindow {
         public DarkPlacement Placement { get; set; }
+        public DarkCover Cover { get; set; }
         public DateTime Now { get; set; }
         public DateTime? WaitUntil { get; set; }
         public TimeSpan? AfterWait { get; set; }
@@ -160,7 +178,29 @@ namespace NINA.Plugin.TargetScheduler.Darks {
             return TimeSpan.FromSeconds(delta * rate.Value);
         }
 
+        public static string CoverStopReason(DarkCover c) {
+            if (c == null || !c.Configured) {
+                return null;
+            }
+            string device = string.IsNullOrWhiteSpace(c.Device) ? "the profile's flat device" : $"the flat device {c.Device}";
+            if (c.ReadError != null) {
+                return $"{device} could not be read ({c.ReadError}), so the cover is not confirmed closed";
+            }
+            if (!c.Connected) {
+                return $"{device} is not connected, so the cover is not confirmed closed";
+            }
+            if (c.State != DarkCoverState.Closed) {
+                return $"{device} reports its cover as {c.State}, not Closed";
+            }
+            return null;
+        }
+
         public static string StopReason(DarkWindow w) {
+            string cover = CoverStopReason(w.Cover);
+            if (cover != null) {
+                return cover;
+            }
+
             if (w.StopBy.HasValue && w.Now >= w.StopBy.Value) {
                 return "the instruction's time limit is up";
             }
