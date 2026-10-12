@@ -266,6 +266,14 @@ namespace NINA.Plugin.TargetScheduler.Remote.Commands {
         [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
         public string Designation { get; set; }
 
+        [JsonPropertyName("kind")]
+        [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+        public string Kind { get; set; }
+
+        [JsonPropertyName("window")]
+        [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+        public NewTargetWindow Window { get; set; }
+
         [JsonPropertyName("plans")]
         public List<NewPlan> Plans { get; set; } = new List<NewPlan>();
     }
@@ -283,6 +291,39 @@ namespace NINA.Plugin.TargetScheduler.Remote.Commands {
 
         [JsonPropertyName("designation")]
         public string Designation { get; set; }
+    }
+
+    public class NewTargetWindow {
+
+        [JsonPropertyName("start")]
+        public string Start { get; set; }
+
+        [JsonPropertyName("end")]
+        public string End { get; set; }
+
+        [JsonPropertyName("priority")]
+        public string Priority { get; set; }
+
+        [JsonPropertyName("event_id")]
+        public string EventId { get; set; }
+
+        [JsonPropertyName("ignore_moon")]
+        public bool? IgnoreMoon { get; set; }
+    }
+
+    public class TargetWindowPayload {
+
+        [JsonPropertyName("target_id")]
+        public int TargetId { get; set; }
+
+        [JsonPropertyName("target_guid")]
+        public string TargetGuid { get; set; }
+
+        [JsonPropertyName("target_name")]
+        public string TargetName { get; set; }
+
+        [JsonPropertyName("window")]
+        public NewTargetWindow Window { get; set; }
     }
 
     public class NewGoal {

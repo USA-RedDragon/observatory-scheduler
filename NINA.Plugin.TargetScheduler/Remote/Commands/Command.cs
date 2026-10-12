@@ -42,6 +42,7 @@ namespace NINA.Plugin.TargetScheduler.Remote.Commands {
         public const string ProjectCreate = "project.create";
         public const string ProjectDelete = "project.delete";
         public const string TargetBody = "target.body";
+        public const string TargetWindow = "target.window";
     }
 
     public class CommandEnvelope {

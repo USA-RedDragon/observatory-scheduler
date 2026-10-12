@@ -136,6 +136,8 @@ namespace NINA.Plugin.TargetScheduler.Remote.Commands {
 
         ChangeOutcome SetTargetBody(TargetBodyPayload payload, DateTime now);
 
+        ChangeOutcome SetTargetWindow(TargetWindowPayload payload, DateTime now);
+
         TargetSnapshot ReadSnapshot(int targetId);
 
         int CountAcquired(int targetId, DateTime sinceUtc);

@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Globalization;
 using System.Linq;
 using System.Text.Json;
+using NINA.Plugin.TargetScheduler.Bodies;
 
 namespace NINA.Plugin.TargetScheduler.Remote.Commands {
 
@@ -341,6 +342,14 @@ namespace NINA.Plugin.TargetScheduler.Remote.Commands {
                 if (designationError != null) {
                     return $"{t.Name} {designationError}";
                 }
+                var kindError = TargetWindowHandler.CheckKind(t.Kind);
+                if (kindError != null) {
+                    return $"{t.Name} {kindError}";
+                }
+                var windowError = TargetWindowHandler.CheckWindow(t.Window);
+                if (windowError != null) {
+                    return $"{t.Name} {windowError}";
+                }
                 t.Plans ??= new List<NewPlan>();
                 foreach (var pl in t.Plans) {
                     var error = CheckPlan(pl);
@@ -405,6 +414,64 @@ namespace NINA.Plugin.TargetScheduler.Remote.Commands {
 
         protected override ChangeOutcome Change(TargetBodyPayload p, ICommandContext context) {
             return context.Database.SetTargetBody(p, context.Now);
+        }
+    }
+
+    public class TargetWindowHandler : PlanningHandler<TargetWindowPayload> {
+        public const int MaxSpanDays = 400;
+        public const int MaxEventIdLength = 200;
+        public const string DefaultKind = "comet";
+
+        private static readonly string[] Kinds = { "comet", "asteroid", "event" };
+
+        public override string Kind => CommandKinds.TargetWindow;
+
+        public static string NormalKind(string kind) {
+            return string.IsNullOrWhiteSpace(kind) ? DefaultKind : kind.Trim().ToLowerInvariant();
+        }
+
+        public static string CheckKind(string kind) {
+            if (kind == null || Kinds.Contains(NormalKind(kind))) {
+                return null;
+            }
+            return "kind must be comet, asteroid or event";
+        }
+
+        public static string CheckWindow(NewTargetWindow w) {
+            if (w == null) {
+                return null;
+            }
+            if (!TargetWindowTable.TryParseUtc(w.Start, out var start) || !TargetWindowTable.TryParseUtc(w.End, out var end)) {
+                return "window start and end must be ISO 8601 UTC times";
+            }
+            if (start >= end) {
+                return "window start must be before its end";
+            }
+            if ((end - start).TotalDays > MaxSpanDays) {
+                return $"window spans more than {MaxSpanDays} days";
+            }
+            if (TargetWindowRow.NormalPriority(w.Priority) == null) {
+                return "window priority must be normal or high";
+            }
+            if (w.EventId != null && w.EventId.Trim().Length > MaxEventIdLength) {
+                return $"window event_id is longer than {MaxEventIdLength} characters";
+            }
+            return null;
+        }
+
+        protected override string Check(TargetWindowPayload p) {
+            if (string.IsNullOrWhiteSpace(p.TargetGuid)) {
+                return "missing target_guid";
+            }
+            return CheckWindow(p.Window);
+        }
+
+        protected override string Label(TargetWindowPayload p) {
+            return p.TargetName ?? p.TargetGuid;
+        }
+
+        protected override ChangeOutcome Change(TargetWindowPayload p, ICommandContext context) {
+            return context.Database.SetTargetWindow(p, context.Now);
         }
     }
 }

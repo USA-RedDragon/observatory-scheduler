@@ -17,6 +17,12 @@ namespace NINA.Plugin.TargetScheduler.Bodies {
         public bool IgnoreMoon { get; set; }
         public DateTime? UpdatedAt { get; set; }
 
+        public static string NormalPriority(string priority) {
+            if (string.IsNullOrWhiteSpace(priority)) { return Normal; }
+            string p = priority.Trim().ToLowerInvariant();
+            return p == Normal || p == High ? p : null;
+        }
+
         public bool IsHigh => string.Equals(Priority?.Trim(), High, StringComparison.OrdinalIgnoreCase);
 
         public bool Contains(DateTime time) {
@@ -69,7 +75,7 @@ namespace NINA.Plugin.TargetScheduler.Bodies {
         }
 
         public static string FormatUtc(DateTime utc) {
-            return Utc(utc).ToString("yyyy-MM-dd'T'HH:mm:ss'Z'", CultureInfo.InvariantCulture);
+            return Utc(utc).ToString("yyyy-MM-dd'T'HH:mm:ss.FFFFFFF'Z'", CultureInfo.InvariantCulture);
         }
     }
 }

@@ -509,7 +509,14 @@ VALUES (@pr, @name, @desc, @state, @prio, @created, NULL, NULL, @mintime, @minal
             if (bodies.Count > 0) {
                 s.Exec(TargetBodyStore.CreateTable);
                 foreach (var t in bodies) {
-                    WriteTargetBody(s, t.Guid, t.Designation.Trim(), stamp);
+                    WriteTargetBody(s, t.Guid, t.Designation.Trim(), TargetWindowHandler.NormalKind(t.Kind), stamp);
+                }
+            }
+            var windows = p.Targets.Where(t => t.Window != null).ToList();
+            if (windows.Count > 0) {
+                s.Exec(TargetWindowStore.CreateTable);
+                foreach (var t in windows) {
+                    WriteTargetWindow(s, t.Guid, t.Window, stamp);
                 }
             }
             s.Commit();
@@ -544,7 +551,7 @@ VALUES (@pr, @name, @desc, @state, @prio, @created, NULL, NULL, @mintime, @minal
                 if (!exists) {
                     s.Exec(TargetBodyStore.CreateTable);
                 }
-                WriteTargetBody(s, p.TargetGuid, designation, now.ToUniversalTime().ToString("yyyy-MM-dd'T'HH:mm:ss'Z'", CultureInfo.InvariantCulture));
+                WriteTargetBody(s, p.TargetGuid, designation, null, now.ToUniversalTime().ToString("yyyy-MM-dd'T'HH:mm:ss'Z'", CultureInfo.InvariantCulture));
             }
             s.Commit();
             o.Touch((int?)Long(t["projectid"]), (int)Long(t["Id"]).Value);
@@ -552,10 +559,61 @@ VALUES (@pr, @name, @desc, @state, @prio, @created, NULL, NULL, @mintime, @minal
             return o;
         }
 
-        private static void WriteTargetBody(Session s, string targetGuid, string designation, string stamp) {
-            s.Exec("INSERT INTO ts_target_body (target_guid, designation, kind, updated_at) VALUES (@g, @d, 'comet', @at) " +
-                "ON CONFLICT(target_guid) DO UPDATE SET designation = excluded.designation, kind = excluded.kind, updated_at = excluded.updated_at",
-                ("@g", targetGuid), ("@d", designation), ("@at", stamp));
+        private static void WriteTargetBody(Session s, string targetGuid, string designation, string kind, string stamp) {
+            var keepKind = kind == null ? "" : ", kind = excluded.kind";
+            s.Exec("INSERT INTO ts_target_body (target_guid, designation, kind, updated_at) VALUES (@g, @d, @k, @at) " +
+                $"ON CONFLICT(target_guid) DO UPDATE SET designation = excluded.designation{keepKind}, updated_at = excluded.updated_at",
+                ("@g", targetGuid), ("@d", designation), ("@k", kind ?? TargetWindowHandler.DefaultKind), ("@at", stamp));
+        }
+
+        public ChangeOutcome SetTargetWindow(TargetWindowPayload p, DateTime now) {
+            var o = new ChangeOutcome();
+            using var s = Open();
+            var label = p.TargetName ?? p.TargetGuid;
+            var t = s.Row("SELECT Id, projectid FROM target WHERE guid = @g", ("@g", p.TargetGuid));
+            if (t == null || (p.TargetId > 0 && Long(t["Id"]) != p.TargetId)) {
+                return o.Reject($"{label} no longer exists.");
+            }
+            var exists = s.TableExists(TargetWindowStore.Table);
+            var current = exists ? s.Row("SELECT start_utc, end_utc, priority, event_id, ignore_moon FROM ts_target_window WHERE target_guid = @g", ("@g", p.TargetGuid)) : null;
+            if (p.Window == null) {
+                if (current == null) {
+                    o.Message = $"{label} has no event window.";
+                    return o;
+                }
+                s.Exec("DELETE FROM ts_target_window WHERE target_guid = @g", ("@g", p.TargetGuid));
+            } else {
+                var next = WindowValues(p.Window);
+                if (current != null && Str(current["start_utc"]) == (string)next.start && Str(current["end_utc"]) == (string)next.end
+                    && Str(current["priority"]) == (string)next.priority && Str(current["event_id"]) == (string)next.eventId
+                    && Long(current["ignore_moon"]) == (long)next.ignoreMoon) {
+                    o.Message = $"{label} already has this event window.";
+                    return o;
+                }
+                if (!exists) {
+                    s.Exec(TargetWindowStore.CreateTable);
+                }
+                WriteTargetWindow(s, p.TargetGuid, p.Window, now.ToUniversalTime().ToString("yyyy-MM-dd'T'HH:mm:ss'Z'", CultureInfo.InvariantCulture));
+            }
+            s.Commit();
+            o.Touch((int?)Long(t["projectid"]), (int)Long(t["Id"]).Value);
+            o.Changed = true;
+            return o;
+        }
+
+        private static (string start, string end, string priority, string eventId, long ignoreMoon) WindowValues(NewTargetWindow w) {
+            TargetWindowTable.TryParseUtc(w.Start, out var start);
+            TargetWindowTable.TryParseUtc(w.End, out var end);
+            var eventId = string.IsNullOrWhiteSpace(w.EventId) ? null : w.EventId.Trim();
+            return (TargetWindowTable.FormatUtc(start), TargetWindowTable.FormatUtc(end), TargetWindowRow.NormalPriority(w.Priority), eventId, w.IgnoreMoon == true ? 1 : 0);
+        }
+
+        private static void WriteTargetWindow(Session s, string targetGuid, NewTargetWindow w, string stamp) {
+            var v = WindowValues(w);
+            s.Exec("INSERT INTO ts_target_window (target_guid, start_utc, end_utc, priority, event_id, ignore_moon, updated_at) VALUES (@g, @s, @e, @p, @id, @m, @at) " +
+                "ON CONFLICT(target_guid) DO UPDATE SET start_utc = excluded.start_utc, end_utc = excluded.end_utc, priority = excluded.priority, " +
+                "event_id = excluded.event_id, ignore_moon = excluded.ignore_moon, updated_at = excluded.updated_at",
+                ("@g", targetGuid), ("@s", v.start), ("@e", v.end), ("@p", v.priority), ("@id", Db(v.eventId)), ("@m", v.ignoreMoon), ("@at", stamp));
         }
 
         private static Dictionary<string, double> ProjectSettingValues(Session s, string profile, NewProject p, out string filled) {
@@ -599,6 +657,9 @@ VALUES (@pr, @name, @desc, @state, @prio, @created, NULL, NULL, @mintime, @minal
             }
             if (s.TableExists(TargetBodyStore.Table)) {
                 s.Exec("DELETE FROM ts_target_body WHERE target_guid IN (SELECT guid FROM target WHERE projectid = @p AND guid IS NOT NULL)", pid);
+            }
+            if (s.TableExists(TargetWindowStore.Table)) {
+                s.Exec("DELETE FROM ts_target_window WHERE target_guid IN (SELECT guid FROM target WHERE projectid = @p AND guid IS NOT NULL)", pid);
             }
             s.Exec($"DELETE FROM filtercadenceitem WHERE targetid IN ({targets})", pid);
             s.Exec($"DELETE FROM overrideexposureorderitem WHERE targetid IN ({targets})", pid);
