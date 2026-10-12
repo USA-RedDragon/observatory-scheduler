@@ -25,6 +25,7 @@ namespace NINA.Plugin.TargetScheduler.Planning {
         public static Func<ITargetSeasonReader> ReaderFactory { get; set; } = ForkDatabase.TargetSeasonReader;
         public static Func<ITargetSeasonWriter> WriterFactory { get; set; } = ForkDatabase.TargetSeasonWriter;
         public static Func<BodyNightTable> BodyNightsFactory { get; set; } = ForkDatabase.BodyNights;
+        public static Func<string> BodyNightsVersionFactory { get; set; } = ForkDatabase.BodyNightsVersion;
 
         private static readonly object instanceLock = new object();
 
@@ -36,6 +37,7 @@ namespace NINA.Plugin.TargetScheduler.Planning {
         private int fullPassRequested;
         private volatile bool imaging;
         private DateTime? lastPassNight;
+        private volatile string bodyNightsAtLastPass;
 
         public bool Imaging => imaging;
 
@@ -95,6 +97,21 @@ namespace NINA.Plugin.TargetScheduler.Planning {
             }
         }
 
+        public void NoticeBodyNights(string version) {
+            if (SeasonSchedule.BodyNightsChanged(bodyNightsAtLastPass, version)) {
+                RequestPass("moving-body season nights changed");
+            }
+        }
+
+        private static string BodyNightsVersion() {
+            try {
+                return BodyNightsVersionFactory();
+            } catch (Exception ex) {
+                TSLogger.Debug($"season worker: could not read the {BodyNightStore.Table} version: {ex.Message}");
+                return null;
+            }
+        }
+
         public void RequestFullPass(string reason) {
             Interlocked.Exchange(ref fullPassRequested, 1);
             RequestPass(reason);
@@ -125,6 +142,10 @@ namespace NINA.Plugin.TargetScheduler.Planning {
 
                     bool full = Interlocked.Exchange(ref fullPassRequested, 0) == 1;
                     bool requested = Interlocked.Exchange(ref passRequested, 0) == 1;
+                    if (!full && !requested && SeasonSchedule.BodyNightsChanged(bodyNightsAtLastPass, BodyNightsVersion())) {
+                        TSLogger.Debug("season worker: moving-body season nights changed");
+                        requested = true;
+                    }
                     if (full || DailyPassDue()) {
                         SafePass(true, token);
                     } else if (requested) {
@@ -164,6 +185,7 @@ namespace NINA.Plugin.TargetScheduler.Planning {
         }
 
         private void RunPass(bool full, CancellationToken token) {
+            bodyNightsAtLastPass = BodyNightsVersion() ?? bodyNightsAtLastPass;
             IProfile profile = profileService.ActiveProfile;
             ObserverInfo observer = Observer();
             DateTime night = SeasonCalculator.NightDate(observer, DateTime.Now);

@@ -1,5 +1,6 @@
 using NINA.Plugin.TargetScheduler.Bodies;
 using NINA.Plugin.TargetScheduler.Goals;
+using NINA.Plugin.TargetScheduler.Planning;
 using NINA.Plugin.TargetScheduler.Planning.Exposures;
 using NINA.Plugin.TargetScheduler.Remote.Commands;
 using NINA.Plugin.TargetScheduler.Remote.Data;
@@ -76,6 +77,11 @@ namespace NINA.Plugin.TargetScheduler.Database {
             BodySnapshot snapshot = BodySchema.Load(context.Database.Connection, BodySnapshot.Current, m => TSLogger.Warning(m));
             BodySnapshot.Current = snapshot;
             TSLogger.Debug($"loaded moving bodies: {snapshot.Targets.Count} targets, {snapshot.Positions.Count} positions in {sw.ElapsedMilliseconds}ms");
+            try {
+                SeasonWorker.Instance?.NoticeBodyNights(BodyNightStore.Version(context.Database.Connection));
+            } catch (Exception ex) {
+                TSLogger.Debug($"could not read the {BodyNightStore.Table} version: {ex.Message}");
+            }
             RefreshTargetWindows(context);
         }
 
@@ -118,6 +124,12 @@ namespace NINA.Plugin.TargetScheduler.Database {
 
         public static ITargetSeasonReader TargetSeasonReader() {
             return new SqlTargetSeasonReader(() => new SchedulerDatabaseInteraction().GetContext().Database.Connection);
+        }
+
+        public static string BodyNightsVersion() {
+            using (SchedulerDatabaseContext context = new SchedulerDatabaseInteraction().GetContext()) {
+                return BodyNightStore.Version(context.Database.Connection);
+            }
         }
 
         public static BodyNightTable BodyNights() {

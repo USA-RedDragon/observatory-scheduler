@@ -161,6 +161,17 @@ namespace NINA.Plugin.TargetScheduler.Planning.Test {
         }
 
         [Test]
+        public void ANewOrChangedNightTableAsksForAPass() {
+            SeasonSchedule.BodyNightsChanged(null, "2|2026-10-12 20:00:00.000|2026-10-11|2026-10-12").Should().BeFalse();
+            SeasonSchedule.BodyNightsChanged("absent", null).Should().BeFalse();
+            SeasonSchedule.BodyNightsChanged("absent", "absent").Should().BeFalse();
+            SeasonSchedule.BodyNightsChanged("absent", "0|||").Should().BeTrue();
+            SeasonSchedule.BodyNightsChanged("0|||", "368|2026-10-12 20:00:00.000|2026-10-11|2027-10-13").Should().BeTrue();
+            SeasonSchedule.BodyNightsChanged("368|2026-10-12 20:00:00.000|2026-10-11|2027-10-13", "368|2026-10-13 20:00:00.000|2026-10-12|2027-10-14").Should().BeTrue();
+            SeasonSchedule.BodyNightsChanged("368|2026-10-12 20:00:00.000|2026-10-11|2027-10-13", "368|2026-10-12 20:00:00.000|2026-10-11|2027-10-13").Should().BeFalse();
+        }
+
+        [Test]
         public void UsabilityAsksTheSkyOnlyOnBrightNights() {
             BodyNightTrack track = new BodyNightTrack(new[] { Row("2026-10-12", 9, 15), Row("2026-10-13", 16, 15), Row("2026-10-14", 9, 15) });
             StubSky sky = new StubSky(n => 120);

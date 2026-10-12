@@ -28,6 +28,27 @@ namespace NINA.Plugin.TargetScheduler.Bodies {
             SqliteRows.Ensure(connection, CreateTable);
         }
 
+        public const string VersionSql = "SELECT COUNT(*), MAX(computed_at), MIN(night), MAX(night) FROM ts_body_night";
+
+        public static string Version(DbConnection connection) {
+            bool opened = false;
+            if (connection.State != ConnectionState.Open) {
+                connection.Open();
+                opened = true;
+            }
+
+            try {
+                if (!TableExists(connection, Table)) { return "absent"; }
+                using DbCommand cmd = connection.CreateCommand();
+                cmd.CommandText = VersionSql;
+                using DbDataReader r = cmd.ExecuteReader();
+                if (!r.Read()) { return "empty"; }
+                return string.Join("|", Text(r, 0), Text(r, 1), Text(r, 2), Text(r, 3));
+            } finally {
+                if (opened) { connection.Close(); }
+            }
+        }
+
         public static BodyNightTable Load(DbConnection connection) {
             bool opened = false;
             if (connection.State != ConnectionState.Open) {

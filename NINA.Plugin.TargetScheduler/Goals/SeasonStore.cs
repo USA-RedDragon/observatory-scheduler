@@ -74,6 +74,10 @@ namespace NINA.Plugin.TargetScheduler.Goals {
         public const int NoonWindowStartHour = 11;
         public const int NoonWindowEndHour = 14;
 
+        public static bool BodyNightsChanged(string seenAtLastPass, string now) {
+            return seenAtLastPass != null && now != null && !string.Equals(seenAtLastPass, now, StringComparison.Ordinal);
+        }
+
         public static bool DailyPassDue(DateTime nowLocal, DateTime nightDate, DateTime? lastPassNight, bool imaging) {
             if (lastPassNight.HasValue && lastPassNight.Value.Date == nightDate.Date) { return false; }
             if (!imaging) { return true; }

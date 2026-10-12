@@ -45,6 +45,22 @@ namespace NINA.Plugin.TargetScheduler.Remote.Test {
         public void MissingTableLoadsEmpty() {
             using var conn = db.Connect();
             BodyNightStore.Load(conn).Should().BeSameAs(BodyNightTable.Empty);
+            BodyNightStore.Version(conn).Should().Be("absent");
+        }
+
+        [Test]
+        public void VersionChangesWhenRowsArriveChangeOrGo() {
+            using (var conn = db.Connect()) { BodyNightStore.Ensure(conn); }
+            string Version() { using var conn = db.Connect(); return BodyNightStore.Version(conn); }
+            string empty = Version();
+            empty.Should().Be("0|||");
+            db.Exec("INSERT INTO ts_body_night VALUES ('G161', '2026-10-11', '2026-10-12 07:20:00.000', '161P', 1, 1, 1, 1, 9.5, 15, '2026-10-12 20:00:00.000')");
+            string one = Version();
+            one.Should().Be("1|2026-10-12 20:00:00.000|2026-10-11|2026-10-11");
+            db.Exec("UPDATE ts_body_night SET mag = 16, computed_at = '2026-10-13 20:00:00.000'");
+            Version().Should().NotBe(one);
+            db.Exec("DELETE FROM ts_body_night");
+            Version().Should().Be(empty);
         }
 
         [Test]
