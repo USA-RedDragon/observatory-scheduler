@@ -1,5 +1,6 @@
 ﻿using NINA.Astrometry;
 using NINA.Plugin.TargetScheduler.Astrometry;
+using NINA.Plugin.TargetScheduler.Bodies;
 using NINA.Plugin.TargetScheduler.Planning.Interfaces;
 using NINA.Plugin.TargetScheduler.Shared.Utility;
 using NINA.Profile.Interfaces;
@@ -38,7 +39,7 @@ namespace NINA.Plugin.TargetScheduler.Planning {
         }
 
         public bool IsRejected(DateTime atTime, ITarget target, IExposure exposure) {
-            if (!exposure.MoonAvoidanceEnabled) {
+            if (!exposure.MoonAvoidanceEnabled || target.Window()?.IgnoreMoon == true) {
                 exposure.MoonAvoidanceScore = SCORE_OFF;
                 return false;
             }
