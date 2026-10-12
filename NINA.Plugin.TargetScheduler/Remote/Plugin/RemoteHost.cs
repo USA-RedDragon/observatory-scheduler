@@ -1,4 +1,5 @@
 using NINA.Astrometry;
+using NINA.Equipment.Interfaces.Mediator;
 using NINA.Plugin.TargetScheduler.Astrometry;
 using NINA.Plugin.TargetScheduler.Planning;
 using NINA.Plugin.TargetScheduler.Planning.Exposures;
@@ -47,6 +48,9 @@ namespace NINA.Plugin.TargetScheduler.Remote.Plugin {
         private TargetSnapshot pickedSnapshot;
         private TargetSchedulerContainer container;
         private CancellationTokenSource waitCanceller;
+        private readonly IFocuserMediator focuserMediator;
+        private readonly AutofocusLatest autofocus = new AutofocusLatest();
+        private AutofocusObserver autofocusObserver;
 
         public RemoteSettings Settings { get; }
         public SchedulerControl Control { get; }
@@ -60,13 +64,13 @@ namespace NINA.Plugin.TargetScheduler.Remote.Plugin {
         public IReadOnlyDictionary<string, double> DefaultRuleWeights => Planning.Scoring.Rules.ScoringRule.GetDefaultRuleWeights().ToDictionary(w => w.name, w => w.weight);
         ISchedulerControl ICommandContext.Control => Control;
 
-        public static void Start(IProfileService profileService) {
+        public static void Start(IProfileService profileService, IFocuserMediator focuserMediator = null) {
             lock (initLock) {
                 if (Instance != null) {
                     return;
                 }
                 try {
-                    Instance = new RemoteHost(profileService);
+                    Instance = new RemoteHost(profileService, focuserMediator);
                     Instance.Run();
                 } catch (Exception e) {
                     TSLogger.Error($"remote control failed to start: {e}");
@@ -82,8 +86,9 @@ namespace NINA.Plugin.TargetScheduler.Remote.Plugin {
             }
         }
 
-        private RemoteHost(IProfileService profileService) {
+        private RemoteHost(IProfileService profileService, IFocuserMediator focuserMediator) {
             this.profileService = profileService;
+            this.focuserMediator = focuserMediator;
             connectionString = $"Data Source={Path.Combine(Common.PLUGIN_HOME, "schedulerdb.sqlite")};";
             database = new SqlSchedulerDatabase(Connect);
             tracker = new ExposureTracker(null, (t, since) => database.CountAcquired(t, since));
@@ -103,6 +108,7 @@ namespace NINA.Plugin.TargetScheduler.Remote.Plugin {
                 Push("status", null);
             };
             Settings.Changed += ApplySettings;
+            autofocus.Changed += () => Push("status", null);
         }
 
         private DbConnection Connect() {
@@ -124,10 +130,27 @@ namespace NINA.Plugin.TargetScheduler.Remote.Plugin {
             ev.WaitStopping += (s, e) => { lock (sync) { wait = null; } Push("status", null); };
             ev.ExposureStarting += (s, e) => OnExposureStarting(e);
             ev.ExposureStopping += (s, e) => { EndPlan(); Push("status", null); };
+            StartAutofocusObserver();
             TSLogger.Info("remote control started");
         }
 
+        private void StartAutofocusObserver() {
+            try {
+                autofocusObserver = new AutofocusObserver(focuserMediator, new AutofocusStore(Connect), autofocus, () => ProfileId, CurrentTarget);
+                autofocusObserver.Start();
+            } catch (Exception e) {
+                TSLogger.Error($"autofocus observer failed to start: {e}");
+            }
+        }
+
+        private (string Name, string Guid) CurrentTarget() {
+            lock (sync) {
+                return (target?.TargetName, target?.TargetGuid);
+            }
+        }
+
         private void Stop() {
+            autofocusObserver?.Stop();
             timer?.Dispose();
             lock (sync) {
                 foreach (var a in servers.Values) {
@@ -477,6 +500,7 @@ namespace NINA.Plugin.TargetScheduler.Remote.Plugin {
                     Skips = skips,
                     Pending = pending,
                     LastPlanAt = lastPlanAt,
+                    Autofocus = autofocus.Snapshot(),
                 };
             }
         }

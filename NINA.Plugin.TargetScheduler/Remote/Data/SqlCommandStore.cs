@@ -24,6 +24,7 @@ namespace NINA.Plugin.TargetScheduler.Remote.Data {
             Darks.BiasStore.Ensure(conn);
             Flats.FlatRequestStore.Ensure(conn);
             Goals.SubLengthStore.Ensure(conn);
+            AutofocusStore.Ensure(conn);
         }
 
         public void SaveCommand(CommandEnvelope command) {

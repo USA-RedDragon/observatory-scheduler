@@ -183,6 +183,9 @@ namespace NINA.Plugin.TargetScheduler.Remote.Api {
 
         [JsonPropertyName("last_plan_at")]
         public DateTime? LastPlanAt { get; set; }
+
+        [JsonPropertyName("autofocus")]
+        public StatusAutofocus Autofocus { get; set; }
     }
 
     public class PreviewOverride {

@@ -2,6 +2,7 @@
 using NINA.Core.Model;
 using NINA.Core.Utility;
 using NINA.Equipment.Interfaces;
+using NINA.Equipment.Interfaces.Mediator;
 using NINA.Plugin.Interfaces;
 using NINA.Plugin.TargetScheduler.Controls.AcquiredImages;
 using NINA.Plugin.TargetScheduler.Controls.DatabaseManager;
@@ -44,6 +45,7 @@ namespace NINA.Plugin.TargetScheduler {
         private IFramingAssistantVM framingAssistantVM;
         private IDeepSkyObjectSearchVM deepSkyObjectSearchVM;
         private IPlanetariumFactory planetariumFactory;
+        private IFocuserMediator focuserMediator;
 
         [ImportingConstructor]
         public TargetScheduler(IProfileService profileService,
@@ -51,7 +53,8 @@ namespace NINA.Plugin.TargetScheduler {
             IApplicationMediator applicationMediator,
             IFramingAssistantVM framingAssistantVM,
             IDeepSkyObjectSearchVM deepSkyObjectSearchVM,
-            IPlanetariumFactory planetariumFactory) {
+            IPlanetariumFactory planetariumFactory,
+            IFocuserMediator focuserMediator) {
             if (Properties.Settings.Default.UpdateSettings) {
                 Properties.Settings.Default.Upgrade();
                 Properties.Settings.Default.UpdateSettings = false;
@@ -63,6 +66,7 @@ namespace NINA.Plugin.TargetScheduler {
             this.framingAssistantVM = framingAssistantVM;
             this.deepSkyObjectSearchVM = deepSkyObjectSearchVM;
             this.planetariumFactory = planetariumFactory;
+            this.focuserMediator = focuserMediator;
 
             profileService.ProfileChanged += ProfileService_ProfileChanged;
 
@@ -78,7 +82,7 @@ namespace NINA.Plugin.TargetScheduler {
                 SyncManager.Instance.Start(profileService);
             }
 
-            Remote.Plugin.RemoteHost.Start(profileService);
+            Remote.Plugin.RemoteHost.Start(profileService, focuserMediator);
             RemoteOptions = new Remote.Plugin.RemoteOptionsVM();
 
             //new ExportProfile(profileService.ActiveProfile, false).Export();
