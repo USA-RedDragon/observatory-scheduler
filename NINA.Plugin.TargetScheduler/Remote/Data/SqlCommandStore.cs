@@ -25,6 +25,7 @@ namespace NINA.Plugin.TargetScheduler.Remote.Data {
             Flats.FlatRequestStore.Ensure(conn);
             Goals.SubLengthStore.Ensure(conn);
             Goals.MoonKeepStore.Ensure(conn);
+            Goals.AltKeepStore.Ensure(conn);
             Bodies.TargetBodyStore.Ensure(conn);
             Bodies.BodyPositionStore.Ensure(conn);
             Bodies.TargetWindowStore.Ensure(conn);

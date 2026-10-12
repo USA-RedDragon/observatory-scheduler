@@ -57,6 +57,15 @@ namespace NINA.Plugin.TargetScheduler.Planning {
             return exposure != null && exposure.IsManaged && target?.Window()?.IgnoreMoon != true;
         }
 
+        public static bool AltApplies(ITarget target, IExposure exposure) {
+            return exposure != null && AltKeep.Applies(exposure.IsManaged, target?.Window() != null);
+        }
+
+        public static double? AltWorth(ITarget target, IExposure exposure, double altitude) {
+            if (!AltApplies(target, exposure) || AltKeepTable.Current.Count == 0 || double.IsNaN(altitude)) { return null; }
+            return AltKeep.Worth(AltKeepTable.Current.Lookup(exposure.FilterName, altitude));
+        }
+
         public static MoonState? KeepState(ObserverInfo observer, Coordinates coordinates, DateTime atTime) {
             if (observer == null || coordinates == null || MoonKeepTable.Current.Count == 0) { return null; }
             return Moon(observer, coordinates, atTime);

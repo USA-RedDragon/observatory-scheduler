@@ -14,6 +14,7 @@ namespace NINA.Plugin.TargetScheduler.Goals {
         public double PanelMatch { get; set; } = 1;
         public double? Worth { get; set; }
         public double? BroadbandWorth { get; set; }
+        public double? AltWorth { get; set; }
         public double Value { get; set; }
     }
 
@@ -51,7 +52,7 @@ namespace NINA.Plugin.TargetScheduler.Goals {
             foreach (SteeringCandidate c in candidates) {
                 if (c == null) { continue; }
                 double gainNorm = maxGain > 0 ? GoalCompletion.Clamp01(Gain(c) / maxGain) : 1;
-                double condition = ConditionMatch.MoonScore(c.Narrowband, c.MoonGlare, c.Worth) * ConditionMatch.SkyScore(c.Narrowband, quality);
+                double condition = ConditionMatch.MoonScore(c.Narrowband, c.MoonGlare, c.Worth) * ConditionMatch.SkyScore(c.Narrowband, quality) * AltKeep.Weight(c.AltWorth);
                 c.Value = Deficit(c) * (0.5 + 0.5 * gainNorm) * condition * GoalCompletion.Clamp01(c.PanelMatch);
             }
         }

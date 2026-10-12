@@ -1,4 +1,5 @@
 using NINA.Astrometry;
+using NINA.Plugin.TargetScheduler.Astrometry;
 using NINA.Plugin.TargetScheduler.Goals;
 using NINA.Plugin.TargetScheduler.Planning.Interfaces;
 using NINA.Plugin.TargetScheduler.Shared.Utility;
@@ -43,6 +44,7 @@ namespace NINA.Plugin.TargetScheduler.Planning.Exposures {
             MoonState? moon = SkyConditions.KeepState(observer, coordinates, atTime);
             MoonKeepTable keep = MoonKeepTable.Current;
             double? broadbandWorth = moon.HasValue ? MoonKeep.Worth(keep.Broadband(moon.Value)) : null;
+            double altitude = observer == null || coordinates == null ? double.NaN : AstrometryUtils.GetAltitude(observer, coordinates, atTime);
 
             List<SteeringCandidate> candidates = new List<SteeringCandidate>();
             int currentIndex = -1;
@@ -59,6 +61,7 @@ namespace NINA.Plugin.TargetScheduler.Planning.Exposures {
                     MoonGlare = glare,
                     Worth = moon.HasValue && SkyConditions.KeepApplies(target, plan) ? MoonKeep.Worth(keep.Lookup(plan.FilterName, moon.Value)) : null,
                     BroadbandWorth = SkyConditions.KeepApplies(target, plan) ? broadbandWorth : null,
+                    AltWorth = SkyConditions.AltWorth(target, plan, altitude),
                     PanelMatch = PanelBalance.ConditionFactor(target, plan.FilterName, glare, observer)
                 });
             }

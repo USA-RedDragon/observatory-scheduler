@@ -11,6 +11,7 @@ namespace NINA.Plugin.TargetScheduler.Goals {
         public double PanelMatch { get; set; } = 1;
         public double? Worth { get; set; }
         public double? BroadbandWorth { get; set; }
+        public double? AltWorth { get; set; }
     }
 
     public static class ConditionMatch {
@@ -64,7 +65,7 @@ namespace NINA.Plugin.TargetScheduler.Goals {
 
         public static double FilterScore(FilterCondition filter, double? quality) {
             if (filter == null) { return 0; }
-            return MoonScore(filter.Narrowband, filter.MoonGlare, filter.Worth) * SkyScore(filter.Narrowband, quality) * GoalCompletion.Clamp01(filter.PanelMatch);
+            return MoonScore(filter.Narrowband, filter.MoonGlare, filter.Worth) * SkyScore(filter.Narrowband, quality) * GoalCompletion.Clamp01(filter.PanelMatch) * AltKeep.Weight(filter.AltWorth);
         }
 
         public static bool NarrowbandFavored(double glare, double? quality) {

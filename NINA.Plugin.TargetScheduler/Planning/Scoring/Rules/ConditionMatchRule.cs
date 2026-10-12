@@ -36,7 +36,7 @@ namespace NINA.Plugin.TargetScheduler.Planning.Scoring.Rules {
                 double altitude = AstrometryUtils.GetAltitude(observer, coordinates, at);
                 double peak = ConditionMatch.PeakAltitude(observer.Latitude, coordinates.Dec, potentialTarget.Project.MaximumAltitude);
                 double? quality = SkyConditions.NightQuality(at);
-                double score = ConditionMatch.Score(altitude, peak, plans.Select(p => PanelCondition(potentialTarget, p, glare, moon, observer)), quality);
+                double score = ConditionMatch.Score(altitude, peak, plans.Select(p => PanelCondition(potentialTarget, p, glare, moon, observer, altitude)), quality);
                 TSLogger.Debug($"condition match {potentialTarget.Project.Name}/{potentialTarget.Name}: alt {altitude:0.0}/{peak:0.0}, glare {glare:0.00}, quality {(quality.HasValue ? quality.Value.ToString("0.00") : "unknown")}, score {score:0.000}");
                 return score;
             } catch (Exception ex) {
@@ -45,9 +45,10 @@ namespace NINA.Plugin.TargetScheduler.Planning.Scoring.Rules {
             }
         }
 
-        private static FilterCondition PanelCondition(ITarget target, IExposure plan, double glare, MoonState? moon, ObserverInfo observer) {
+        private static FilterCondition PanelCondition(ITarget target, IExposure plan, double glare, MoonState? moon, ObserverInfo observer, double altitude) {
             FilterCondition condition = SkyConditions.For(plan, glare, SkyConditions.KeepApplies(target, plan) ? moon : null);
             condition.PanelMatch = PanelBalance.ConditionFactor(target, plan.FilterName, glare, observer);
+            condition.AltWorth = SkyConditions.AltWorth(target, plan, altitude);
             return condition;
         }
     }

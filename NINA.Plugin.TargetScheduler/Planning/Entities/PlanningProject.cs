@@ -150,11 +150,13 @@ namespace NINA.Plugin.TargetScheduler.Planning.Entities {
             return sb.ToString();
         }
 
+        public const double NoHorizonMinimumAltitude = 15;
+
         public static HorizonDefinition DetermineHorizon(IProfile profile, Project project) {
             if (project.UseCustomHorizon) {
                 if (profile.AstrometrySettings.Horizon == null) {
-                    TSLogger.Warning("project 'Use Custom Horizon' is enabled but no custom horizon was found in the profile, defaulting to Minimum Altitude");
-                    return new HorizonDefinition(project.MinimumAltitude);
+                    TSLogger.Warning($"project 'Use Custom Horizon' is enabled but no custom horizon was found in the profile, using the minimum altitude, at least {NoHorizonMinimumAltitude}°");
+                    return new HorizonDefinition(Math.Max(project.MinimumAltitude, NoHorizonMinimumAltitude));
                 }
 
                 return new HorizonDefinition(profile.AstrometrySettings.Horizon, project.HorizonOffset, project.MinimumAltitude);

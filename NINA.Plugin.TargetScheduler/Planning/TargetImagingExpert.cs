@@ -338,6 +338,21 @@ namespace NINA.Plugin.TargetScheduler.Planning {
             return rejected;
         }
 
+        public bool AltKeepRejects(DateTime atTime, ITarget target, IExposure exposure) {
+            if (!SkyConditions.AltApplies(target, exposure) || AltKeepTable.Current.Count == 0) { return false; }
+            double seconds = SubLengthPlanning.Seconds(exposure, target, atTime);
+            DateTime mid = MoonFloor.MidExposure(atTime, seconds);
+            Coordinates coordinates = target.CoordinatesAt(mid);
+            if (coordinates == null) { return false; }
+            double altitude = AstrometryUtils.GetAltitude(observerInfo, coordinates, mid);
+            AltKeepRow row = AltKeepTable.Current.Lookup(exposure.FilterName, altitude);
+            bool rejected = AltKeep.Skips(row);
+            if (rejected) {
+                TSLogger.Debug($"managed {target.Name}/{exposure.FilterName} left low in the sky at {Utils.FormatDateTimeFull(mid)}: {AltKeep.Explain(row, altitude)}");
+            }
+            return rejected;
+        }
+
         /// <summary>
         /// Reject target exposures that are not suitable for the current level of humidity.
         /// </summary>
@@ -390,6 +405,8 @@ namespace NINA.Plugin.TargetScheduler.Planning {
                         SetRejected(exposure, Reasons.FilterMoonAvoidance);
                     } else if (MoonKeepRejects(atTime, target, exposure)) {
                         SetRejected(exposure, Reasons.FilterMoonKeep);
+                    } else if (AltKeepRejects(atTime, target, exposure)) {
+                        SetRejected(exposure, Reasons.FilterAltKeep);
                     }
                 }
             }
@@ -433,7 +450,8 @@ namespace NINA.Plugin.TargetScheduler.Planning {
                     MoonAvoidanceFilter(atTime, target, moonExpert);
                     if (AllExposurePlansRejected(target)) {
                         SetRejected(target, target.ExposurePlans.All(e => e.RejectedReason == Reasons.FilterBodyPositionUnknown) ? Reasons.TargetBodyPositionUnknown
-                            : MoonKeep.Waits(target.ExposurePlans.Select(e => e.RejectedReason), Reasons.FilterMoonAvoidance) ? Reasons.TargetMoonKeep : Reasons.TargetMoonAvoidance);
+                            : MoonKeep.Waits(target.ExposurePlans.Select(e => e.RejectedReason), Reasons.FilterMoonAvoidance, Reasons.FilterAltKeep) ? Reasons.TargetMoonKeep
+                            : AltKeep.Waits(target.ExposurePlans.Select(e => e.RejectedReason), Reasons.FilterMoonAvoidance) ? Reasons.TargetAltKeep : Reasons.TargetMoonAvoidance);
                     }
                 }
 

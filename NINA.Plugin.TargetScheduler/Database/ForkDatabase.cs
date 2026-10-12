@@ -44,6 +44,11 @@ namespace NINA.Plugin.TargetScheduler.Database {
                         TSLogger.Warning($"failed to create {MoonKeepStore.Table}, bright-Moon exposures keep the moon glare rule: {ex.Message}");
                     }
                     try {
+                        AltKeepStore.Ensure(context.Database.Connection);
+                    } catch (Exception ex) {
+                        TSLogger.Warning($"failed to create {AltKeepStore.Table}, exposures are not weighed by the target's altitude: {ex.Message}");
+                    }
+                    try {
                         TemplateRoleStore.Ensure(context.Database.Connection);
                     } catch (Exception ex) {
                         TSLogger.Warning($"failed to create {TemplateRoleStore.RoleTable} and {TemplateRoleStore.MigrationTable}, no template is managed: {ex.Message}");
@@ -68,6 +73,7 @@ namespace NINA.Plugin.TargetScheduler.Database {
             RefreshSubLengths(context);
             RefreshManagedTemplates(context);
             RefreshMoonKeep(context);
+            RefreshAltKeep(context);
             RefreshBodies(context);
             RefreshPanelHistory(context);
             return MosaicCompletion.GoalSource;
@@ -92,6 +98,17 @@ namespace NINA.Plugin.TargetScheduler.Database {
             } catch (Exception ex) {
                 MoonKeepTable.Current = MoonKeepTable.Empty;
                 TSLogger.Warning($"failed to load {MoonKeepStore.Table}, bright-Moon exposures keep the moon glare rule: {ex.Message}");
+            }
+        }
+
+        public static void RefreshAltKeep(SchedulerDatabaseContext context) {
+            try {
+                Stopwatch sw = Stopwatch.StartNew();
+                AltKeepTable.Current = AltKeepStore.Load(context.Database.Connection);
+                TSLogger.Debug($"loaded altitude kept rates: {AltKeepTable.Current.Count} rows in {sw.ElapsedMilliseconds}ms");
+            } catch (Exception ex) {
+                AltKeepTable.Current = AltKeepTable.Empty;
+                TSLogger.Warning($"failed to load {AltKeepStore.Table}, exposures are not weighed by the target's altitude: {ex.Message}");
             }
         }
 

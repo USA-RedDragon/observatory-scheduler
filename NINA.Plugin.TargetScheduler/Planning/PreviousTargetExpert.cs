@@ -82,7 +82,8 @@ namespace NINA.Plugin.TargetScheduler.Planning {
             targetExpert.MoonAvoidanceFilter(atTime, previousTarget, new MoonAvoidanceExpert(observerInfo));
             bool allRejected = previousTarget.ExposurePlans.All(ep => ep.Rejected);
             if (allRejected) {
-                string why = previousTarget.ExposurePlans.All(ep => ep.RejectedReason == Reasons.FilterMoonKeep) ? "a bright Moon" : "moon avoidance";
+                string why = previousTarget.ExposurePlans.All(ep => ep.RejectedReason == Reasons.FilterMoonKeep) ? "a bright Moon"
+                    : previousTarget.ExposurePlans.All(ep => ep.RejectedReason == Reasons.FilterAltKeep) ? "low in the sky" : "moon avoidance";
                 TSLogger.Info($"not continuing previous target at {atTime}, {previousTarget.Name}: all remaining exposure plans now rejected for {why}");
                 return false;
             }
