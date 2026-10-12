@@ -1,6 +1,5 @@
-Observatory Scheduler 5.8.2.216: comets and other moving bodies, and sky event windows.
+Observatory Scheduler 5.8.2.217: framing for comets and other moving bodies.
 
-- **Moving bodies**: targets with a body designation follow the stacker's JPL Horizons positions for visibility, scoring, slew and center, re-center as the body drifts, and cap sub lengths so the body stays sharp.
-- **Event windows**: time-boxed targets with a priority; normal events fill gaps, high-priority events may interrupt at the next exposure boundary.
+- **Framing**: a moving-body target can keep a frame rotation and a head offset; the mount and rotator frame the body that way and keep the offset as it moves.
 
-On start-up the plugin adds `ts_target_body`, `ts_body_position` and `ts_target_window` to its SQLite database. The home database needs those tables and their SymmetricDS triggers (install the plugin first). Requires NINA 3.1.2.9001 or later. Install like 5.8.2.215.
+On start-up the plugin adds `rotation_deg` and `offset_frac` to `ts_target_body`. The home database needs the same two columns, then a `sync-triggers ts_target_body` on the observatory so they sync. Requires NINA 3.1.2.9001 or later. Install like 5.8.2.216.
