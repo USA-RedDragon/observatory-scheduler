@@ -46,11 +46,44 @@ namespace NINA.Plugin.TargetScheduler.Bodies {
     target_guid TEXT NOT NULL PRIMARY KEY,
     designation TEXT NOT NULL,
     kind TEXT NOT NULL DEFAULT 'comet',
-    updated_at TEXT
+    updated_at TEXT,
+    rotation_deg REAL,
+    offset_frac REAL
 )";
+
+        public static readonly string[] FramingColumns = { "rotation_deg", "offset_frac" };
+
+        public const string ColumnCountSql = "SELECT COUNT(*) FROM pragma_table_info('ts_target_body') WHERE name = @c";
+
+        public static string AddColumnSql(string column) {
+            return $"ALTER TABLE ts_target_body ADD COLUMN {column} REAL";
+        }
 
         public static void Ensure(DbConnection connection) {
             SqliteRows.Ensure(connection, CreateTable);
+            bool opened = false;
+            if (connection.State != ConnectionState.Open) {
+                connection.Open();
+                opened = true;
+            }
+
+            try {
+                foreach (string column in FramingColumns) {
+                    if (HasColumn(connection, column)) { continue; }
+                    using DbCommand cmd = connection.CreateCommand();
+                    cmd.CommandText = AddColumnSql(column);
+                    cmd.ExecuteNonQuery();
+                }
+            } finally {
+                if (opened) { connection.Close(); }
+            }
+        }
+
+        public static bool HasColumn(DbConnection connection, string column) {
+            using DbCommand cmd = connection.CreateCommand();
+            cmd.CommandText = ColumnCountSql;
+            Add(cmd, "@c", column);
+            return Convert.ToInt64(cmd.ExecuteScalar(), System.Globalization.CultureInfo.InvariantCulture) > 0;
         }
 
         public static TargetBodyTable Load(DbConnection connection) {
@@ -62,16 +95,19 @@ namespace NINA.Plugin.TargetScheduler.Bodies {
 
             try {
                 if (!TableExists(connection, Table)) { return TargetBodyTable.Empty; }
+                bool framing = HasColumn(connection, "rotation_deg") && HasColumn(connection, "offset_frac");
                 List<TargetBodyRow> rows = new List<TargetBodyRow>();
                 using DbCommand cmd = connection.CreateCommand();
-                cmd.CommandText = "SELECT target_guid, designation, kind, updated_at FROM ts_target_body";
+                cmd.CommandText = "SELECT target_guid, designation, kind, updated_at" + (framing ? ", rotation_deg, offset_frac" : "") + " FROM ts_target_body";
                 using DbDataReader r = cmd.ExecuteReader();
                 while (r.Read()) {
                     rows.Add(new TargetBodyRow {
                         TargetGuid = Text(r, 0),
                         Designation = Text(r, 1),
                         Kind = Text(r, 2),
-                        UpdatedAt = Time(r, 3)
+                        UpdatedAt = Time(r, 3),
+                        RotationDeg = framing ? Real(r, 4) : null,
+                        OffsetFrac = framing ? Real(r, 5) : null
                     });
                 }
                 return new TargetBodyTable(rows);

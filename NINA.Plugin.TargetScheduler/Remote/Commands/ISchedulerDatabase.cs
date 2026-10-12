@@ -138,6 +138,8 @@ namespace NINA.Plugin.TargetScheduler.Remote.Commands {
 
         ChangeOutcome SetTargetWindow(TargetWindowPayload payload, DateTime now);
 
+        ChangeOutcome SetTargetFraming(TargetFramingPayload payload, DateTime now);
+
         TargetSnapshot ReadSnapshot(int targetId);
 
         int CountAcquired(int targetId, DateTime sinceUtc);

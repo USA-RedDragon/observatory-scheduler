@@ -507,9 +507,12 @@ VALUES (@pr, @name, @desc, @state, @prio, @created, NULL, NULL, @mintime, @minal
             }
             var bodies = p.Targets.Where(t => !string.IsNullOrWhiteSpace(t.Designation)).ToList();
             if (bodies.Count > 0) {
-                s.Exec(TargetBodyStore.CreateTable);
+                EnsureTargetBody(s);
                 foreach (var t in bodies) {
                     WriteTargetBody(s, t.Guid, t.Designation.Trim(), TargetWindowHandler.NormalKind(t.Kind), stamp);
+                    if (t.RotationDeg.HasValue && t.OffsetFrac.HasValue) {
+                        WriteFraming(s, t.Guid, t.RotationDeg, t.OffsetFrac, stamp);
+                    }
                 }
             }
             var windows = p.Targets.Where(t => t.Window != null).ToList();
@@ -548,11 +551,61 @@ VALUES (@pr, @name, @desc, @state, @prio, @created, NULL, NULL, @mintime, @minal
                     o.Message = $"{label} already follows {designation}.";
                     return o;
                 }
-                if (!exists) {
-                    s.Exec(TargetBodyStore.CreateTable);
+                EnsureTargetBody(s);
+                var stamp = now.ToUniversalTime().ToString("yyyy-MM-dd'T'HH:mm:ss'Z'", CultureInfo.InvariantCulture);
+                WriteTargetBody(s, p.TargetGuid, designation, null, stamp);
+                if (current != null) {
+                    WriteFraming(s, p.TargetGuid, null, null, stamp);
                 }
-                WriteTargetBody(s, p.TargetGuid, designation, null, now.ToUniversalTime().ToString("yyyy-MM-dd'T'HH:mm:ss'Z'", CultureInfo.InvariantCulture));
             }
+            s.Commit();
+            o.Touch((int?)Long(t["projectid"]), (int)Long(t["Id"]).Value);
+            o.Changed = true;
+            return o;
+        }
+
+        private static void EnsureTargetBody(Session s) {
+            s.Exec(TargetBodyStore.CreateTable);
+            foreach (var column in TargetBodyStore.FramingColumns) {
+                if (s.Count(TargetBodyStore.ColumnCountSql, ("@c", column)) == 0) {
+                    s.Exec(TargetBodyStore.AddColumnSql(column));
+                }
+            }
+        }
+
+        private static void WriteFraming(Session s, string targetGuid, double? rotationDeg, double? offsetFrac, string stamp) {
+            s.Exec("UPDATE ts_target_body SET rotation_deg = @r, offset_frac = @o, updated_at = @at WHERE target_guid = @g",
+                ("@g", targetGuid), ("@r", Db(rotationDeg)), ("@o", Db(offsetFrac)), ("@at", stamp));
+        }
+
+        private static bool Same(double? a, double? b) {
+            if (!a.HasValue || !b.HasValue) { return a.HasValue == b.HasValue; }
+            return Math.Abs(a.Value - b.Value) <= 1e-9;
+        }
+
+        public ChangeOutcome SetTargetFraming(TargetFramingPayload p, DateTime now) {
+            var o = new ChangeOutcome();
+            using var s = Open();
+            var label = p.TargetName ?? p.TargetGuid;
+            var t = s.Row("SELECT Id, projectid FROM target WHERE guid = @g", ("@g", p.TargetGuid));
+            if (t == null || (p.TargetId > 0 && Long(t["Id"]) != p.TargetId)) {
+                return o.Reject($"{label} no longer exists.");
+            }
+            if (!s.TableExists(TargetBodyStore.Table)) {
+                return o.Reject($"{label} is not a moving body, so it has no framing.");
+            }
+            EnsureTargetBody(s);
+            var row = s.Row("SELECT designation, rotation_deg, offset_frac FROM ts_target_body WHERE target_guid = @g", ("@g", p.TargetGuid));
+            if (row == null) {
+                return o.Reject($"{label} is not a moving body, so it has no framing.");
+            }
+            var rotation = p.Framing?.RotationDeg;
+            var offset = p.Framing?.OffsetFrac;
+            if (Same(Double(row["rotation_deg"]), rotation) && Same(Double(row["offset_frac"]), offset)) {
+                o.Message = rotation.HasValue ? $"{label} already has this framing." : $"{label} already has no framing.";
+                return o;
+            }
+            WriteFraming(s, p.TargetGuid, rotation, offset, now.ToUniversalTime().ToString("yyyy-MM-dd'T'HH:mm:ss'Z'", CultureInfo.InvariantCulture));
             s.Commit();
             o.Touch((int?)Long(t["projectid"]), (int)Long(t["Id"]).Value);
             o.Changed = true;

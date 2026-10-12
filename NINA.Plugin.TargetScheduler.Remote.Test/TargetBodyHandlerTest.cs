@@ -59,7 +59,7 @@ namespace NINA.Plugin.TargetScheduler.Remote.Test {
         public void TargetBodySetsChangesAndClearsTheDesignation() {
             var r = Run("target.body", SetComet);
             r.Status.Should().Be(CommandStatus.Applied);
-            db.Dump("ts_target_body").Should().Be("target_guid=g13|designation=C/2025 R2|kind=comet|updated_at=2026-10-10T06:52:00Z");
+            db.Dump("ts_target_body").Should().Be("target_guid=g13|designation=C/2025 R2|kind=comet|updated_at=2026-10-10T06:52:00Z|rotation_deg=null|offset_frac=null");
             Control.Invalidated.Should().ContainSingle().Which.Should().Be(((int?)5, (int?)13));
             Control.Replans.Should().HaveCount(1);
             Load().Designation("g13").Should().Be("C/2025 R2");
@@ -77,7 +77,7 @@ namespace NINA.Plugin.TargetScheduler.Remote.Test {
 
             payload["designation"] = "DES=2P;CAP;NOFRAG";
             Run("target.body", payload.ToJsonString()).Status.Should().Be(CommandStatus.Applied);
-            db.Dump("ts_target_body").Should().Be("target_guid=g13|designation=DES=2P;CAP;NOFRAG|kind=comet|updated_at=2026-10-10T06:52:00Z");
+            db.Dump("ts_target_body").Should().Be("target_guid=g13|designation=DES=2P;CAP;NOFRAG|kind=comet|updated_at=2026-10-10T06:52:00Z|rotation_deg=null|offset_frac=null");
             Control.Replans.Should().HaveCount(2);
 
             payload["designation"] = "  ";
@@ -115,7 +115,7 @@ namespace NINA.Plugin.TargetScheduler.Remote.Test {
             var payload = JsonNode.Parse(Samples.ProjectCreate);
             payload["targets"][0]["designation"] = "C/2025 R2";
             Run("project.create", payload.ToJsonString()).Status.Should().Be(CommandStatus.Applied);
-            db.Dump("ts_target_body").Should().Be("target_guid=tg|designation=C/2025 R2|kind=comet|updated_at=2026-10-10T06:52:00Z");
+            db.Dump("ts_target_body").Should().Be("target_guid=tg|designation=C/2025 R2|kind=comet|updated_at=2026-10-10T06:52:00Z|rotation_deg=null|offset_frac=null");
             Load().Designation("tg").Should().Be("C/2025 R2");
 
             Run("project.delete", payload.ToJsonString()).Status.Should().Be(CommandStatus.Applied);

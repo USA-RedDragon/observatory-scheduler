@@ -38,8 +38,40 @@ namespace NINA.Plugin.TargetScheduler.Remote.Test {
             store.EnsureSchema();
             store.EnsureSchema();
             db.Count("SELECT COUNT(*) FROM sqlite_master WHERE type = 'table' AND name IN ('ts_target_body', 'ts_body_position')").Should().Be(2);
-            Columns("ts_target_body").Should().Equal("target_guid", "designation", "kind", "updated_at");
+            Columns("ts_target_body").Should().Equal("target_guid", "designation", "kind", "updated_at", "rotation_deg", "offset_frac");
             Columns("ts_body_position").Should().Equal("target_guid", "at", "designation", "night", "ra", "dec", "ra_app", "dec_app", "ra_rate", "dec_rate", "mag", "delta", "unc_ra", "unc_dec", "computed_at");
+        }
+
+        [Test]
+        public void StartupAddsTheFramingColumnsToALegacyTableAndKeepsItsRows() {
+            db.Exec(@"CREATE TABLE ts_target_body (target_guid TEXT NOT NULL PRIMARY KEY, designation TEXT NOT NULL, kind TEXT NOT NULL DEFAULT 'comet', updated_at TEXT);
+INSERT INTO ts_target_body (target_guid, designation) VALUES ('g13', 'C/2025 R2')");
+            using (var conn = db.Connect()) {
+                TargetBodyStore.Load(conn).Get("g13").Frame.Should().BeNull();
+            }
+            var store = new SqlCommandStore(db.Connect);
+            store.EnsureSchema();
+            store.EnsureSchema();
+            Columns("ts_target_body").Should().Equal("target_guid", "designation", "kind", "updated_at", "rotation_deg", "offset_frac");
+            db.Exec("UPDATE ts_target_body SET rotation_deg = 84.06, offset_frac = -0.25");
+            TargetBodyRow row;
+            using (var conn = db.Connect()) { row = TargetBodyStore.Load(conn).Get("g13"); }
+            row.Designation.Should().Be("C/2025 R2");
+            row.Frame.RotationDeg.Should().Be(84.06);
+            row.Frame.OffsetFrac.Should().Be(-0.25);
+        }
+
+        [Test]
+        public void OutOfRangeFramingLoadsAsNoFraming() {
+            using (var conn = db.Connect()) { TargetBodyStore.Ensure(conn); }
+            db.Exec("INSERT INTO ts_target_body (target_guid, designation, rotation_deg, offset_frac) VALUES ('g1', '2P', 400, 0), ('g2', '2P', 10, NULL), ('g3', '2P', 10, 0.2)");
+            TargetBodyTable table;
+            using (var conn = db.Connect()) { table = TargetBodyStore.Load(conn); }
+            table.Get("g1").Frame.Should().BeNull();
+            table.Get("g2").Frame.Should().BeNull();
+            table.Frame("g3", "2p").OffsetFrac.Should().Be(0.2);
+            table.Frame("g3", "3P").Should().BeNull();
+            table.Frame("g9", "2P").Should().BeNull();
         }
 
         [Test]

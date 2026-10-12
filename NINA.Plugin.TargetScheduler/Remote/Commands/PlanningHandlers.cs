@@ -350,6 +350,13 @@ namespace NINA.Plugin.TargetScheduler.Remote.Commands {
                 if (windowError != null) {
                     return $"{t.Name} {windowError}";
                 }
+                var framingError = BodyFrame.Check(t.RotationDeg, t.OffsetFrac);
+                if (framingError != null) {
+                    return $"{t.Name} {framingError}";
+                }
+                if (t.RotationDeg.HasValue && string.IsNullOrWhiteSpace(t.Designation)) {
+                    return $"{t.Name} has framing but no designation";
+                }
                 t.Plans ??= new List<NewPlan>();
                 foreach (var pl in t.Plans) {
                     var error = CheckPlan(pl);
@@ -472,6 +479,32 @@ namespace NINA.Plugin.TargetScheduler.Remote.Commands {
 
         protected override ChangeOutcome Change(TargetWindowPayload p, ICommandContext context) {
             return context.Database.SetTargetWindow(p, context.Now);
+        }
+    }
+
+    public class TargetFramingHandler : PlanningHandler<TargetFramingPayload> {
+
+        public override string Kind => CommandKinds.TargetFraming;
+
+        protected override string Check(TargetFramingPayload p) {
+            if (string.IsNullOrWhiteSpace(p.TargetGuid)) {
+                return "missing target_guid";
+            }
+            if (p.Framing == null) {
+                return null;
+            }
+            if (!p.Framing.RotationDeg.HasValue && !p.Framing.OffsetFrac.HasValue) {
+                return "framing needs rotation_deg and offset_frac, or framing null to clear it";
+            }
+            return BodyFrame.Check(p.Framing.RotationDeg, p.Framing.OffsetFrac);
+        }
+
+        protected override string Label(TargetFramingPayload p) {
+            return p.TargetName ?? p.TargetGuid;
+        }
+
+        protected override ChangeOutcome Change(TargetFramingPayload p, ICommandContext context) {
+            return context.Database.SetTargetFraming(p, context.Now);
         }
     }
 }

@@ -274,6 +274,14 @@ namespace NINA.Plugin.TargetScheduler.Remote.Commands {
         [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
         public NewTargetWindow Window { get; set; }
 
+        [JsonPropertyName("rotation_deg")]
+        [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+        public double? RotationDeg { get; set; }
+
+        [JsonPropertyName("offset_frac")]
+        [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+        public double? OffsetFrac { get; set; }
+
         [JsonPropertyName("plans")]
         public List<NewPlan> Plans { get; set; } = new List<NewPlan>();
     }
@@ -291,6 +299,30 @@ namespace NINA.Plugin.TargetScheduler.Remote.Commands {
 
         [JsonPropertyName("designation")]
         public string Designation { get; set; }
+    }
+
+    public class TargetFraming {
+
+        [JsonPropertyName("rotation_deg")]
+        public double? RotationDeg { get; set; }
+
+        [JsonPropertyName("offset_frac")]
+        public double? OffsetFrac { get; set; }
+    }
+
+    public class TargetFramingPayload {
+
+        [JsonPropertyName("target_id")]
+        public int TargetId { get; set; }
+
+        [JsonPropertyName("target_guid")]
+        public string TargetGuid { get; set; }
+
+        [JsonPropertyName("target_name")]
+        public string TargetName { get; set; }
+
+        [JsonPropertyName("framing")]
+        public TargetFraming Framing { get; set; }
     }
 
     public class NewTargetWindow {

@@ -6,6 +6,7 @@ namespace NINA.Plugin.TargetScheduler.Bodies {
     public sealed class BodyField {
         public const double DefaultImageScale = 1.91;
         public const double DefaultShortSideDegrees = 2.2;
+        public const double DefaultLongSideDegrees = 3.3;
         public const double RecenterFraction = 0.1;
         public const double MaxTrailPixels = 1.0;
 
@@ -24,6 +25,10 @@ namespace NINA.Plugin.TargetScheduler.Bodies {
         public int? HeightPx { get; }
 
         public double RecenterDegrees => ShortSideDegrees * RecenterFraction;
+
+        public double LongSideDegrees => WidthPx.HasValue && HeightPx.HasValue
+            ? Math.Max(WidthPx.Value, HeightPx.Value) * ImageScale / 3600
+            : DefaultLongSideDegrees;
 
         private BodyField(double imageScale, double shortSideDegrees, int? widthPx, int? heightPx) {
             ImageScale = imageScale;

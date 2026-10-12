@@ -10,6 +10,10 @@ namespace NINA.Plugin.TargetScheduler.Bodies {
         public string Designation { get; set; }
         public string Kind { get; set; }
         public DateTime? UpdatedAt { get; set; }
+        public double? RotationDeg { get; set; }
+        public double? OffsetFrac { get; set; }
+
+        public BodyFrame Frame => BodyFrame.From(RotationDeg, OffsetFrac);
     }
 
     public class BodyPositionRow {
@@ -76,6 +80,11 @@ namespace NINA.Plugin.TargetScheduler.Bodies {
 
         public string Designation(string targetGuid) {
             return Get(targetGuid)?.Designation?.Trim();
+        }
+
+        public BodyFrame Frame(string targetGuid, string designation) {
+            TargetBodyRow row = Get(targetGuid);
+            return row != null && SameDesignation(row.Designation, designation) ? row.Frame : null;
         }
 
         public static bool SameDesignation(string a, string b) {

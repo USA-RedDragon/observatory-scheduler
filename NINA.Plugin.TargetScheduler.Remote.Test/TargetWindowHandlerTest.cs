@@ -121,7 +121,7 @@ namespace NINA.Plugin.TargetScheduler.Remote.Test {
             payload = node.ToJsonString();
 
             Run("project.create", payload).Status.Should().Be(CommandStatus.Applied);
-            db.Dump("ts_target_body").Should().Be("target_guid=tg|designation=event:mars-m-44-2026-10-13|kind=event|updated_at=2026-10-10T06:52:00Z");
+            db.Dump("ts_target_body").Should().Be("target_guid=tg|designation=event:mars-m-44-2026-10-13|kind=event|updated_at=2026-10-10T06:52:00Z|rotation_deg=null|offset_frac=null");
             db.Dump("ts_target_window").Should().Be("target_guid=tg|start_utc=2026-10-13T00:30:00Z|end_utc=2026-10-14T12:00:00Z|priority=high|event_id=mars-m-44-2026-10-13|ignore_moon=1|updated_at=2026-10-10T06:52:00Z");
             var row = Load().Get("tg");
             row.StartUtc.Should().Be(new DateTime(2026, 10, 13, 0, 30, 0, DateTimeKind.Utc));
@@ -136,7 +136,7 @@ namespace NINA.Plugin.TargetScheduler.Remote.Test {
         [Test]
         public void ProjectCreateWithADesignationAndNoKindStaysAComet() {
             Run("project.create", CreateWith(t => t["designation"] = "C/2025 R2")).Status.Should().Be(CommandStatus.Applied);
-            db.Dump("ts_target_body").Should().Be("target_guid=tg|designation=C/2025 R2|kind=comet|updated_at=2026-10-10T06:52:00Z");
+            db.Dump("ts_target_body").Should().Be("target_guid=tg|designation=C/2025 R2|kind=comet|updated_at=2026-10-10T06:52:00Z|rotation_deg=null|offset_frac=null");
             db.Count("SELECT COUNT(*) FROM sqlite_master WHERE name = 'ts_target_window'").Should().Be(0);
         }
 
@@ -249,7 +249,7 @@ namespace NINA.Plugin.TargetScheduler.Remote.Test {
             payload["targets"][0]["kind"] = "event";
             Run("project.create", payload.ToJsonString()).Status.Should().Be(CommandStatus.Applied);
             Run("target.body", """{"target_guid":"tg","target_name":"Gecko Nebula","designation":"event:b"}""").Status.Should().Be(CommandStatus.Applied);
-            db.Dump("ts_target_body").Should().Be("target_guid=tg|designation=event:b|kind=event|updated_at=2026-10-10T06:52:00Z");
+            db.Dump("ts_target_body").Should().Be("target_guid=tg|designation=event:b|kind=event|updated_at=2026-10-10T06:52:00Z|rotation_deg=null|offset_frac=null");
         }
 
         [Test]
