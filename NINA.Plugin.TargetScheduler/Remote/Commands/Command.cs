@@ -41,6 +41,7 @@ namespace NINA.Plugin.TargetScheduler.Remote.Commands {
         public const string UnapplySet = "exposureplan.unapplyset";
         public const string ProjectCreate = "project.create";
         public const string ProjectDelete = "project.delete";
+        public const string TargetBody = "target.body";
     }
 
     public class CommandEnvelope {

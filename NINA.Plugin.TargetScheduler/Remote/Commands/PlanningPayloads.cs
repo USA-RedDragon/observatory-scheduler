@@ -262,8 +262,27 @@ namespace NINA.Plugin.TargetScheduler.Remote.Commands {
         [JsonPropertyName("rotation")]
         public double Rotation { get; set; }
 
+        [JsonPropertyName("designation")]
+        [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+        public string Designation { get; set; }
+
         [JsonPropertyName("plans")]
         public List<NewPlan> Plans { get; set; } = new List<NewPlan>();
+    }
+
+    public class TargetBodyPayload {
+
+        [JsonPropertyName("target_id")]
+        public int TargetId { get; set; }
+
+        [JsonPropertyName("target_guid")]
+        public string TargetGuid { get; set; }
+
+        [JsonPropertyName("target_name")]
+        public string TargetName { get; set; }
+
+        [JsonPropertyName("designation")]
+        public string Designation { get; set; }
     }
 
     public class NewGoal {

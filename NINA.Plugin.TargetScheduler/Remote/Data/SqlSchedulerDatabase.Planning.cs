@@ -1,3 +1,4 @@
+using NINA.Plugin.TargetScheduler.Bodies;
 using NINA.Plugin.TargetScheduler.Remote.Commands;
 using System;
 using System.Collections.Generic;
@@ -504,11 +505,57 @@ VALUES (@pr, @name, @desc, @state, @prio, @created, NULL, NULL, @mintime, @minal
             foreach (var g in p.Goals) {
                 WriteGoal(s, g.TargetGuid, g.Filter, g.Setting, stamp);
             }
+            var bodies = p.Targets.Where(t => !string.IsNullOrWhiteSpace(t.Designation)).ToList();
+            if (bodies.Count > 0) {
+                s.Exec(TargetBodyStore.CreateTable);
+                foreach (var t in bodies) {
+                    WriteTargetBody(s, t.Guid, t.Designation.Trim(), stamp);
+                }
+            }
             s.Commit();
             o.Touch((int)projectId, null);
             o.Changed = true;
             o.Message = filled;
             return o;
+        }
+
+        public ChangeOutcome SetTargetBody(TargetBodyPayload p, DateTime now) {
+            var o = new ChangeOutcome();
+            using var s = Open();
+            var label = p.TargetName ?? p.TargetGuid;
+            var t = s.Row("SELECT Id, projectid FROM target WHERE guid = @g", ("@g", p.TargetGuid));
+            if (t == null || (p.TargetId > 0 && Long(t["Id"]) != p.TargetId)) {
+                return o.Reject($"{label} no longer exists.");
+            }
+            var designation = string.IsNullOrWhiteSpace(p.Designation) ? null : p.Designation.Trim();
+            var exists = s.TableExists(TargetBodyStore.Table);
+            var current = exists ? Str(s.Scalar("SELECT designation FROM ts_target_body WHERE target_guid = @g", ("@g", p.TargetGuid))) : null;
+            if (designation == null) {
+                if (current == null) {
+                    o.Message = $"{label} is already a fixed target.";
+                    return o;
+                }
+                s.Exec("DELETE FROM ts_target_body WHERE target_guid = @g", ("@g", p.TargetGuid));
+            } else {
+                if (TargetBodyTable.SameDesignation(current, designation)) {
+                    o.Message = $"{label} already follows {designation}.";
+                    return o;
+                }
+                if (!exists) {
+                    s.Exec(TargetBodyStore.CreateTable);
+                }
+                WriteTargetBody(s, p.TargetGuid, designation, now.ToUniversalTime().ToString("yyyy-MM-dd'T'HH:mm:ss'Z'", CultureInfo.InvariantCulture));
+            }
+            s.Commit();
+            o.Touch((int?)Long(t["projectid"]), (int)Long(t["Id"]).Value);
+            o.Changed = true;
+            return o;
+        }
+
+        private static void WriteTargetBody(Session s, string targetGuid, string designation, string stamp) {
+            s.Exec("INSERT INTO ts_target_body (target_guid, designation, kind, updated_at) VALUES (@g, @d, 'comet', @at) " +
+                "ON CONFLICT(target_guid) DO UPDATE SET designation = excluded.designation, kind = excluded.kind, updated_at = excluded.updated_at",
+                ("@g", targetGuid), ("@d", designation), ("@at", stamp));
         }
 
         private static Dictionary<string, double> ProjectSettingValues(Session s, string profile, NewProject p, out string filled) {
@@ -549,6 +596,9 @@ VALUES (@pr, @name, @desc, @state, @prio, @created, NULL, NULL, @mintime, @minal
             }
             if (s.TableExists("ts_goal")) {
                 s.Exec("DELETE FROM ts_goal WHERE target_guid IN (SELECT guid FROM target WHERE projectid = @p AND guid IS NOT NULL)", pid);
+            }
+            if (s.TableExists(TargetBodyStore.Table)) {
+                s.Exec("DELETE FROM ts_target_body WHERE target_guid IN (SELECT guid FROM target WHERE projectid = @p AND guid IS NOT NULL)", pid);
             }
             s.Exec($"DELETE FROM filtercadenceitem WHERE targetid IN ({targets})", pid);
             s.Exec($"DELETE FROM overrideexposureorderitem WHERE targetid IN ({targets})", pid);

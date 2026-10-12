@@ -337,6 +337,10 @@ namespace NINA.Plugin.TargetScheduler.Remote.Commands {
                 if (t.RaHours < 0 || t.RaHours >= 24 || t.Dec < -90 || t.Dec > 90) {
                     return $"{t.Name} coordinates out of range";
                 }
+                var designationError = TargetBodyHandler.CheckDesignation(t.Designation);
+                if (designationError != null) {
+                    return $"{t.Name} {designationError}";
+                }
                 t.Plans ??= new List<NewPlan>();
                 foreach (var pl in t.Plans) {
                     var error = CheckPlan(pl);
@@ -373,6 +377,34 @@ namespace NINA.Plugin.TargetScheduler.Remote.Commands {
 
         protected override ChangeOutcome Change(ProjectCreatePayload p, ICommandContext context) {
             return delete ? context.Database.DeleteProject(p) : context.Database.CreateProject(p, context.ProfileId, context.DefaultRuleWeights, context.Now);
+        }
+    }
+
+    public class TargetBodyHandler : PlanningHandler<TargetBodyPayload> {
+        public const int MaxDesignationLength = 200;
+
+        public override string Kind => CommandKinds.TargetBody;
+
+        public static string CheckDesignation(string designation) {
+            if (designation != null && designation.Trim().Length > MaxDesignationLength) {
+                return $"designation is longer than {MaxDesignationLength} characters";
+            }
+            return null;
+        }
+
+        protected override string Check(TargetBodyPayload p) {
+            if (string.IsNullOrWhiteSpace(p.TargetGuid)) {
+                return "missing target_guid";
+            }
+            return CheckDesignation(p.Designation);
+        }
+
+        protected override string Label(TargetBodyPayload p) {
+            return p.TargetName ?? p.TargetGuid;
+        }
+
+        protected override ChangeOutcome Change(TargetBodyPayload p, ICommandContext context) {
+            return context.Database.SetTargetBody(p, context.Now);
         }
     }
 }

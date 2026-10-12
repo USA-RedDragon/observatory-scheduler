@@ -49,6 +49,7 @@ namespace NINA.Plugin.TargetScheduler.Remote.Commands {
                 new ExposureSetHandler(true),
                 new ProjectCreateHandler(false),
                 new ProjectCreateHandler(true),
+                new TargetBodyHandler(),
             });
         }
     }
