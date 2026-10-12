@@ -1,4 +1,5 @@
 using NINA.Astrometry;
+using NINA.Plugin.TargetScheduler.Bodies;
 using NINA.Plugin.TargetScheduler.Goals;
 using System;
 using System.Collections.Generic;
@@ -28,6 +29,25 @@ namespace NINA.Plugin.TargetScheduler.Astrometry {
                 observerInfo.Latitude.ToString("0.0000", CultureInfo.InvariantCulture),
                 observerInfo.Longitude.ToString("0.0000", CultureInfo.InvariantCulture),
                 (constraints ?? SeasonConstraints.None).Key());
+        }
+
+        public static string BodyKey(ObserverInfo observerInfo, string designation, BodyNightTrack track, HorizonDefinition horizon, int minimumTime, TwilightLevel level, SeasonConstraints constraints) {
+            return string.Join("|",
+                "body",
+                designation?.Trim().ToLowerInvariant() ?? "",
+                (track ?? BodyNightTrack.Empty).Version,
+                horizon.GetCacheKey(),
+                minimumTime.ToString(CultureInfo.InvariantCulture),
+                level.ToString(),
+                observerInfo.Latitude.ToString("0.0000", CultureInfo.InvariantCulture),
+                observerInfo.Longitude.ToString("0.0000", CultureInfo.InvariantCulture),
+                (constraints ?? SeasonConstraints.None).Key());
+        }
+
+        public static SeasonResult ComputeBody(ObserverInfo observerInfo, BodyNightTrack track, HorizonDefinition horizon, TwilightLevel level, int minimumTime, DateTime nightDate, SeasonConstraints constraints) {
+            track ??= BodyNightTrack.Empty;
+            SeasonVisibility visibility = new SeasonVisibility(observerInfo, t => track.At(t), horizon, level, nightDate, constraints);
+            return SeasonCounter.Count(new BodyNightUsability(visibility, track, nightDate), minimumTime);
         }
 
         public static DateTime NightDate(ObserverInfo observerInfo, DateTime atTime) {

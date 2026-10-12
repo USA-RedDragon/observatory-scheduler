@@ -32,6 +32,11 @@ namespace NINA.Plugin.TargetScheduler.Database {
                     } catch (Exception ex) {
                         TSLogger.Warning($"failed to create {TargetWindowStore.Table}, planning without event windows: {ex.Message}");
                     }
+                    try {
+                        BodyNightStore.Ensure(context.Database.Connection);
+                    } catch (Exception ex) {
+                        TSLogger.Warning($"failed to create {BodyNightStore.Table}, moving bodies get no season: {ex.Message}");
+                    }
                     ensured = true;
                     TSLogger.Info("fork goal schema ensured");
                     RefreshGoalSource(context);
@@ -113,6 +118,12 @@ namespace NINA.Plugin.TargetScheduler.Database {
 
         public static ITargetSeasonReader TargetSeasonReader() {
             return new SqlTargetSeasonReader(() => new SchedulerDatabaseInteraction().GetContext().Database.Connection);
+        }
+
+        public static BodyNightTable BodyNights() {
+            using (SchedulerDatabaseContext context = new SchedulerDatabaseInteraction().GetContext()) {
+                return BodyNightStore.Load(context.Database.Connection);
+            }
         }
 
         public static ITargetSeasonWriter TargetSeasonWriter() {

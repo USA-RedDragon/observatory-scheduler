@@ -24,6 +24,7 @@ namespace NINA.Plugin.TargetScheduler.Planning {
         public static SeasonWorker Instance { get; private set; }
         public static Func<ITargetSeasonReader> ReaderFactory { get; set; } = ForkDatabase.TargetSeasonReader;
         public static Func<ITargetSeasonWriter> WriterFactory { get; set; } = ForkDatabase.TargetSeasonWriter;
+        public static Func<BodyNightTable> BodyNightsFactory { get; set; } = ForkDatabase.BodyNights;
 
         private static readonly object instanceLock = new object();
 
@@ -176,11 +177,14 @@ namespace NINA.Plugin.TargetScheduler.Planning {
             Stopwatch sw = Stopwatch.StartNew();
             int computed = 0;
             int skipped = 0;
+            int noNights = 0;
+            BodyNightTable bodyNights = null;
 
             foreach (Project project in projects ?? new List<Project>()) {
                 HorizonDefinition horizon = PlanningProject.DetermineHorizon(profile, project);
-                foreach (Target target in project.Targets.Where(t => t.Enabled && !string.IsNullOrWhiteSpace(t.Guid) && TargetBodyTable.Current.Designation(t.Guid) == null)) {
+                foreach (Target target in project.Targets.Where(t => t.Enabled && !string.IsNullOrWhiteSpace(t.Guid))) {
                     if (token.IsCancellationRequested) { return; }
+                    string designation = TargetBodyTable.Current.Designation(target.Guid);
 
                     List<ExposureTemplate> templates = target.ExposurePlans
                         .Where(ep => ep.IsEnabled && ep.ExposureTemplate != null)
@@ -189,13 +193,27 @@ namespace NINA.Plugin.TargetScheduler.Planning {
                     SeasonConstraints constraints = SeasonCalculator.Constraints(project.MaximumAltitude, project.MeridianWindow,
                         templates.Select(t => SeasonCalculator.Moon(t.MoonAvoidanceEnabled, t.MoonAvoidanceSeparation, t.MoonAvoidanceWidth,
                             t.MoonRelaxScale, t.MoonRelaxMaxAltitude, t.MoonRelaxMinAltitude, t.MoonDownEnabled)));
-                    string key = SeasonCalculator.Key(observer, target.Coordinates, horizon, project.MinimumTime, level, constraints);
+                    BodyNightTrack track = null;
+                    if (designation != null) {
+                        bodyNights ??= LoadBodyNights();
+                        track = bodyNights.Track(target.Guid, designation);
+                        if (!track.HasNight(night)) {
+                            noNights++;
+                            continue;
+                        }
+                    }
+
+                    string key = track == null
+                        ? SeasonCalculator.Key(observer, target.Coordinates, horizon, project.MinimumTime, level, constraints)
+                        : SeasonCalculator.BodyKey(observer, designation, track, horizon, project.MinimumTime, level, constraints);
                     if (!full && Store.IsCurrent(target.Guid, key, night)) {
                         skipped++;
                         continue;
                     }
 
-                    SeasonResult season = SeasonCalculator.Compute(observer, target.Coordinates, horizon, level, project.MinimumTime, night, constraints);
+                    SeasonResult season = track == null
+                        ? SeasonCalculator.Compute(observer, target.Coordinates, horizon, level, project.MinimumTime, night, constraints)
+                        : SeasonCalculator.ComputeBody(observer, track, horizon, level, project.MinimumTime, night, constraints);
                     Store.Put(new SeasonEntry { TargetGuid = target.Guid, Key = key, Season = season, ComputedFor = night });
                     computed++;
 
@@ -210,7 +228,16 @@ namespace NINA.Plugin.TargetScheduler.Planning {
             }
 
             if (full) { lastPassNight = night; }
-            TSLogger.Info($"season worker: {(full ? "full" : "incremental")} pass for night {night:yyyy-MM-dd}: computed {computed}, current {skipped}, {sw.ElapsedMilliseconds}ms");
+            TSLogger.Info($"season worker: {(full ? "full" : "incremental")} pass for night {night:yyyy-MM-dd}: computed {computed}, current {skipped}, moving bodies without season nights {noNights}, {sw.ElapsedMilliseconds}ms");
+        }
+
+        private static BodyNightTable LoadBodyNights() {
+            try {
+                return BodyNightsFactory() ?? BodyNightTable.Empty;
+            } catch (Exception ex) {
+                TSLogger.Warning($"season worker: could not read {BodyNightStore.Table}, moving bodies get no season: {ex.Message}");
+                return BodyNightTable.Empty;
+            }
         }
     }
 }

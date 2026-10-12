@@ -27,6 +27,7 @@ namespace NINA.Plugin.TargetScheduler.Remote.Data {
             Bodies.TargetBodyStore.Ensure(conn);
             Bodies.BodyPositionStore.Ensure(conn);
             Bodies.TargetWindowStore.Ensure(conn);
+            Bodies.BodyNightStore.Ensure(conn);
             AutofocusStore.Ensure(conn);
         }
 

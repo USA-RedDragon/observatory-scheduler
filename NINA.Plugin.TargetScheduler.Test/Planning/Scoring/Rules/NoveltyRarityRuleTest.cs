@@ -6,6 +6,7 @@ using NINA.Plugin.TargetScheduler.Database;
 using NINA.Plugin.TargetScheduler.Planning;
 using NINA.Plugin.TargetScheduler.Database.Schema;
 using NINA.Plugin.TargetScheduler.Goals;
+using NINA.Plugin.TargetScheduler.Planning.Entities;
 using NINA.Plugin.TargetScheduler.Planning.Exposures;
 using NINA.Plugin.TargetScheduler.Planning.Interfaces;
 using NINA.Plugin.TargetScheduler.Planning.Scoring;
@@ -154,6 +155,33 @@ namespace NINA.Plugin.TargetScheduler.Test.Planning.Scoring.Rules {
 
             Put(engine, target.Object, 0, true, Today);
             new RarityRule().Score(engine, target.Object).Should().Be(0);
+        }
+
+        private static PlanningTarget BodyTarget(IProject project) {
+            return new PlanningTarget {
+                Name = "161P/Hartley-IRAS", DatabaseId = 9161, Guid = "g161", Designation = "161P", Coordinates = TestData.M42, Project = project,
+                ExposurePlans = new List<IExposure>(), AllExposurePlans = new List<IExposure>(), CompletedExposurePlans = new List<IExposure>()
+            };
+        }
+
+        [Test]
+        public void RarityScoresAMovingBodyFromItsSeasonEntry() {
+            var (engine, fixedTarget) = RarityCase(TestData.M42, Today.AddHours(22), 20, 60);
+            PlanningTarget body = BodyTarget(fixedTarget.Object.Project);
+            new RarityRule().Score(engine, body).Should().Be(0);
+
+            SeasonWorker.Store.Put(new SeasonEntry {
+                TargetGuid = "G161",
+                Key = "body|161p|v1",
+                Season = new SeasonResult { NightsLeft = 10, OutOfSeason = false },
+                ComputedFor = Today
+            });
+            new RarityRule().Score(engine, body).Should().Be(1);
+            body.Coordinates = TestData.BETELGEUSE;
+            new RarityRule().Score(engine, body).Should().Be(1);
+
+            SeasonWorker.Store.Put(new SeasonEntry { TargetGuid = "g161", Key = "body|161p|v2", Season = new SeasonResult { OutOfSeason = true }, ComputedFor = Today });
+            new RarityRule().Score(engine, body).Should().Be(0);
         }
 
         [Test]

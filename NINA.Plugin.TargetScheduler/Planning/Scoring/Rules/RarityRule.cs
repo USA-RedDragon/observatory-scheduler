@@ -29,14 +29,14 @@ namespace NINA.Plugin.TargetScheduler.Planning.Scoring.Rules {
         }
 
         public static SeasonEntry Lookup(IScoringEngine scoringEngine, ITarget target) {
-            if (string.IsNullOrWhiteSpace(target?.Guid) || target.IsBody()) { return null; }
+            if (string.IsNullOrWhiteSpace(target?.Guid)) { return null; }
 
             SeasonStore store = SeasonWorker.Store;
             if (!store.Seeded) {
                 SeasonWorker.SeedStore();
             }
 
-            SeasonEntry entry = store.Find(target.Guid, Key(scoringEngine, target), Today());
+            SeasonEntry entry = store.Find(target.Guid, target.IsBody() ? null : Key(scoringEngine, target), Today());
             if (entry == null) {
                 TSLogger.Debug($"rarity: no season yet for {target.Name}, scoring 0");
                 SeasonWorker.Instance?.RequestPass($"no season for {target.Name}");
