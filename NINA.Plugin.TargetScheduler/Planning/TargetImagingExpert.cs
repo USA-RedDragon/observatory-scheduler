@@ -96,6 +96,19 @@ namespace NINA.Plugin.TargetScheduler.Planning {
                 twilightSpan = new TimeInterval(twilightSpan.StartTime, Limit.End);
             }
 
+            int minimumSeconds = project.MinimumTime * 60;
+            TargetWindowRow eventWindow = target.Window();
+            if (eventWindow != null) {
+                var clipped = EventWindows.Ended(eventWindow, atTime) ? null : EventWindows.Clip(eventWindow, twilightSpan.StartTime, twilightSpan.EndTime);
+                if (clipped == null) {
+                    TSLogger.Trace($"Target outside its event window {project.Name}/{target.Name} at {Utils.FormatDateTimeFull(atTime)}: {eventWindow.StartUtc:u} to {eventWindow.EndUtc:u}");
+                    SetRejected(target, Reasons.TargetOutsideEventWindow);
+                    return false;
+                }
+                twilightSpan = new TimeInterval(clipped.Value.Start, clipped.Value.End);
+                minimumSeconds = EventWindows.MinimumSeconds(eventWindow, minimumSeconds, twilightSpan.StartTime, twilightSpan.EndTime, atTime);
+            }
+
             if (!targetVisibility.ImagingPossible) {
                 TSLogger.Warning($"Target not visible at all {project.Name}/{target.Name} on {Utils.FormatDateTimeFull(atTime)} at latitude {observerInfo.Latitude}");
                 SetRejected(target, target.IsBody() && !BodyCovers(target, twilightSpan) ? Reasons.TargetBodyPositionUnknown : Reasons.TargetNotVisible);
@@ -103,7 +116,7 @@ namespace NINA.Plugin.TargetScheduler.Planning {
             }
 
             // Determine the next time interval of visibility of at least the mimimum time
-            VisibilityDetermination viz = targetVisibility.NextVisibleInterval(atTime, twilightSpan, project.HorizonDefinition, project.MinimumTime * 60);
+            VisibilityDetermination viz = targetVisibility.NextVisibleInterval(atTime, twilightSpan, project.HorizonDefinition, minimumSeconds);
             if (!viz.IsVisible) {
                 TSLogger.Trace($"Target not visible for rest of night {project.Name}/{target.Name} on {Utils.FormatDateTimeFull(atTime)} at latitude {observerInfo.Latitude}");
                 SetRejected(target, Reasons.TargetNotVisible);
@@ -131,7 +144,7 @@ namespace NINA.Plugin.TargetScheduler.Planning {
             }
 
             // Recheck minimum time after potential meridian clip
-            if (project.MeridianWindow > 0 && target.MeridianWindow.Duration < project.MinimumTime * 60) {
+            if (project.MeridianWindow > 0 && target.MeridianWindow.Duration < minimumSeconds) {
                 TSLogger.Debug($"Target not visible for min time after meridian window clip: {project.Name}/{target.Name} on {Utils.FormatDateTimeFull(atTime)} at latitude {observerInfo.Latitude}");
                 SetRejected(target, Reasons.TargetNotVisible);
                 return false;
@@ -150,12 +163,20 @@ namespace NINA.Plugin.TargetScheduler.Planning {
                 }
 
                 // Recheck minimum time after potential meridian flip clip
-                if (meridianFlipClippedSpan.Duration < project.MinimumTime * 60) {
+                if (meridianFlipClippedSpan.Duration < minimumSeconds) {
                     TSLogger.Debug($"Target not visible for min time before meridian flip, potentially visible later: {project.Name}/{target.Name} on {Utils.FormatDateTimeFull(atTime)} at latitude {observerInfo.Latitude}");
                     targetStartTime = mfClipper.GetSafeAfterTime();
                 } else {
                     targetStartTime = meridianFlipClippedSpan.StartTime;
                     targetEndTime = meridianFlipClippedSpan.EndTime;
+                }
+            }
+
+            if (eventWindow != null) {
+                targetStartTime = EventWindows.NotBefore(eventWindow, targetStartTime);
+                if (targetStartTime >= targetEndTime) {
+                    SetRejected(target, Reasons.TargetOutsideEventWindow);
+                    return false;
                 }
             }
 
@@ -167,6 +188,8 @@ namespace NINA.Plugin.TargetScheduler.Planning {
                 string reason = Reasons.TargetNotYetVisible;
                 if (meridianClippedSpan != null || meridianFlipClippedSpan != null) {
                     reason = meridianClippedSpan != null ? Reasons.TargetBeforeMeridianWindow : Reasons.TargetMeridianFlipClipped;
+                } else if (EventWindows.RejectReason(eventWindow, atTime) == EventWindows.ReasonBefore) {
+                    reason = Reasons.TargetBeforeEventWindow;
                 }
 
                 SetRejected(target, reason);
@@ -394,7 +417,8 @@ namespace NINA.Plugin.TargetScheduler.Planning {
                   (target.RejectedReason == Reasons.TargetNotYetVisible
                 || target.RejectedReason == Reasons.TargetBeforeMeridianWindow
                 || target.RejectedReason == Reasons.TargetMeridianFlipClipped
-                || target.RejectedReason == Reasons.TargetMaxAltitude);
+                || target.RejectedReason == Reasons.TargetMaxAltitude
+                || target.RejectedReason == Reasons.TargetBeforeEventWindow);
         }
 
         public bool AllExposurePlansRejected(ITarget target) {

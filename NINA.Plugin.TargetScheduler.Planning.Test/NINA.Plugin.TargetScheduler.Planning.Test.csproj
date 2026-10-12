@@ -43,6 +43,7 @@
     <Compile Include="..\NINA.Plugin.TargetScheduler\Bodies\BodyEphemeris.cs" Link="Linked\Bodies\BodyEphemeris.cs" />
     <Compile Include="..\NINA.Plugin.TargetScheduler\Bodies\BodyMotion.cs" Link="Linked\Bodies\BodyMotion.cs" />
     <Compile Include="..\NINA.Plugin.TargetScheduler\Bodies\TargetWindows.cs" Link="Linked\Bodies\TargetWindows.cs" />
+    <Compile Include="..\NINA.Plugin.TargetScheduler\Bodies\EventWindows.cs" Link="Linked\Bodies\EventWindows.cs" />
   </ItemGroup>
 
   <ItemGroup>

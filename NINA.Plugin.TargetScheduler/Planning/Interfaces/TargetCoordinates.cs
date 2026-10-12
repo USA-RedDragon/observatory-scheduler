@@ -10,6 +10,10 @@ namespace NINA.Plugin.TargetScheduler.Planning.Interfaces {
             return !string.IsNullOrWhiteSpace(target?.Designation);
         }
 
+        public static TargetWindowRow Window(this ITarget target) {
+            return target == null ? null : TargetWindowTable.Current.Get(target.Guid);
+        }
+
         public static BodyEphemeris Ephemeris(this ITarget target) {
             if (!target.IsBody()) { return null; }
             return target.BodyEphemeris ?? BodyPositionTable.Current.Ephemeris(target.Guid, target.Designation);

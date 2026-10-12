@@ -1,3 +1,4 @@
+using NINA.Plugin.TargetScheduler.Bodies;
 using NINA.Plugin.TargetScheduler.Database;
 using NINA.Plugin.TargetScheduler.Database.Schema;
 using NINA.Plugin.TargetScheduler.Goals;
@@ -90,11 +91,13 @@ namespace NINA.Plugin.TargetScheduler.Remote.Plugin {
             for (; i < MaxPlans && current < stopAt; i++) {
                 SchedulerPlan plan;
                 Dictionary<ITarget, string> filtered = null;
+                string preempted = null;
                 try {
                     var planner = new Planner(current, profile, prefs, weather, false, true, projects) {
                         Filtered = ps => filtered = Snapshot(ps),
                     };
                     plan = planner.GetPlan(previous);
+                    preempted = planner.PreemptedBy;
                 } catch (Exception e) {
                     TSLogger.Warning($"remote preview stopped at {current}: {e.Message}");
                     preview.Error = e.Message;
@@ -104,7 +107,7 @@ namespace NINA.Plugin.TargetScheduler.Remote.Plugin {
                 }
                 bool continuing = plan != null && !plan.IsWait && ReferenceEquals(plan.PlanTarget, previous);
                 if (previous != null && !continuing) {
-                    EndLast(planned, previous, GaveWay(previous, filtered, plan, current));
+                    EndLast(planned, previous, GaveWay(previous, filtered, plan, current, preempted));
                 }
                 if (filtered != null) {
                     passTimes.Add(current.ToUniversalTime());
@@ -192,7 +195,17 @@ namespace NINA.Plugin.TargetScheduler.Remote.Plugin {
             return t.Rejected && t.RejectedReason == Reasons.TargetLowerScore && plan != null && !plan.IsWait && plan.PlanTarget != null;
         }
 
-        public static string GaveWay(ITarget previous, Dictionary<ITarget, string> filtered, SchedulerPlan plan, DateTime at) {
+        private static bool YieldedToEvent(ITarget t) {
+            return t.Rejected && EventWindows.IsPriorityReason(t.RejectedReason);
+        }
+
+        public static string GaveWay(ITarget previous, Dictionary<ITarget, string> filtered, SchedulerPlan plan, DateTime at, string preempted = null) {
+            if (preempted != null) {
+                return EventWindows.PreemptedReason(plan != null && !plan.IsWait && plan.PlanTarget != null ? $"{plan.PlanTarget.Project?.Name}/{plan.PlanTarget.Name}" : preempted);
+            }
+            if (YieldedToEvent(previous) && plan != null && !plan.IsWait && plan.PlanTarget != null) {
+                return $"{previous.RejectedReason} ({plan.PlanTarget.Name})";
+            }
             if (LostOnScore(previous, plan)) {
                 var w = plan.PlanTarget;
                 return string.Create(CultureInfo.InvariantCulture,
@@ -250,6 +263,9 @@ namespace NINA.Plugin.TargetScheduler.Remote.Plugin {
                 foreach (var t in p.Targets) {
                     filtered.TryGetValue(t, out var reason);
                     bool lost = LostOnScore(t, plan);
+                    if (reason == null && !lost && YieldedToEvent(t)) {
+                        reason = t.RejectedReason;
+                    }
                     if (reason == null && !lost) {
                         continue;
                     }

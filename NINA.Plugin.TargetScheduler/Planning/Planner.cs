@@ -4,6 +4,7 @@ using NINA.Core.Utility;
 using NINA.Core.Utility.Notification;
 using NINA.Equipment.Interfaces.Mediator;
 using NINA.Plugin.TargetScheduler.Astrometry;
+using NINA.Plugin.TargetScheduler.Bodies;
 using NINA.Plugin.TargetScheduler.Database;
 using NINA.Plugin.TargetScheduler.Database.Schema;
 using NINA.Plugin.TargetScheduler.Planning.Exposures;
@@ -85,7 +86,7 @@ namespace NINA.Plugin.TargetScheduler.Planning {
                     }
 
                     // If the previous target still has time in it's initial minimum time span and is still acceptable, then stick with it
-                    if (previousTargetExpert.CanContinue(atTime, weatherDataMediator, previousTarget)) {
+                    if (previousTargetExpert.CanContinue(atTime, weatherDataMediator, previousTarget) && !HighEventPreempts(previousTarget)) {
                         TSLogger.Info($"previous target still within permitted time span, continuing: {previousTarget.Project.Name}/{previousTarget.Name}: {previousTarget.BonusTimeSpanEnd} > {atTime} ");
                         List<IInstruction> instructions = new InstructionGenerator().Generate(previousTarget, previousTarget, atTime);
                         return new SchedulerPlan(atTime, projects, previousTarget, instructions, !checkCondition);
@@ -106,6 +107,7 @@ namespace NINA.Plugin.TargetScheduler.Planning {
                     if (readyTargets.Count > 0) {
                         SelectTargetExposures(readyTargets);
                         FilterForSequenceEnd(readyTargets);
+                        FilterForEventPriority(readyTargets);
                     }
 
                     if (readyTargets.Count > 0) {
@@ -394,7 +396,8 @@ namespace NINA.Plugin.TargetScheduler.Planning {
                         && target.RejectedReason != Reasons.TargetMoonAvoidance
                         && target.RejectedReason != Reasons.TargetBeforeMeridianWindow
                         && target.RejectedReason != Reasons.TargetMeridianFlipClipped
-                        && target.RejectedReason != Reasons.TargetMaxAltitude) {
+                        && target.RejectedReason != Reasons.TargetMaxAltitude
+                        && target.RejectedReason != Reasons.TargetBeforeEventWindow) {
                         continue;
                     }
 
@@ -445,6 +448,43 @@ namespace NINA.Plugin.TargetScheduler.Planning {
             }
 
             return nextAvailableTarget;
+        }
+
+        public void FilterForEventPriority(List<ITarget> readyTargets) {
+            EventWindows.Prefer(readyTargets, t => t.Window(), (t, reason) => {
+                TSLogger.Info($"not selecting {t.Project.Name}/{t.Name}: {reason}");
+                SetRejected(t, reason);
+            });
+        }
+
+        public string PreemptedBy { get; private set; }
+
+        public bool HighEventPreempts(ITarget previousTarget) {
+            if (previousTarget == null || TargetWindowTable.Current.Count == 0 || NoProjects(projects)) { return false; }
+            HashSet<ITarget> candidates = new HashSet<ITarget>(
+                EventWindows.Preempting(projects.SelectMany(p => p.Targets), previousTarget, t => t.DatabaseId, t => t.Window(), atTime),
+                ReferenceEqualityComparer.Instance as IEqualityComparer<ITarget>);
+            List<IProject> probe = projects.Where(p => p.Targets.Any(candidates.Contains)).ToList();
+            if (probe.Count == 0) { return false; }
+
+            PlanningState saved = new PlanningState(probe);
+            try {
+                List<IProject> filtered = FilterForSkips(probe);
+                filtered = FilterForIncomplete(filtered);
+                filtered = FilterForVisibility(filtered);
+                filtered = FilterForMoonAvoidance(filtered);
+                filtered = FilterForTwilight(filtered);
+                filtered = FilterForHumidity(filtered, weatherDataMediator);
+                List<ITarget> ready = GetTargetsReadyNow(filtered).Where(candidates.Contains).ToList();
+                SelectTargetExposures(ready);
+                FilterForSequenceEnd(ready);
+                if (ready.Count == 0) { return false; }
+                PreemptedBy = $"{ready[0].Project.Name}/{ready[0].Name}";
+                TSLogger.Info($"not continuing previous target at {atTime}, {previousTarget.Name}: high-priority event {PreemptedBy} is ready");
+                return true;
+            } finally {
+                saved.Restore();
+            }
         }
 
         public void FilterForSequenceEnd(List<ITarget> readyTargets) {
@@ -624,6 +664,66 @@ namespace NINA.Plugin.TargetScheduler.Planning {
         }
     }
 
+    internal sealed class PlanningState {
+        private readonly List<Action> restore = new List<Action>();
+
+        public PlanningState(IEnumerable<IProject> projects) {
+            foreach (IProject p in projects) {
+                bool rejected = p.Rejected;
+                string reason = p.RejectedReason;
+                restore.Add(() => { p.Rejected = rejected; p.RejectedReason = reason; });
+                foreach (ITarget t in p.Targets) {
+                    Save(t);
+                    foreach (IExposure e in (t.AllExposurePlans ?? new List<IExposure>()).Concat(t.ExposurePlans ?? new List<IExposure>()).Distinct()) {
+                        Save(e);
+                    }
+                }
+            }
+        }
+
+        private void Save(ITarget t) {
+            bool rejected = t.Rejected;
+            string reason = t.RejectedReason;
+            var scoring = t.ScoringResults;
+            IExposure selected = t.SelectedExposure;
+            DateTime start = t.StartTime, end = t.EndTime, minimum = t.MinimumTimeSpanEnd, bonus = t.BonusTimeSpanEnd, culmination = t.CulminationTime;
+            TimeInterval meridian = t.MeridianWindow;
+            restore.Add(() => {
+                t.Rejected = rejected;
+                t.RejectedReason = reason;
+                t.ScoringResults = scoring;
+                t.SelectedExposure = selected;
+                t.StartTime = start;
+                t.EndTime = end;
+                t.MinimumTimeSpanEnd = minimum;
+                t.BonusTimeSpanEnd = bonus;
+                t.CulminationTime = culmination;
+                t.MeridianWindow = meridian;
+            });
+        }
+
+        private void Save(IExposure e) {
+            bool rejected = e.Rejected;
+            string reason = e.RejectedReason;
+            double moon = e.MoonAvoidanceScore, length = e.ExposureLength;
+            string source = e.LengthSource, bucket = e.LengthBucket;
+            bool preDither = e.PreDither;
+            restore.Add(() => {
+                e.Rejected = rejected;
+                e.RejectedReason = reason;
+                e.MoonAvoidanceScore = moon;
+                e.ExposureLength = length;
+                e.LengthSource = source;
+                e.LengthBucket = bucket;
+                e.PreDither = preDither;
+            });
+        }
+
+        public void Restore() {
+            restore.ForEach(a => a());
+        }
+    }
+
     public class Reasons {
         public const string ProjectComplete = "complete";
         public const string ProjectNoVisibleTargets = "no visible targets";
@@ -645,6 +745,8 @@ namespace NINA.Plugin.TargetScheduler.Planning {
         public const string TargetLowerScore = "lower score";
         public const string TargetAllExposurePlans = "all exposure plans rejected";
         public const string TargetSequenceEnd = "exposure ends after the sequence ends imaging";
+        public const string TargetBeforeEventWindow = EventWindows.ReasonBefore;
+        public const string TargetOutsideEventWindow = EventWindows.ReasonOutside;
 
         public const string FilterComplete = "complete";
         public const string FilterMoonAvoidance = "moon avoidance";

@@ -64,6 +64,11 @@ namespace NINA.Plugin.TargetScheduler.Planning {
                 return false;
             }
 
+            if (EventWindows.RejectReason(previousTarget.Window(), atTime) is string window) {
+                TSLogger.Info($"not continuing previous target at {atTime}, {previousTarget.Name}: {window}");
+                return false;
+            }
+
             UpdateTargetExposurePlans(previousTarget);
 
             // Recheck exposure completion
