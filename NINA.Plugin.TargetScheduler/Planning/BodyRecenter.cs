@@ -1,6 +1,7 @@
 using NINA.Astrometry;
 using NINA.Plugin.TargetScheduler.Bodies;
 using NINA.Plugin.TargetScheduler.Planning.Interfaces;
+using NINA.Equipment.Interfaces.Mediator;
 using NINA.Profile.Interfaces;
 using NINA.Plugin.TargetScheduler.Planning.Entities;
 using System;
@@ -50,6 +51,24 @@ namespace NINA.Plugin.TargetScheduler.Planning {
         }
 
         public static void UpdateField(IProfile profile, int? widthPx, int? heightPx) {
+            BodyField.Current = Field(profile, widthPx, heightPx);
+        }
+
+        public static BodyField Field(IProfile profile, ICameraMediator camera) {
+            int? width = null;
+            int? height = null;
+            try {
+                NINA.Equipment.Equipment.MyCamera.CameraInfo info = camera?.GetInfo();
+                if (info != null && info.Connected) {
+                    width = info.XSize;
+                    height = info.YSize;
+                }
+            } catch (Exception) {
+            }
+            return Field(profile, width, height);
+        }
+
+        public static BodyField Field(IProfile profile, int? widthPx, int? heightPx) {
             double? pixelSize = null;
             double? focalLength = null;
             try {
@@ -57,7 +76,7 @@ namespace NINA.Plugin.TargetScheduler.Planning {
                 focalLength = profile?.TelescopeSettings?.FocalLength;
             } catch (Exception) {
             }
-            BodyField.Current = BodyField.From(pixelSize, focalLength, widthPx, heightPx);
+            return BodyField.From(pixelSize, focalLength, widthPx, heightPx);
         }
     }
 }

@@ -57,7 +57,7 @@ namespace NINA.Plugin.TargetScheduler.Planning.Entities {
             this.Gain = GetNullableIntValue(exposureTemplate.Gain);
             this.PlanExposureLength = exposurePlan.Exposure;
             this.TemplateExposureLength = exposureTemplate.DefaultExposure;
-            SubLengthPlanning.Apply(this, planTarget?.Guid, null);
+            SubLengthPlanning.CapForBody(this, SubLengthPlanning.Apply(this, planTarget?.Guid, null), planTarget, null);
             this.Offset = GetNullableIntValue(exposureTemplate.Offset);
             this.BinningMode = exposureTemplate.BinningMode;
             this.ReadoutMode = GetNullableIntValue(exposureTemplate.ReadoutMode);

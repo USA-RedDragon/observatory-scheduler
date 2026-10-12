@@ -64,6 +64,27 @@ namespace NINA.Plugin.TargetScheduler.Bodies {
         }
     }
 
+    public static class BodyTrail {
+        public const string SourceBodyRate = "body-rate";
+
+        public const double MinimumSeconds = 1;
+
+        public static double? MaxSeconds(double? rateArcsecPerHour, BodyField field, int binning = 1) {
+            if (!rateArcsecPerHour.HasValue || double.IsNaN(rateArcsecPerHour.Value) || rateArcsecPerHour.Value <= 0) { return null; }
+            BodyField f = field ?? BodyField.Default;
+            return f.ImageScale * Math.Max(1, binning) * BodyField.MaxTrailPixels / (rateArcsecPerHour.Value / 3600);
+        }
+
+        public static bool Cap(Goals.SubLengthChoice choice, double? maxSeconds) {
+            if (choice == null || !maxSeconds.HasValue || double.IsNaN(maxSeconds.Value)) { return false; }
+            double capped = Math.Max(MinimumSeconds, Math.Floor(maxSeconds.Value));
+            if (choice.Seconds <= capped) { return false; }
+            choice.Seconds = capped;
+            choice.Source = SourceBodyRate;
+            return true;
+        }
+    }
+
     public sealed class BodyCenter {
         public string Designation { get; set; }
         public BodyPosition Position { get; set; }

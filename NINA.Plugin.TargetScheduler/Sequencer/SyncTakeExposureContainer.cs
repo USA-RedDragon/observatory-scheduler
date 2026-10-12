@@ -2,6 +2,7 @@
 using NINA.Equipment.Interfaces.Mediator;
 using NINA.Plugin.TargetScheduler.Database;
 using NINA.Plugin.TargetScheduler.Database.Schema;
+using NINA.Plugin.TargetScheduler.Goals;
 using NINA.Plugin.TargetScheduler.Planning;
 using NINA.Plugin.TargetScheduler.Planning.Exposures;
 using NINA.Plugin.TargetScheduler.Planning.Interfaces;
@@ -92,7 +93,8 @@ namespace NINA.Plugin.TargetScheduler.Sequencer {
 
             DateTime now = DateTime.Now;
             double? glare = SubLengthPlanning.Glare(SkyConditions.Observer(profileService.ActiveProfile), target.CoordinatesAt(now), now);
-            SubLengthPlanning.Apply(exposure, target.Guid, exposureTemplate.FilterName, exposureTemplate.Gain, exposureTemplate.DefaultExposure, glare);
+            SubLengthChoice choice = SubLengthPlanning.Apply(exposure, target.Guid, exposureTemplate.FilterName, exposureTemplate.Gain, exposureTemplate.DefaultExposure, glare);
+            SubLengthPlanning.CapForBody(exposure, choice, target, now, BodyRecenter.Field(profileService.ActiveProfile, cameraMediator));
             TSLogger.Info($"SYNC client exposure: {exposureTemplate.FilterName} {SchedulerPlan.LengthText(exposure)}, server exposure {syncedExposure.ExposureLength} s");
         }
 

@@ -1,4 +1,5 @@
 using NINA.Astrometry;
+using NINA.Plugin.TargetScheduler.Bodies;
 using NINA.Plugin.TargetScheduler.Goals;
 using NINA.Plugin.TargetScheduler.Planning.Interfaces;
 using NINA.Plugin.TargetScheduler.Shared.Utility;
@@ -23,7 +24,27 @@ namespace NINA.Plugin.TargetScheduler.Planning.Exposures {
             if (target == null) { return; }
             double? glare = Glare(SkyConditions.CurrentObserver, target.CoordinatesAt(atTime), atTime);
             foreach (IExposure exposure in Plans(target)) {
-                Apply(exposure, target.Guid, glare);
+                SubLengthChoice choice = Apply(exposure, target.Guid, glare);
+                CapForBody(exposure, choice, target, atTime);
+            }
+        }
+
+        public static double? BodyMaxSeconds(ITarget target, DateTime? atTime, double seconds, BodyField field = null, int binning = 1) {
+            if (target == null || !target.IsBody()) { return null; }
+            BodyEphemeris ephemeris = target.Ephemeris();
+            double? rate = atTime.HasValue ? ephemeris?.MaxRate(atTime.Value, atTime.Value.AddSeconds(Math.Max(0, seconds))) : null;
+            return BodyTrail.MaxSeconds(rate ?? ephemeris?.MaxRate(), field ?? BodyField.Current, binning);
+        }
+
+        public static void CapForBody(IExposure exposure, SubLengthChoice choice, ITarget target, DateTime? atTime, BodyField field = null) {
+            if (exposure == null || choice == null || target == null || !target.IsBody()) { return; }
+            BodyField f = field ?? BodyField.Current;
+            int binning = Math.Max(1, (int)(exposure.BinningMode?.X ?? 1));
+            double before = choice.Seconds;
+            if (BodyTrail.Cap(choice, BodyMaxSeconds(target, atTime, choice.Seconds, f, binning))) {
+                exposure.ExposureLength = choice.Seconds;
+                exposure.LengthSource = choice.Source;
+                TSLogger.Debug($"moving body {target.Name} ({target.Designation}) {exposure.FilterName}: sub length capped from {before:0.###} s to {choice.Seconds:0.###} s to keep the trail under {BodyField.MaxTrailPixels:0.#} px at {f.ImageScale * binning:0.###}\"/px (bin {binning})");
             }
         }
 
