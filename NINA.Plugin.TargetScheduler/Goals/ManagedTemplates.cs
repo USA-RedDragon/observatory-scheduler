@@ -71,7 +71,8 @@ namespace NINA.Plugin.TargetScheduler.Goals {
         public const int MinutesOffset = 0;
         public const double BroadbandDefaultExposure = 300;
         public const double NarrowbandDefaultExposure = 600;
-        public const int TwilightLevel = 1;
+        public const int BroadbandTwilightLevel = 1;
+        public const int NarrowbandTwilightLevel = 2;
 
         public static string Name(string filter) {
             return (filter ?? "").Trim() + Suffix;
@@ -83,6 +84,10 @@ namespace NINA.Plugin.TargetScheduler.Goals {
 
         public static int Gain(string filter) {
             return Narrowband(filter) ? NarrowbandGain : BroadbandGain;
+        }
+
+        public static int TwilightLevel(string filter) {
+            return Narrowband(filter) ? NarrowbandTwilightLevel : BroadbandTwilightLevel;
         }
 
         public static double DefaultExposure(string filter) {

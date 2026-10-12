@@ -106,7 +106,7 @@ namespace NINA.Plugin.TargetScheduler.Remote.Data {
                 "ORDER BY t.filtername = @f DESC, t.Id LIMIT 1",
                 ("@p", profile), ("@n", ManagedTemplateSpec.Name(filter)), ("@f", filter), ("@gain", ManagedTemplateSpec.Gain(filter)),
                 ("@offset", ManagedTemplateSpec.Offset), ("@bin", ManagedTemplateSpec.Bin), ("@readout", ManagedTemplateSpec.ReadoutMode),
-                ("@twilight", ManagedTemplateSpec.TwilightLevel), ("@humidity", ManagedTemplateSpec.MaximumHumidity),
+                ("@twilight", ManagedTemplateSpec.TwilightLevel(filter)), ("@humidity", ManagedTemplateSpec.MaximumHumidity),
                 ("@exposure", ManagedTemplateSpec.DefaultExposure(filter)), ("@dither", ManagedTemplateSpec.DitherEvery), ("@minutes", ManagedTemplateSpec.MinutesOffset)));
         }
 
@@ -130,7 +130,7 @@ namespace NINA.Plugin.TargetScheduler.Remote.Data {
                 "VALUES (@p, @n, @f, @gain, @offset, @bin, @readout, @twilight, 0, 0, 0, @humidity, @exposure, 0, 5, -15, 0, @dither, @minutes, @g)",
                 ("@p", profile), ("@n", ManagedTemplateSpec.Name(filter)), ("@f", filter), ("@gain", ManagedTemplateSpec.Gain(filter)),
                 ("@offset", ManagedTemplateSpec.Offset), ("@bin", ManagedTemplateSpec.Bin), ("@readout", ManagedTemplateSpec.ReadoutMode),
-                ("@twilight", ManagedTemplateSpec.TwilightLevel), ("@humidity", ManagedTemplateSpec.MaximumHumidity),
+                ("@twilight", ManagedTemplateSpec.TwilightLevel(filter)), ("@humidity", ManagedTemplateSpec.MaximumHumidity),
                 ("@exposure", ManagedTemplateSpec.DefaultExposure(filter)), ("@dither", ManagedTemplateSpec.DitherEvery),
                 ("@minutes", ManagedTemplateSpec.MinutesOffset), ("@g", guid));
             s.Exec("INSERT OR REPLACE INTO ts_template_role (template_id, template_guid, profile_id, filter, role, changed_at) VALUES (@id, @g, @p, @f, @r, @at)",

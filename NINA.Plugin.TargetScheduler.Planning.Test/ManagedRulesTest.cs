@@ -22,7 +22,8 @@ namespace NINA.Plugin.TargetScheduler.Planning.Test {
         public void ConstantsMatchTheMeasuredRules() {
             TwilightRule.BroadbandSunLimit.Should().Be(-15);
             MoonFloor.Degrees.Should().Be(20);
-            ManagedTemplateSpec.TwilightLevel.Should().Be(1);
+            ManagedTemplateSpec.TwilightLevel("Red").Should().Be(1);
+            ManagedTemplateSpec.TwilightLevel("H-a").Should().Be(2);
         }
 
         [TestCase(-16.0, false)]

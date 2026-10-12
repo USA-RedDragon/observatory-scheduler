@@ -55,7 +55,7 @@ namespace NINA.Plugin.TargetScheduler.Remote.Test {
             var id = PlanTemplate("pla");
             id.Should().NotBe(1);
             db.Dump($"exposuretemplate WHERE Id = {id}", "Id", "guid").Should().Be(
-                "profileId=p|name=H-a (auto)|filtername=H-a|gain=100|offset=-1|bin=1|readoutmode=-1|twilightlevel=1|moonavoidanceenabled=0|moonavoidanceseparation=0|moonavoidancewidth=0|maximumhumidity=0|defaultexposure=600|moonrelaxscale=0|moonrelaxmaxaltitude=5|moonrelaxminaltitude=-15|moondownenabled=0|ditherevery=-1|minutesOffset=0");
+                "profileId=p|name=H-a (auto)|filtername=H-a|gain=100|offset=-1|bin=1|readoutmode=-1|twilightlevel=2|moonavoidanceenabled=0|moonavoidanceseparation=0|moonavoidancewidth=0|maximumhumidity=0|defaultexposure=600|moonrelaxscale=0|moonrelaxmaxaltitude=5|moonrelaxminaltitude=-15|moondownenabled=0|ditherevery=-1|minutesOffset=0");
             db.Dump("ts_template_role", "changed_at", "template_guid").Should().Be($"template_id={id}|profile_id=p|filter=H-a|role=managed");
 
             var second = Run(CommandKinds.ProjectCreate, Create("pb", "tb", "plb", "H-a", 3));
@@ -178,10 +178,12 @@ namespace NINA.Plugin.TargetScheduler.Remote.Test {
             foreach (var f in new[] { "Luminance", "Red", "Green", "Blue", "L", "UV/IR cut" }) {
                 ManagedTemplateSpec.Gain(f).Should().Be(0, f);
                 ManagedTemplateSpec.DefaultExposure(f).Should().Be(300, f);
+                ManagedTemplateSpec.TwilightLevel(f).Should().Be(1, f);
             }
             foreach (var f in new[] { "H-a", "O-III", "S-II", "Ha 3nm" }) {
                 ManagedTemplateSpec.Gain(f).Should().Be(100, f);
                 ManagedTemplateSpec.DefaultExposure(f).Should().Be(600, f);
+                ManagedTemplateSpec.TwilightLevel(f).Should().Be(2, f);
             }
         }
     }
