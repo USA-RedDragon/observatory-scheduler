@@ -2,6 +2,7 @@
 using NINA.Core.Model;
 using NINA.Equipment.Interfaces.Mediator;
 using NINA.Plugin.TargetScheduler.Astrometry;
+using NINA.Plugin.TargetScheduler.Bodies;
 using NINA.Plugin.TargetScheduler.Database;
 using NINA.Plugin.TargetScheduler.Database.Schema;
 using NINA.Plugin.TargetScheduler.Planning.Entities;
@@ -55,6 +56,11 @@ namespace NINA.Plugin.TargetScheduler.Planning {
             // If we detect that the active target has been edited since it started, we have to abort
             if (!isPreview && TargetEditGuard.Instance.IsEdited(previousTarget.DatabaseId)) {
                 TSLogger.Info($"not continuing previous target at {atTime}, {previousTarget.Name}: detected impacting edit to target");
+                return false;
+            }
+
+            if (!isPreview && BodyRecenter.EndReason(previousTarget, atTime, BodyCenters.Live, BodyField.Current) is string drift) {
+                TSLogger.Info($"not continuing previous target at {atTime}, {previousTarget.Name}: {drift}");
                 return false;
             }
 

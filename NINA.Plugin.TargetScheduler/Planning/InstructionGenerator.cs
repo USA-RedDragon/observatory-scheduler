@@ -1,5 +1,7 @@
-﻿using NINA.Plugin.TargetScheduler.Planning.Entities;
+﻿using NINA.Plugin.TargetScheduler.Bodies;
+using NINA.Plugin.TargetScheduler.Planning.Entities;
 using NINA.Plugin.TargetScheduler.Planning.Interfaces;
+using System;
 using System.Collections.Generic;
 
 namespace NINA.Plugin.TargetScheduler.Planning {
@@ -10,6 +12,10 @@ namespace NINA.Plugin.TargetScheduler.Planning {
         }
 
         public List<IInstruction> Generate(ITarget target, ITarget previousTarget) {
+            return Generate(target, previousTarget, DateTime.Now);
+        }
+
+        public List<IInstruction> Generate(ITarget target, ITarget previousTarget, DateTime atTime) {
             List<IInstruction> instructions = new List<IInstruction>();
             IExposure selectedExposure = target.SelectedExposure;
 
@@ -17,6 +23,8 @@ namespace NINA.Plugin.TargetScheduler.Planning {
             if (!target.Equals(previousTarget)) {
                 instructions.Add(new PlanSlew(target, true));
                 instructions.Add(new PlanBeforeNewTargetContainer());
+            } else if (BodyRecenter.Required(target, atTime, BodyCenters.Live, BodyField.Current)) {
+                instructions.Add(new PlanSlew(target, true));
             }
 
             if (selectedExposure.PreDither) {

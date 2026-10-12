@@ -87,7 +87,7 @@ namespace NINA.Plugin.TargetScheduler.Planning {
                     // If the previous target still has time in it's initial minimum time span and is still acceptable, then stick with it
                     if (previousTargetExpert.CanContinue(atTime, weatherDataMediator, previousTarget)) {
                         TSLogger.Info($"previous target still within permitted time span, continuing: {previousTarget.Project.Name}/{previousTarget.Name}: {previousTarget.BonusTimeSpanEnd} > {atTime} ");
-                        List<IInstruction> instructions = new InstructionGenerator().Generate(previousTarget, previousTarget);
+                        List<IInstruction> instructions = new InstructionGenerator().Generate(previousTarget, previousTarget, atTime);
                         return new SchedulerPlan(atTime, projects, previousTarget, instructions, !checkCondition);
                     }
 
@@ -112,7 +112,7 @@ namespace NINA.Plugin.TargetScheduler.Planning {
                         ITarget selectedTarget = readyTargets.Count == 1
                             ? readyTargets[0]
                             : SelectTargetByScore(readyTargets, new ScoringEngine(activeProfile, profilePreferences, atTime, previousTarget));
-                        List<IInstruction> instructions = new InstructionGenerator().Generate(selectedTarget, previousTarget);
+                        List<IInstruction> instructions = new InstructionGenerator().Generate(selectedTarget, previousTarget, atTime);
 
                         HandleTargetSwitch(previousTarget, selectedTarget);
                         if (!isPreview) { TargetEditGuard.Instance.Clear(); }

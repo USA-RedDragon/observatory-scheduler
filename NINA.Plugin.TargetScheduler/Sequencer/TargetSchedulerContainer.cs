@@ -13,6 +13,7 @@ using NINA.Plugin.Interfaces;
 using NINA.Plugin.TargetScheduler.Astrometry;
 using NINA.Plugin.TargetScheduler.Database;
 using NINA.Plugin.TargetScheduler.Database.Schema;
+using NINA.Plugin.TargetScheduler.Bodies;
 using NINA.Plugin.TargetScheduler.Planning;
 using NINA.Plugin.TargetScheduler.Planning.Exposures;
 using NINA.Plugin.TargetScheduler.Planning.Interfaces;
@@ -276,6 +277,7 @@ namespace NINA.Plugin.TargetScheduler.Sequencer {
             ITarget previousPlanTarget = null;
             Remote.Plugin.RemoteHost.Instance?.Attach(this);
             DitherManagerCache.Clear();
+            BodyCenters.Live.Clear();
             PlanExecutionHistory = new PlanExecutionHistory();
             synchronizationEnabled = IsSynchronizationEnabled();
 
@@ -303,6 +305,7 @@ namespace NINA.Plugin.TargetScheduler.Sequencer {
                 atTime = GetPlannerTime(DateTime.Now, atTime);
                 profilePreferences = GetProfilePreferences();
                 CurrentLimit = SequenceLimits.Find(this, profileService.ActiveProfile, atTime);
+                UpdateBodyField();
                 string limitText = SequenceLimits.Describe(CurrentLimit);
                 if (limitText != lastLimitText) {
                     TSLogger.Info($"end of imaging: {limitText}");
@@ -389,6 +392,7 @@ namespace NINA.Plugin.TargetScheduler.Sequencer {
                         TSLogger.Info($"plan target: {target.Name}");
 
                         SetTarget(atTime, target, plan.PlanCoordinates);
+                        BodyRecenter.AfterSetTarget(target, previousPlanTarget, plan, profilePreferences.EnableSlewCenter, BodyCenters.Live);
                         ResetCenterAfterDrift(previousPlanTarget, target, plan);
                         SetTargetForCustomEventContainers();
 
@@ -679,6 +683,16 @@ namespace NINA.Plugin.TargetScheduler.Sequencer {
             inputTarget.InputCoordinates.Coordinates = new Coordinates(Angle.Zero, Angle.Zero, Epoch.J2000);
             inputTarget.PositionAngle = 0;
             return inputTarget;
+        }
+
+        private void UpdateBodyField() {
+            try {
+                NINA.Equipment.Equipment.MyCamera.CameraInfo camera = cameraMediator?.GetInfo();
+                bool known = camera != null && camera.Connected;
+                BodyRecenter.UpdateField(profileService.ActiveProfile, known ? camera.XSize : null, known ? camera.YSize : null);
+            } catch (Exception ex) {
+                TSLogger.Warning($"could not read the camera field for moving bodies, using the rig defaults: {ex.Message}");
+            }
         }
 
         private void ResetCenterAfterDrift(ITarget previousPlanTarget, ITarget target, SchedulerPlan plan) {
