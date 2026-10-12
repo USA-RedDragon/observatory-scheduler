@@ -44,6 +44,8 @@ namespace NINA.Plugin.TargetScheduler.Remote.Commands {
         public const string TargetBody = "target.body";
         public const string TargetWindow = "target.window";
         public const string TargetFraming = "target.framing";
+        public const string TemplatesMigrate = "templates.migrate";
+        public const string TemplatesRevert = "templates.revert";
     }
 
     public class CommandEnvelope {

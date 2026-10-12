@@ -52,6 +52,8 @@ namespace NINA.Plugin.TargetScheduler.Remote.Commands {
                 new TargetBodyHandler(),
                 new TargetWindowHandler(),
                 new TargetFramingHandler(),
+                new TemplateMigrateHandler(false),
+                new TemplateMigrateHandler(true),
             });
         }
     }

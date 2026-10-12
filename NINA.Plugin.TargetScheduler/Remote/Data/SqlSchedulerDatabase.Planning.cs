@@ -321,6 +321,9 @@ namespace NINA.Plugin.TargetScheduler.Remote.Data {
             if (IsManagedTemplate(s, id.Value)) {
                 return o.Reject($"{p.Name ?? "The template"}: {ManagedReason("deleted")}.");
             }
+            if (NeededForRevert(s, id.Value)) {
+                return o.Reject($"{p.Name ?? "The template"} is needed to revert the template migration, so it was not removed.");
+            }
             var used = s.Count("SELECT COUNT(*) FROM exposureplan WHERE exposureTemplateId = @id", ("@id", id.Value));
             if (used > 0) {
                 return o.Reject($"{p.Name ?? "The template"} is used by {used} exposure {(used == 1 ? "plan" : "plans")}, so it was not removed.");

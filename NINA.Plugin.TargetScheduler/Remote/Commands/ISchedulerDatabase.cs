@@ -96,6 +96,7 @@ namespace NINA.Plugin.TargetScheduler.Remote.Commands {
         public List<Dictionary<string, object>> Conflicts { get; } = new List<Dictionary<string, object>>();
         public List<(int? ProjectId, int? TargetId)> Touched { get; } = new List<(int?, int?)>();
         public bool Changed { get; set; }
+        public object Detail { get; set; }
 
         public ChangeOutcome Reject(string message) {
             Status = CommandStatus.Rejected;
@@ -131,6 +132,10 @@ namespace NINA.Plugin.TargetScheduler.Remote.Commands {
         ChangeOutcome ApplyExposureSet(ApplySetPayload payload, bool undo, string activeProfileId = null, IReadOnlyCollection<string> wheelFilters = null);
 
         ChangeOutcome CreateProject(ProjectCreatePayload payload, string profileId, IReadOnlyDictionary<string, double> defaultRuleWeights, DateTime now, IReadOnlyCollection<string> wheelFilters = null);
+
+        ChangeOutcome MigrateTemplates(bool dryRun, DateTime now);
+
+        ChangeOutcome RevertTemplates(bool dryRun, DateTime now);
 
         ChangeOutcome DeleteProject(ProjectCreatePayload payload);
 

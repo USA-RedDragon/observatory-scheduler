@@ -112,7 +112,7 @@ namespace NINA.Plugin.TargetScheduler.Remote.Commands {
                     context.Control.RequestReplan($"{Kind} by {command.Author}");
                 }
             }
-            return CommandResult.Of(command.Id, CommandStatus.Applied, o.Message);
+            return CommandResult.Of(command.Id, CommandStatus.Applied, o.Message, o.Detail);
         }
 
         private static string Show(object v) {
@@ -505,6 +505,24 @@ namespace NINA.Plugin.TargetScheduler.Remote.Commands {
 
         protected override ChangeOutcome Change(TargetFramingPayload p, ICommandContext context) {
             return context.Database.SetTargetFraming(p, context.Now);
+        }
+    }
+
+    public class TemplateMigrateHandler : PlanningHandler<TemplateMigratePayload> {
+        private readonly bool revert;
+
+        public TemplateMigrateHandler(bool revert) {
+            this.revert = revert;
+        }
+
+        public override string Kind => revert ? CommandKinds.TemplatesRevert : CommandKinds.TemplatesMigrate;
+
+        protected override string Label(TemplateMigratePayload p) {
+            return revert ? "Template revert" : "Template migration";
+        }
+
+        protected override ChangeOutcome Change(TemplateMigratePayload p, ICommandContext context) {
+            return revert ? context.Database.RevertTemplates(p.DryRun, context.Now) : context.Database.MigrateTemplates(p.DryRun, context.Now);
         }
     }
 }

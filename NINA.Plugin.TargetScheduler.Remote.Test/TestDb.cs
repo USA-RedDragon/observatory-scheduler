@@ -3,6 +3,8 @@ using System;
 using System.Collections.Generic;
 using System.Data.Common;
 using System.Globalization;
+using System.IO;
+using System.Linq;
 
 namespace NINA.Plugin.TargetScheduler.Remote.Test {
 
@@ -10,10 +12,23 @@ namespace NINA.Plugin.TargetScheduler.Remote.Test {
         private readonly SqliteConnection keepAlive;
         public string ConnectionString { get; }
 
-        public TestDb() {
-            ConnectionString = $"Data Source=file:{Guid.NewGuid():N}?mode=memory&cache=shared";
+        private TestDb(string options) {
+            ConnectionString = $"Data Source=file:{Guid.NewGuid():N}?mode=memory&cache=shared{options}";
             keepAlive = new SqliteConnection(ConnectionString);
             keepAlive.Open();
+        }
+
+        public static TestDb RealSchema() {
+            var db = new TestDb(";Foreign Keys=False");
+            var dir = Path.Combine(AppContext.BaseDirectory, "Schema");
+            db.Exec(File.ReadAllText(Path.Combine(dir, "Initial", "initial_schema.sql")));
+            foreach (var file in Directory.GetFiles(Path.Combine(dir, "Migrate"), "*.sql").OrderBy(f => int.Parse(Path.GetFileNameWithoutExtension(f), CultureInfo.InvariantCulture))) {
+                db.Exec(File.ReadAllText(file));
+            }
+            return db;
+        }
+
+        public TestDb() : this("") {
             Exec(@"CREATE TABLE project (Id INTEGER PRIMARY KEY, profileId TEXT NOT NULL, name TEXT NOT NULL, state INTEGER, priority INTEGER, minimumtime INTEGER, isMosaic INTEGER NOT NULL DEFAULT 0, flatsHandling INTEGER NOT NULL DEFAULT 0);
 CREATE TABLE target (Id INTEGER PRIMARY KEY, name TEXT NOT NULL, active INTEGER NOT NULL, ra REAL, dec REAL, epochcode INTEGER NOT NULL DEFAULT 2, projectid INTEGER);
 CREATE TABLE exposureplan (Id INTEGER PRIMARY KEY, profileId TEXT NOT NULL, exposure REAL NOT NULL, desired INTEGER, acquired INTEGER, accepted INTEGER, targetid INTEGER, exposureTemplateId INTEGER, enabled INTEGER);

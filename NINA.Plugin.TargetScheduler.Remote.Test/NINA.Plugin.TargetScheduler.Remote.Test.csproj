@@ -46,6 +46,11 @@
   </ItemGroup>
 
   <ItemGroup>
+    <None Include="..\NINA.Plugin.TargetScheduler\Database\Initial\initial_schema.sql" Link="Schema\Initial\initial_schema.sql" CopyToOutputDirectory="PreserveNewest" />
+    <None Include="..\NINA.Plugin.TargetScheduler\Database\Migrate\*.sql" LinkBase="Schema\Migrate" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
+  <ItemGroup>
     <PackageReference Include="EmbedIO" Version="3.5.2" />
     <PackageReference Include="FluentAssertions" Version="6.12.1" />
     <PackageReference Include="Microsoft.Data.Sqlite" Version="8.0.11" />

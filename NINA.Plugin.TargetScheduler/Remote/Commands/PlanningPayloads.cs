@@ -401,4 +401,10 @@ namespace NINA.Plugin.TargetScheduler.Remote.Commands {
         [JsonPropertyName("match_with")]
         public string MatchWith { get; set; }
     }
+
+    public class TemplateMigratePayload {
+
+        [JsonPropertyName("dry_run")]
+        public bool DryRun { get; set; }
+    }
 }
