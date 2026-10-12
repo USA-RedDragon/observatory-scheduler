@@ -40,7 +40,7 @@ namespace NINA.Plugin.TargetScheduler.Planning {
             bool newTarget = previousTarget == null || !target.Equals(previousTarget);
             bool recenter = plan.PlanInstructions?.Any(i => i is PlanSlew) == true;
             if (!newTarget && !recenter) { return; }
-            Coordinates coordinates = plan.PlanCoordinates ?? target.CoordinatesAt(plan.PlanTime);
+            Coordinates coordinates = plan.PlanBodyCoordinates ?? (target.Frame() == null ? plan.PlanCoordinates : null) ?? target.CoordinatesAt(plan.PlanTime);
             if (coordinates == null) { return; }
             centers.Record(target.Guid, target.Designation, new BodyPosition(coordinates.RADegrees, coordinates.Dec), plan.PlanTime);
         }

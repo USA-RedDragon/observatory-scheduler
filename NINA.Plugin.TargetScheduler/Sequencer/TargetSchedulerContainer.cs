@@ -380,7 +380,8 @@ namespace NINA.Plugin.TargetScheduler.Sequencer {
                             await Task.Delay(UnknownPositionRetry, token);
                             continue;
                         }
-                        plan.PlanCoordinates = target.CoordinatesAt(atTime);
+                        plan.PlanBodyCoordinates = target.CoordinatesAt(atTime);
+                        plan.PlanCoordinates = target.FramedCoordinatesAt(atTime);
 
                         if (previousPlanTarget != null && !target.Equals(previousPlanTarget)) {
                             await ExecuteEventContainer(AfterTargetContainer, progress, token);
@@ -653,14 +654,14 @@ namespace NINA.Plugin.TargetScheduler.Sequencer {
                 inputTarget.DeepSkyObject = GetDeepSkyObject(referenceDate, activeProfile, planTarget, targetCoordinates, customHorizon);
                 inputTarget.TargetName = planTarget.Name;
                 inputTarget.InputCoordinates = new InputCoordinates(targetCoordinates);
-                inputTarget.PositionAngle = planTarget.Rotation;
+                inputTarget.PositionAngle = planTarget.FramedRotation();
                 inputTarget.Expanded = true;
                 Target = inputTarget;
 
                 ProjectTargetDisplay = $"{planTarget.Project.Name} / {planTarget.Name}";
                 CoordinatesDisplay = $"{inputTarget.InputCoordinates.RAHours}h  {inputTarget.InputCoordinates.RAMinutes}m  {inputTarget.InputCoordinates.RASeconds}s   " +
                                     $"{inputTarget.InputCoordinates.DecDegrees}°  {inputTarget.InputCoordinates.DecMinutes}'  {inputTarget.InputCoordinates.DecSeconds}\",   " +
-                                    $"Rotation {planTarget.Rotation}°";
+                                    $"Rotation {inputTarget.PositionAngle}°";
                 StopAtDisplay = $"{planTarget.EndTime:HH:mm:ss}";
 
                 Task.Run(() => NighttimeData = nighttimeCalculator.Calculate(referenceDate)).Wait();

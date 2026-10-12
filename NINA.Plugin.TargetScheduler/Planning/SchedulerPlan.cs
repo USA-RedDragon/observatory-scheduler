@@ -28,6 +28,7 @@ namespace NINA.Plugin.TargetScheduler.Planning {
         public bool IsWait { get => WaitForNextTargetTime.HasValue; }
         public bool IsEmulator { get; set; }
         public Coordinates PlanCoordinates { get; set; }
+        public Coordinates PlanBodyCoordinates { get; set; }
         public string DetailsLog { get; private set; }
 
         public SchedulerPlan(DateTime planTime, List<IProject> projects, ITarget target, List<IInstruction> planInstructions, bool logPlan) {

@@ -137,5 +137,28 @@ namespace NINA.Plugin.TargetScheduler.Test.Planning {
             target.IsPreview = true;
             sut.Generate(target, target, AfterArcsec(BodyField.Default.RecenterDegrees * 3600 + 5)).OfType<PlanSlew>().Should().BeEmpty();
         }
+
+        [Test]
+        public void AFramedBodyRecordsTheBodyNotTheOffsetFrameCentreSoItDoesNotRecenterAtOnce() {
+            PlanningTarget target = Body();
+            target.BodyFrame = BodyFrame.From(84, -0.25);
+            SchedulerPlan plan = new SchedulerPlan(Start, new List<IProject>(), target, new List<IInstruction> { new PlanSlew(target, true) }, false) {
+                PlanBodyCoordinates = target.CoordinatesAt(Start),
+                PlanCoordinates = target.FramedCoordinatesAt(Start, BodyField.Default)
+            };
+            BodyDrift.SeparationDegrees(new BodyPosition(plan.PlanCoordinates.RADegrees, plan.PlanCoordinates.Dec), new BodyPosition(76.2, 20)).Should().BeApproximately(0.25 * BodyField.Default.LongSideDegrees, 1e-6);
+            BodyRecenter.AfterSetTarget(target, null, plan, true, BodyCenters.Live);
+            BodyCenters.Live.Get("g1", "C/2025 R2").Position.Dec.Should().BeApproximately(20, 1e-9);
+            BodyCenters.Live.Get("g1", "C/2025 R2").Position.Ra.Should().BeApproximately(76.2, 1e-9);
+            BodyRecenter.EndReason(target, Start, BodyCenters.Live, BodyField.Default).Should().BeNull();
+
+            BodyCenters.Live.Clear();
+            SchedulerPlan noBody = new SchedulerPlan(Start, new List<IProject>(), target, new List<IInstruction> { new PlanSlew(target, true) }, false) {
+                PlanCoordinates = target.FramedCoordinatesAt(Start, BodyField.Default)
+            };
+            BodyRecenter.AfterSetTarget(target, null, noBody, true, BodyCenters.Live);
+            BodyCenters.Live.Get("g1", "C/2025 R2").Position.Dec.Should().BeApproximately(20, 1e-9);
+            BodyRecenter.EndReason(target, Start, BodyCenters.Live, BodyField.Default).Should().BeNull();
+        }
     }
 }

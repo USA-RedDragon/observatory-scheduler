@@ -15,6 +15,7 @@ namespace NINA.Plugin.TargetScheduler.Planning.Interfaces {
         Coordinates Coordinates { get; set; }
         string Designation => null;
         BodyEphemeris BodyEphemeris => null;
+        BodyFrame BodyFrame => null;
         Epoch Epoch { get; set; }
         double Rotation { get; set; }
         double ROI { get; set; }

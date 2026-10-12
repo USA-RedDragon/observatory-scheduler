@@ -24,6 +24,25 @@ namespace NINA.Plugin.TargetScheduler.Planning.Interfaces {
             return $"moving body {target.Name} ({target.Designation}) has no position at {time}";
         }
 
+        public static BodyFrame Frame(this ITarget target) {
+            if (!target.IsBody()) { return null; }
+            return target.BodyFrame ?? TargetBodyTable.Current.Frame(target.Guid, target.Designation);
+        }
+
+        public static Coordinates FramedCoordinatesAt(this ITarget target, DateTime time, BodyField field = null) {
+            Coordinates body = target.CoordinatesAt(time);
+            BodyFrame frame = target.Frame();
+            if (body == null || frame == null) { return body; }
+            BodyPosition center = frame.Center(new BodyPosition(body.RADegrees, body.Dec), (field ?? BodyField.Current).LongSideDegrees);
+            return new Coordinates(Angle.ByDegree(center.Ra), Angle.ByDegree(center.Dec), Epoch.J2000);
+        }
+
+        public static double FramedRotation(this ITarget target, BodyField field = null) {
+            BodyFrame frame = target?.Frame();
+            BodyField f = field ?? BodyField.Current;
+            return frame == null ? target.Rotation : frame.NinaPositionAngle(f.WidthPx, f.HeightPx);
+        }
+
         public static Coordinates CoordinatesAt(this ITarget target, DateTime time) {
             if (target == null) { return null; }
             if (!target.IsBody()) { return target.Coordinates; }

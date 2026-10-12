@@ -244,7 +244,7 @@ namespace NINA.Plugin.TargetScheduler.Sequencer {
 
         private void AddSlew(PlanSlew instruction, ITarget target, DateTime planTime) {
             bool isPlateSolve = instruction.center;
-            Coordinates coordinates = plan.PlanCoordinates ?? target.CoordinatesAt(planTime);
+            Coordinates coordinates = plan.PlanCoordinates ?? target.FramedCoordinatesAt(planTime);
             if (coordinates == null && target.IsBody()) {
                 TSLogger.Warning($"no slew/center added: {target.PositionUnknownReason(planTime)}");
                 return;
@@ -265,7 +265,7 @@ namespace NINA.Plugin.TargetScheduler.Sequencer {
 
                     slewCenter.Name = nameof(CenterAndRotate);
                     (slewCenter as Center).Coordinates = slewCoordinates;
-                    (slewCenter as CenterAndRotate).PositionAngle = target.Rotation;
+                    (slewCenter as CenterAndRotate).PositionAngle = target.FramedRotation();
                 } else {
                     slewCenter = new Center(profileService, telescopeMediator, imagingMediator, filterWheelMediator, guiderMediator, domeMediator, domeFollower, plateSolverFactory, windowServiceFactory);
                     slewCenter.Name = nameof(Center);

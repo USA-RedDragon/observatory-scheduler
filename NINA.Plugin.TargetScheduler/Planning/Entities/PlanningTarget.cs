@@ -20,6 +20,7 @@ namespace NINA.Plugin.TargetScheduler.Planning.Entities {
         public Coordinates Coordinates { get; set; }
         public string Designation { get; set; }
         public BodyEphemeris BodyEphemeris { get; set; }
+        public BodyFrame BodyFrame { get; set; }
         public Epoch Epoch { get; set; }
         public double Rotation { get; set; }
         public double ROI { get; set; }
@@ -51,6 +52,7 @@ namespace NINA.Plugin.TargetScheduler.Planning.Entities {
             BodySnapshot bodies = BodySnapshot.Current;
             this.Designation = bodies.Targets.Designation(target.Guid);
             this.BodyEphemeris = this.Designation == null ? null : bodies.Positions.Ephemeris(target.Guid, this.Designation);
+            this.BodyFrame = this.Designation == null ? null : bodies.Targets.Frame(target.Guid, this.Designation);
             this.Epoch = target.Epoch;
             this.Rotation = target.Rotation;
             this.ROI = target.ROI;
