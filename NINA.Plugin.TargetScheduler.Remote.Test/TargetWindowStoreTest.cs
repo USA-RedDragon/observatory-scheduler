@@ -99,6 +99,38 @@ namespace NINA.Plugin.TargetScheduler.Remote.Test {
             load.Should().Throw<Exception>();
         }
 
+        private const string TwoWindows = @"INSERT INTO ts_target_window (target_guid, start_utc, end_utc, priority, event_id, ignore_moon, updated_at) VALUES
+('G13', '2026-10-13T00:30:00Z', '2026-10-14T12:00:00Z', 'high', NULL, 0, NULL),
+('gone', '2026-10-13T00:30:00Z', '2026-10-14T12:00:00Z', 'high', NULL, 0, NULL)";
+
+        [Test]
+        public void RowsOfDeletedTargetsAreIgnoredOnLoad() {
+            db.Dispose();
+            db = new TestDb().WithPlanning();
+            using (var conn = db.Connect()) { TargetWindowStore.Ensure(conn); }
+            db.Exec(TwoWindows);
+            TargetWindowTable table;
+            using (var conn = db.Connect()) { table = TargetWindowStore.Load(conn); }
+            table.Count.Should().Be(1);
+            table.Get("g13").Should().NotBeNull();
+            table.Get("gone").Should().BeNull();
+        }
+
+        [Test]
+        public void DeleteRemovesTheWindowsOfDeletedTargets() {
+            using (var conn = db.Connect()) {
+                TargetWindowStore.Delete(conn, new[] { "g13" }).Should().Be(0);
+                TargetWindowStore.Ensure(conn);
+            }
+            db.Exec(TwoWindows);
+            using (var conn = db.Connect()) {
+                TargetWindowStore.Delete(conn, new[] { " g13 ", null, "", "g99" }).Should().Be(1);
+                TargetWindowStore.Delete(conn, null).Should().Be(0);
+            }
+            db.Count("SELECT COUNT(*) FROM ts_target_window").Should().Be(1);
+            db.Scalar("SELECT target_guid FROM ts_target_window").Should().Be("gone");
+        }
+
         [Test]
         public void CurrentFallsBackToEmpty() {
             TargetWindowTable.Current = null;

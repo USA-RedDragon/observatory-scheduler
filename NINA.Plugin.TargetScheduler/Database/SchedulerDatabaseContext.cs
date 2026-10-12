@@ -578,9 +578,11 @@ namespace NINA.Plugin.TargetScheduler.Database {
         }
 
         public bool DeleteProject(Project project, bool deleteAcquiredImagesWithTarget) {
+            List<string> targetGuids = null;
             using (var transaction = Database.BeginTransaction()) {
                 try {
                     project = GetProject(project.Id);
+                    targetGuids = project.Targets.Select(t => t.Guid).ToList();
 
                     if (deleteAcquiredImagesWithTarget) {
                         AcquiredImageSet.RemoveRange(AcquiredImageSet.Where(a => a.ProjectId == project.Id));
@@ -589,6 +591,7 @@ namespace NINA.Plugin.TargetScheduler.Database {
                     ProjectSet.Remove(project);
                     SaveChanges();
                     transaction.Commit();
+                    DeleteTargetWindows(targetGuids);
                     return true;
                 } catch (Exception e) {
                     TSLogger.Error($"error deleting project: {e.Message} {e.StackTrace}");
@@ -725,6 +728,15 @@ namespace NINA.Plugin.TargetScheduler.Database {
             }
         }
 
+        private void DeleteTargetWindows(IEnumerable<string> targetGuids) {
+            try {
+                int deleted = Bodies.TargetWindowStore.Delete(Database.Connection, targetGuids);
+                if (deleted > 0) { TSLogger.Debug($"deleted {deleted} event windows of deleted targets"); }
+            } catch (Exception e) {
+                TSLogger.Warning($"failed to delete event windows of deleted targets, they are ignored at the next load: {e.Message}");
+            }
+        }
+
         public bool DeleteTarget(Target target) {
             ClearExistingOverrideExposureOrders(target.Id);
             ClearExistingFilterCadences(target.Id);
@@ -732,6 +744,7 @@ namespace NINA.Plugin.TargetScheduler.Database {
             using (var transaction = Database.BeginTransaction()) {
                 try {
                     target = GetTarget(target.ProjectId, target.Id);
+                    string targetGuid = target.Guid;
                     TargetSet.Remove(target);
 
                     FlatHistorySet.Where(fh => fh.targetId == target.Id).ForEach(fh => {
@@ -740,6 +753,7 @@ namespace NINA.Plugin.TargetScheduler.Database {
 
                     SaveChanges();
                     transaction.Commit();
+                    DeleteTargetWindows(new[] { targetGuid });
                     return true;
                 } catch (Exception e) {
                     TSLogger.Error($"error deleting target: {e.Message} {e.StackTrace}");
