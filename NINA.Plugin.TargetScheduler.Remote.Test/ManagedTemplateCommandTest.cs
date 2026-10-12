@@ -102,7 +102,7 @@ namespace NINA.Plugin.TargetScheduler.Remote.Test {
             var payload = """{"set_name":"HOO","mode":"add","targets":[{"target_id":29,"target_guid":"g29","create":[{"guid":"s1","template_id":1,"filter":"O-III","exposure":-1,"desired":10}]}]}""";
             var r = Run(CommandKinds.ApplySet, payload);
             r.Status.Should().Be(CommandStatus.Applied);
-            r.Message.Should().Be("Created managed template O-III (auto).");
+            r.Message.Should().Be("Created managed template O-III (auto). The profile is not migrated to managed templates, but plans that name a filter use the managed template of that filter.");
             var id = PlanTemplate("s1");
             db.Scalar($"SELECT name FROM exposuretemplate WHERE Id = {id}").Should().Be("O-III (auto)");
             Run(CommandKinds.ApplySet, payload).Status.Should().Be(CommandStatus.Applied);

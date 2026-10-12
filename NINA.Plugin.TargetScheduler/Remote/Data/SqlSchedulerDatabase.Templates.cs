@@ -85,6 +85,43 @@ namespace NINA.Plugin.TargetScheduler.Remote.Data {
                 ("@r", TemplateRoles.Managed), ("@p", profile), ("@f", filter)));
         }
 
+        private static bool IsMigrated(Session s, string profile) {
+            return s.TableExists(TemplateRoleStore.RoleTable)
+                && s.Count("SELECT COUNT(*) FROM ts_template_role WHERE role = @r AND profile_id = @p", ("@r", TemplateRoles.Retired), ("@p", profile)) > 0;
+        }
+
+        private static string NotMigratedText(Session s, string profile, bool usedFilters) {
+            return usedFilters && !IsMigrated(s, profile)
+                ? "The profile is not migrated to managed templates, but plans that name a filter use the managed template of that filter."
+                : null;
+        }
+
+        private static long? FindAdoptable(Session s, string profile, string filter) {
+            var hasRoles = s.TableExists(TemplateRoleStore.RoleTable);
+            return Long(s.Scalar("SELECT t.Id FROM exposuretemplate t WHERE t.profileId = @p AND t.name = @n AND t.filtername = @f COLLATE NOCASE " +
+                "AND t.gain = @gain AND t.\"offset\" = @offset AND t.bin = @bin AND t.readoutmode = @readout AND t.twilightlevel = @twilight " +
+                "AND COALESCE(t.moonavoidanceenabled, 0) = 0 AND COALESCE(t.maximumhumidity, 0) = @humidity AND t.defaultexposure = @exposure " +
+                "AND COALESCE(t.ditherevery, -1) = @dither AND COALESCE(t.minutesOffset, 0) = @minutes " +
+                (hasRoles ? "AND NOT EXISTS (SELECT 1 FROM ts_template_role r WHERE r.template_id = t.Id) " : "") +
+                "ORDER BY t.filtername = @f DESC, t.Id LIMIT 1",
+                ("@p", profile), ("@n", ManagedTemplateSpec.Name(filter)), ("@f", filter), ("@gain", ManagedTemplateSpec.Gain(filter)),
+                ("@offset", ManagedTemplateSpec.Offset), ("@bin", ManagedTemplateSpec.Bin), ("@readout", ManagedTemplateSpec.ReadoutMode),
+                ("@twilight", ManagedTemplateSpec.TwilightLevel), ("@humidity", ManagedTemplateSpec.MaximumHumidity),
+                ("@exposure", ManagedTemplateSpec.DefaultExposure(filter)), ("@dither", ManagedTemplateSpec.DitherEvery), ("@minutes", ManagedTemplateSpec.MinutesOffset)));
+        }
+
+        private static long AdoptOrCreateManagedTemplate(Session s, string profile, string filter, string stamp) {
+            var adopt = FindAdoptable(s, profile, filter);
+            if (!adopt.HasValue) {
+                return CreateManagedTemplate(s, profile, filter, stamp);
+            }
+            EnsureTemplateRoles(s);
+            var row = s.Row("SELECT guid, filtername FROM exposuretemplate WHERE Id = @id", ("@id", adopt.Value));
+            s.Exec("INSERT OR REPLACE INTO ts_template_role (template_id, template_guid, profile_id, filter, role, changed_at) VALUES (@id, @g, @p, @f, @r, @at)",
+                ("@id", adopt.Value), ("@g", Db(Str(row["guid"]))), ("@p", profile), ("@f", Str(row["filtername"])), ("@r", TemplateRoles.Managed), ("@at", stamp));
+            return adopt.Value;
+        }
+
         private static long CreateManagedTemplate(Session s, string profile, string filter, string stamp) {
             EnsureTemplateRoles(s);
             var guid = Guid.NewGuid().ToString();
@@ -107,7 +144,7 @@ namespace NINA.Plugin.TargetScheduler.Remote.Data {
                 return id.Value;
             }
             created?.Add(ManagedTemplateSpec.Name(filter));
-            return CreateManagedTemplate(s, profile, filter, stamp);
+            return AdoptOrCreateManagedTemplate(s, profile, filter, stamp);
         }
 
         private static string CreatedText(List<string> created) {
@@ -192,13 +229,25 @@ namespace NINA.Plugin.TargetScheduler.Remote.Data {
                 profiles.Add(profile ?? "");
                 var key = Key(profile, tmpl.Filter);
                 if (!managed.TryGetValue(key, out var target)) {
-                    target = dryRun ? 0 : CreateManagedTemplate(s, profile, tmpl.Filter, stamp);
+                    var adoptable = FindAdoptable(s, profile, tmpl.Filter);
+                    target = adoptable ?? (dryRun ? 0 : CreateManagedTemplate(s, profile, tmpl.Filter, stamp));
+                    if (adoptable.HasValue) {
+                        if (!dryRun) {
+                            AdoptOrCreateManagedTemplate(s, profile, tmpl.Filter, stamp);
+                        }
+                        roles[adoptable.Value] = TemplateRoles.Managed;
+                    }
                     managed[key] = target;
                     created.Add(new Dictionary<string, object> {
                         ["profile_id"] = profile, ["filter"] = tmpl.Filter, ["name"] = ManagedTemplateSpec.Name(tmpl.Filter),
-                        ["template_id"] = dryRun ? null : (object)target, ["gain"] = ManagedTemplateSpec.Gain(tmpl.Filter),
+                        ["template_id"] = dryRun && !adoptable.HasValue ? null : (object)target, ["adopted"] = adoptable.HasValue, ["gain"] = ManagedTemplateSpec.Gain(tmpl.Filter),
                         ["narrowband"] = ManagedTemplateSpec.Narrowband(tmpl.Filter)
                     });
+                }
+                if (target == tmpl.Id) {
+                    alreadyManaged++;
+                    newIds[pl.Id] = tmpl.Id;
+                    continue;
                 }
                 if (!dryRun) {
                     var n = s.Exec("UPDATE exposureplan SET exposureTemplateId = @new WHERE Id = @id AND exposureTemplateId = @old", ("@new", target), ("@id", pl.Id), ("@old", tmpl.Id));
@@ -291,6 +340,7 @@ namespace NINA.Plugin.TargetScheduler.Remote.Data {
                 targetProjects[Long(r["Id"]).Value] = (int?)Long(r["projectid"]);
             }
             var reverted = 0;
+            var revertedIds = new List<long>();
             var skipped = new List<Dictionary<string, object>>();
             var profiles = new HashSet<string>(StringComparer.Ordinal);
             foreach (var r in rows) {
@@ -323,29 +373,37 @@ namespace NINA.Plugin.TargetScheduler.Remote.Data {
                     continue;
                 }
                 reverted++;
+                revertedIds.Add(planId);
             }
             long unretired = 0;
+            long unmanaged = 0;
             if (s.TableExists(TemplateRoleStore.RoleTable)) {
                 foreach (var profile in profiles) {
                     unretired += dryRun
                         ? s.Count("SELECT COUNT(*) FROM ts_template_role WHERE role = @r AND profile_id = @p", ("@r", TemplateRoles.Retired), ("@p", profile))
                         : s.Exec("DELETE FROM ts_template_role WHERE role = @r AND profile_id = @p", ("@r", TemplateRoles.Retired), ("@p", profile));
+                    var unused = "ts_template_role WHERE role = @r AND profile_id = @p AND template_id NOT IN (SELECT exposureTemplateId FROM exposureplan WHERE exposureTemplateId IS NOT NULL" +
+                        (revertedIds.Count == 0 ? ")" : $" AND Id NOT IN ({string.Join(",", revertedIds.Select(i => i.ToString(CultureInfo.InvariantCulture)))}))");
+                    unmanaged += dryRun
+                        ? s.Count("SELECT COUNT(*) FROM " + unused, ("@r", TemplateRoles.Managed), ("@p", profile))
+                        : s.Exec("DELETE FROM " + unused, ("@r", TemplateRoles.Managed), ("@p", profile));
                 }
             }
-            var changed = reverted > 0 || unretired > 0;
+            var changed = reverted > 0 || unretired > 0 || unmanaged > 0;
             if (!dryRun && changed) {
                 s.Commit();
                 o.Changed = true;
             }
             o.Message = dryRun
-                ? $"Dry run, nothing was written: would revert {reverted} {(reverted == 1 ? "plan" : "plans")} and un-retire {unretired} {(unretired == 1 ? "template" : "templates")}; {skipped.Count} {(skipped.Count == 1 ? "plan" : "plans")} would be skipped."
+                ? $"Dry run, nothing was written: would revert {reverted} {(reverted == 1 ? "plan" : "plans")}, un-retire {unretired} {(unretired == 1 ? "template" : "templates")} and end {unmanaged} unused managed {(unmanaged == 1 ? "template" : "templates")}; {skipped.Count} {(skipped.Count == 1 ? "plan" : "plans")} would be skipped."
                 : changed
-                    ? $"Reverted {reverted} {(reverted == 1 ? "plan" : "plans")} and un-retired {unretired} {(unretired == 1 ? "template" : "templates")}; {skipped.Count} {(skipped.Count == 1 ? "plan was" : "plans were")} skipped. Managed templates stay."
+                    ? $"Reverted {reverted} {(reverted == 1 ? "plan" : "plans")}, un-retired {unretired} {(unretired == 1 ? "template" : "templates")} and ended {unmanaged} unused managed {(unmanaged == 1 ? "template" : "templates")}; {skipped.Count} {(skipped.Count == 1 ? "plan was" : "plans were")} skipped. Managed templates that plans still use stay managed."
                     : $"Nothing to revert; {skipped.Count} {(skipped.Count == 1 ? "plan was" : "plans were")} skipped.";
             o.Detail = new Dictionary<string, object> {
                 ["dry_run"] = dryRun,
                 ["plans_reverted"] = reverted,
                 ["retired_roles_removed"] = unretired,
+                ["managed_roles_removed"] = unmanaged,
                 ["skipped"] = skipped,
             };
             return o;

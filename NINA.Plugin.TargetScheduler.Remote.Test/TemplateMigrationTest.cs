@@ -181,6 +181,7 @@ INSERT INTO overrideexposureorderitem (targetid, ""order"", action, referenceIdx
             Snapshot().Should().Equal(migrated);
             Detail(r)["plans_reverted"].Should().Be(6);
             Detail(r)["retired_roles_removed"].Should().Be(9L);
+            Detail(r)["managed_roles_removed"].Should().Be(4L);
         }
 
         [Test]
@@ -196,8 +197,8 @@ INSERT INTO overrideexposureorderitem (targetid, ""order"", action, referenceIdx
             db.Dump("exposureplan").Should().Be(before);
             db.Dump("acquiredimage").Should().Be(images);
             db.Dump("exposuretemplate").Should().Be(managedTemplates);
-            db.Count("SELECT COUNT(*) FROM ts_template_role WHERE role = 'retired'").Should().Be(0);
-            db.Count("SELECT COUNT(*) FROM ts_template_role WHERE role = 'managed'").Should().Be(4);
+            db.Count("SELECT COUNT(*) FROM ts_template_role").Should().Be(0);
+            Detail(r)["managed_roles_removed"].Should().Be(4L);
             db.Count("SELECT COUNT(*) FROM ts_template_migration WHERE reverted_at = '2026-10-13T18:00:00Z'").Should().Be(6);
             Detail(r)["plans_reverted"].Should().Be(6);
 
@@ -215,6 +216,8 @@ INSERT INTO overrideexposureorderitem (targetid, ""order"", action, referenceIdx
             database.MigrateTemplates(false, Now.AddHours(2)).Changed.Should().BeTrue();
 
             db.Count("SELECT COUNT(*) FROM ts_template_migration").Should().Be(12);
+            db.Count("SELECT COUNT(*) FROM exposuretemplate").Should().Be(13);
+            db.Count("SELECT COUNT(*) FROM ts_template_role WHERE role = 'managed'").Should().Be(4);
             db.Count("SELECT COUNT(*) FROM ts_template_migration WHERE migrated_at = '2026-10-12T18:00:00Z' AND reverted_at = '2026-10-12T19:00:00Z'").Should().Be(6);
             db.Count("SELECT COUNT(*) FROM ts_template_migration WHERE migrated_at = '2026-10-12T20:00:00Z' AND reverted_at IS NULL").Should().Be(6);
 
@@ -282,7 +285,9 @@ INSERT INTO overrideexposureorderitem (targetid, ""order"", action, referenceIdx
             database.RevertTemplates(false, Now);
 
             db.Scalar("SELECT exposureTemplateId FROM exposureplan WHERE guid = 'new1'").Should().Be(oiii);
-            db.Scalar($"SELECT role FROM ts_template_role WHERE template_id = {oiii}").Should().Be("managed");
+            db.Dump("ts_template_role", "changed_at", "template_guid").Should().Be($"template_id={oiii}|profile_id={Profile}|filter=O-III|role=managed");
+            r = CommandRegistry.Builtin().Get(CommandKinds.ApplySet).Apply(Cmd.Of(CommandKinds.ApplySet, payload.Replace("new1", "new2")), ctx);
+            r.Message.Should().Contain("The profile is not migrated to managed templates");
         }
 
         [Test]
@@ -306,7 +311,7 @@ INSERT INTO overrideexposureorderitem (targetid, ""order"", action, referenceIdx
 
             var revert = registry.Get(CommandKinds.TemplatesRevert).Apply(Cmd.Of(CommandKinds.TemplatesRevert, "{}"), ctx);
             revert.Status.Should().Be(CommandStatus.Applied);
-            revert.Message.Should().StartWith("Reverted 6 plans and un-retired 9 templates");
+            revert.Message.Should().StartWith("Reverted 6 plans, un-retired 9 templates and ended 4 unused managed templates; 0 plans were skipped.");
             ctx.FakeControlInstance.Replans.Should().HaveCount(2);
 
             migrate.Validate(Cmd.Of(CommandKinds.TemplatesMigrate, """{"dry_run":"yes"}""")).Should().StartWith("invalid payload");

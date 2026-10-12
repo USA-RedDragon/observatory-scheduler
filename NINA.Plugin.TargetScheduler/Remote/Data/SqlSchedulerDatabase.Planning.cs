@@ -419,9 +419,16 @@ namespace NINA.Plugin.TargetScheduler.Remote.Data {
                     o.Changed = true;
                 }
             }
+            var filterTarget = p.Targets.FirstOrDefault(t => t.Create.Any(filters.ContainsKey));
+            var notMigrated = filterTarget == null ? null : NotMigratedText(s, SetProfile(s, filterTarget, found[filterTarget], null), true);
             s.Commit();
-            o.Message = CreatedText(created);
+            o.Message = Join(CreatedText(created), notMigrated);
             return o;
+        }
+
+        private static string Join(params string[] parts) {
+            var text = string.Join(" ", parts.Where(m => m != null));
+            return text.Length == 0 ? null : text;
         }
 
         private static string SetProfile(Session s, ApplySetTarget t, int? projectId, int? templateId) {
@@ -558,13 +565,11 @@ VALUES (@pr, @name, @desc, @state, @prio, @created, NULL, NULL, @mintime, @minal
                     WriteTargetWindow(s, t.Guid, t.Window, stamp);
                 }
             }
+            var notMigratedNote = NotMigratedText(s, profile, filters.Count > 0);
             s.Commit();
             o.Touch((int)projectId, null);
             o.Changed = true;
-            o.Message = string.Join(" ", new[] { filled, CreatedText(createdTemplates) }.Where(m => m != null));
-            if (o.Message.Length == 0) {
-                o.Message = null;
-            }
+            o.Message = Join(filled, CreatedText(createdTemplates), notMigratedNote);
             return o;
         }
 
