@@ -1,6 +1,7 @@
-Observatory Scheduler 5.8.2.225: darks ramp the camera temperature at 1 °C per minute, with move times learned for the ramp.
+Observatory Scheduler 5.8.2.226: the running target keeps its turn unless a challenger scores more than 1% higher.
 
-- **Darks cooling ramp**: every setpoint change Target Scheduler Darks makes ramps at 1 °C per minute instead of jumping at full cooler power, and a restore keeps ramping in the background when the instruction is canceled.
-- **Move times**: the planner estimates a move as the ramp plus the settle time it measured after earlier ramps, and Darks Ready counts the sequence's own cool-down before the darks.
+- **Tie band**: at a re-plan, a challenger within 1% of the running target's score no longer replaces it, as long as the running target is still ready to image. The live planner and the Tonight simulation use the same rule.
+- **Plain-words reason**: the Now page, the Tonight pick table and timeline, and Left out tonight say when and why the running target kept its turn. The log records each hold.
+- **NINA 3.2**: the plugin builds for NINA 3.1 and NINA 3.2.
 
-No database changes. Requires NINA 3.1.2.9001 or later. Install like 5.8.2.224, together with observatory-pc Main.json that ramps the sequence's own cool-downs.
+No database changes. Requires NINA 3.1.2.9001 or later. Install like 5.8.2.225. The web shows the hold after the astro-stacker and astro-processing updates that carry score_note and held.

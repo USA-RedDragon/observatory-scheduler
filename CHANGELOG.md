@@ -1,5 +1,10 @@
 # Observatory Scheduler
 
+## 5.8.2.226 - 2026-10-13
+* Tie band for the running target: when the planner re-plans while a target is running, a challenger must score more than 1% above the running target to replace it. Within 1%, the running target keeps its turn. On 2026-10-13 at 02:17, M 15 (1.85959) and Sharpless 216 (1.85883) were 0.04% apart, so a tiny change in an input flipped the pick. The band holds only while the running target is still ready to image: visible, not skipped, inside its windows, not complete and not waiting. The live planner and the Tonight simulation apply it through the same planner code.
+* The log records each hold, for example "kept P/Sharpless 216: challenger P/M 15 within 1% (1.85959 vs 1.85883)". The Now page shows the hold under Why this target, the Tonight pick table and timeline show where a run held its turn, and Left out tonight names the running target that held a close challenger off.
+* Builds for NINA 3.1 and NINA 3.2 from the same source, computes standard refraction through NOVAS, and models the Sun Altitude condition the way the running NINA measures it.
+
 ## 5.8.2.225 - 2026-10-13
 * The planner learns the settle time after a ramp: each measured move records how long the sensor took after the ramp ended, per direction. A move is then estimated as the 1 °C per minute ramp plus that settle time. Until a ramped move is measured, the estimate stays the longer of the measured rate and the ramp. A cooling or warming rate must still be measured before Before Wait takes a dark.
 * Target Scheduler Darks Ready counts the cool time the sequence really takes when it powers up for darks: the ramp from ambient to the sequence's imaging setpoint (ambient - 30 °C below 20 °C ambient, else ambient - 25 °C), then the ramp to the dark, or the measured cooling rate when that is longer.
