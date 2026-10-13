@@ -321,7 +321,11 @@ namespace NINA.Plugin.TargetScheduler.Sequencer {
                 return;
             }
 
-            double imagingSetpoint = cam.TemperatureSetPoint;
+            double? pending = PendingRestore();
+            double imagingSetpoint = pending ?? cam.TemperatureSetPoint;
+            if (pending.HasValue) {
+                TSLogger.Info($"TS Darks: a restore to {pending.Value} °C is still ramping, so that is the imaging setpoint");
+            }
             double? imagingPower = DarkPlanner.AtTemperature(cam.Temperature, imagingSetpoint) ? cam.CoolerPower : (double?)null;
             short normalReadout = cam.ReadoutModeForNormalImages;
             double currentSetpoint = imagingSetpoint;
@@ -382,7 +386,7 @@ namespace NINA.Plugin.TargetScheduler.Sequencer {
                         CameraInfo reached = cameraMediator.GetInfo();
                         currentSetpoint = reached.TemperatureSetPoint;
                         if (reach != null) {
-                            if (reach != DarkPlanner.CameraDisconnected && !token.IsCancellationRequested && !yieldToken.IsCancellationRequested && (deadline == null || DateTime.UtcNow < deadline.Value)) {
+                            if (reach != DarkPlanner.CameraDisconnected && reach != DarkPlanner.SensorUnknown && !token.IsCancellationRequested && !yieldToken.IsCancellationRequested && (deadline == null || DateTime.UtcNow < deadline.Value)) {
                                 DarkRuntime.State.AddLimit(Limit(need.SetTemp, imagingSetpoint, imagingPower, reach, reached.Connected && !double.IsNaN(reached.Temperature) ? reached.Temperature : (double?)null));
                             }
                             TSLogger.Info($"TS Darks: skipping {need}: {reach}");
@@ -505,7 +509,11 @@ namespace NINA.Plugin.TargetScheduler.Sequencer {
         }
 
         private async Task<string> Reach(double target, TemperatureWatch watch, DateTime? deadline, IProgress<ApplicationStatus> progress, CancellationToken token, CancellationToken yieldToken) {
+            await StopRestore();
             CameraInfo info = cameraMediator.GetInfo();
+            if (double.IsNaN(info.Temperature)) {
+                return DarkPlanner.SensorUnknown;
+            }
             if (DarkPlanner.SameSetpoint(info.TemperatureSetPoint, target) && DarkPlanner.AtTemperature(info.Temperature, target)) {
                 return null;
             }
@@ -541,10 +549,60 @@ namespace NINA.Plugin.TargetScheduler.Sequencer {
             return null;
         }
 
+        private static readonly object restoreSync = new object();
+        private static CancellationTokenSource restoreCts;
+        private static Task<bool> restoreTask;
+        private static double restoreTarget;
+
+        private static double? PendingRestore() {
+            lock (restoreSync) {
+                return restoreTask != null && !restoreTask.IsCompleted ? restoreTarget : (double?)null;
+            }
+        }
+
+        private static async Task StopRestore() {
+            CancellationTokenSource cts;
+            Task<bool> task;
+            lock (restoreSync) {
+                cts = restoreCts;
+                task = restoreTask;
+                restoreCts = null;
+                restoreTask = null;
+            }
+            if (task == null) {
+                return;
+            }
+            if (!task.IsCompleted) {
+                TSLogger.Info("TS Darks: stopping the restore ramp that is still running");
+                cts.Cancel();
+                try {
+                    await task;
+                } catch (Exception) {
+                }
+            }
+            cts.Dispose();
+        }
+
+        private Task<bool> StartRestore(double target, IProgress<ApplicationStatus> progress) {
+            var cts = new CancellationTokenSource();
+            Task<bool> task = RampTo(target, progress, cts.Token);
+            _ = task.ContinueWith(t => TSLogger.Warning($"TS Darks: the restore ramp to {target} °C ended: {t.Exception?.GetBaseException().Message ?? "canceled"}"),
+                CancellationToken.None, TaskContinuationOptions.NotOnRanToCompletion, TaskScheduler.Default);
+            lock (restoreSync) {
+                restoreCts = cts;
+                restoreTask = task;
+                restoreTarget = target;
+            }
+            return task;
+        }
+
         private async Task<bool> RampTo(double target, IProgress<ApplicationStatus> progress, CancellationToken token) {
             CameraInfo info = cameraMediator.GetInfo();
-            double from = double.IsNaN(info.Temperature) ? info.TemperatureSetPoint : info.Temperature;
-            TimeSpan ramp = DarkPlanner.Ramp(from, target);
+            if (double.IsNaN(info.Temperature)) {
+                TSLogger.Warning($"TS Darks: not moving the setpoint to {target} °C: {DarkPlanner.SensorUnknown}");
+                return false;
+            }
+            TimeSpan ramp = DarkPlanner.Ramp(info.Temperature, target);
             TSLogger.Info($"TS Darks: ramping the setpoint from {info.TemperatureSetPoint} °C (sensor {info.Temperature} °C) to {target} °C over {ramp.TotalMinutes:0.##} min");
             bool ok = await cameraMediator.CoolCamera(target, ramp, progress, token);
             if (ok && !DarkPlanner.SameSetpoint(cameraMediator.GetInfo().TemperatureSetPoint, target)) {
@@ -582,15 +640,28 @@ namespace NINA.Plugin.TargetScheduler.Sequencer {
                 return;
             }
 
-            TSLogger.Info($"TS Darks: restoring the imaging setpoint {imagingSetpoint} °C from {info.TemperatureSetPoint} °C");
-            if (token.IsCancellationRequested) {
-                _ = RampTo(imagingSetpoint, progress, CancellationToken.None);
+            if (double.IsNaN(info.Temperature)) {
+                TSLogger.Warning($"TS Darks: not restoring the imaging setpoint {imagingSetpoint} °C: {DarkPlanner.SensorUnknown}");
                 return;
             }
 
+            TSLogger.Info($"TS Darks: restoring the imaging setpoint {imagingSetpoint} °C from {info.TemperatureSetPoint} °C");
+            await StopRestore();
             double from = info.Temperature;
             DateTime start = DateTime.UtcNow;
-            bool ok = await RampTo(imagingSetpoint, progress, token);
+            Task<bool> ramp = StartRestore(imagingSetpoint, progress);
+            if (token.IsCancellationRequested) {
+                TSLogger.Info($"TS Darks: the instruction was canceled, so the ramp to {imagingSetpoint} °C runs on in the background");
+                return;
+            }
+
+            bool ok;
+            try {
+                ok = await ramp.WaitAsync(token);
+            } catch (OperationCanceledException) when (token.IsCancellationRequested) {
+                TSLogger.Info($"TS Darks: the instruction was canceled, so the ramp to {imagingSetpoint} °C runs on in the background");
+                return;
+            }
             string held = ok ? await WaitAtTemperature(imagingSetpoint, watch, token) : "NINA could not reach it";
             if (held != null) {
                 TSLogger.Warning($"TS Darks: the setpoint is back at {imagingSetpoint} °C but the sensor is not there yet: {held}");

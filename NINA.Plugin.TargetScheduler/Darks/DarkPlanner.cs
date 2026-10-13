@@ -400,6 +400,8 @@ namespace NINA.Plugin.TargetScheduler.Darks {
 
         public const string CameraDisconnected = "the camera disconnected";
 
+        public const string SensorUnknown = "the camera reports no sensor temperature, so the setpoint is not moved";
+
         public static string AboveAmbientReason(double setTemp, double? ambient) {
             if (!ambient.HasValue || setTemp <= ambient.Value) {
                 return null;
