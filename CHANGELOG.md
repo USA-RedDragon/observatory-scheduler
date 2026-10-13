@@ -1,5 +1,13 @@
 # Observatory Scheduler
 
+## 5.8.2.224 - 2026-10-13
+* Fix for 5.8.2.223: a restore to the imaging setpoint now ramps on its own and keeps going when the instruction is canceled. Before, the safety loop that ends a while-unsafe darks run within 5 s of turning safe canceled the ramp partway, and NINA then left the setpoint at the sensor temperature, so lights could resume at the dark temperature. A canceled restore no longer blocks the unsafe handling; the ramp finishes in the background.
+* Only one ramp runs at a time. A darks move first stops a restore ramp that is still running (NINA leaves the setpoint at the sensor temperature), and a darks run that starts while a restore is still ramping takes that restore's target as the imaging setpoint instead of the setpoint in the middle of the ramp.
+* With no sensor temperature reported, darks do not move the setpoint at all (NINA would set it at once) and do not record a cooler limit for it.
+* When the sensor is within 1 °C of the target, NINA sets the target at once instead of ramping; that step is at most the gap between the setpoint and the sensor.
+* End-of-sequence darks no longer restore the imaging setpoint, because the camera warm-up follows them.
+* The Before Wait dark deadline also leaves room for the download time, as the fit check does.
+
 ## 5.8.2.223 - 2026-10-13
 * Target Scheduler Darks no longer jumps the camera setpoint at full cooler power. Every move to a dark set temperature and every restore to the imaging setpoint (also the restore after a cancel) asks NINA to ramp the setpoint over |target - sensor temperature| at 1 °C per minute, rounded up to NINA's 15 s steps, at least 1 min and at most 60 min. NINA steps the setpoint in whole degrees every 15 s along that line, then waits for the sensor as before. When the ramp ends on a rounded setpoint, the exact target is set after it (under 0.5 °C). The reach deadline, the stall check after the ramp, cooler-limit learning and the yield to imaging are unchanged; a ramp cut off by the deadline or a yield leaves the setpoint at the sensor temperature.
 * The planner's move time is now the longer of the measured rate and the 1 °C per minute ramp, so the Before Wait fit check, the deadline (which keeps room for the ramp back to the imaging setpoint) and the dark-readiness sun check count the ramp.
