@@ -13,6 +13,8 @@ namespace NINA.Plugin.TargetScheduler.Darks {
         public DateTime? CoolingMeasuredAt { get; set; }
         public double? WarmingSecondsPerC { get; set; }
         public DateTime? WarmingMeasuredAt { get; set; }
+        public double? CoolingSettleSeconds { get; set; }
+        public double? WarmingSettleSeconds { get; set; }
         public double? SaveSeconds { get; set; }
         public DateTime? SaveMeasuredAt { get; set; }
         public List<CoolerHold> Holds { get; set; } = new List<CoolerHold>();
@@ -57,7 +59,7 @@ namespace NINA.Plugin.TargetScheduler.Darks {
 
         public CoolerRates Rates() {
             lock (sync) {
-                return new CoolerRates { CoolingSecondsPerC = data.CoolingSecondsPerC, WarmingSecondsPerC = data.WarmingSecondsPerC };
+                return new CoolerRates { CoolingSecondsPerC = data.CoolingSecondsPerC, WarmingSecondsPerC = data.WarmingSecondsPerC, CoolingSettleSeconds = data.CoolingSettleSeconds, WarmingSettleSeconds = data.WarmingSettleSeconds };
             }
         }
 
@@ -92,13 +94,16 @@ namespace NINA.Plugin.TargetScheduler.Darks {
             if (!rate.HasValue) {
                 return;
             }
+            double? settle = DarkPlanner.SettleSeconds(from, to, took);
 
             Update(d => {
                 if (to < from) {
                     d.CoolingSecondsPerC = rate;
+                    d.CoolingSettleSeconds = settle;
                     d.CoolingMeasuredAt = nowUtc;
                 } else {
                     d.WarmingSecondsPerC = rate;
+                    d.WarmingSettleSeconds = settle;
                     d.WarmingMeasuredAt = nowUtc;
                 }
             });

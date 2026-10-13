@@ -60,6 +60,18 @@ namespace NINA.Plugin.TargetScheduler.Planning.Test {
         }
 
         [Test]
+        public void AMeasuredSettleTimeIsAddedToTheRamp() {
+            var rates = new CoolerRates { CoolingSecondsPerC = 100, CoolingSettleSeconds = 45, WarmingSecondsPerC = 63 };
+            DarkPlanner.MoveTime(-10, -30, rates).Should().Be(TimeSpan.FromSeconds(1200 + 45));
+            DarkPlanner.MoveTime(-14, -15, rates).Should().Be(TimeSpan.FromSeconds(60 + 45));
+            DarkPlanner.MoveTime(-15, -14, rates).Should().Be(TimeSpan.FromSeconds(63));
+            DarkPlanner.MoveTime(-15, -14, new CoolerRates { WarmingSettleSeconds = 30 }).Should().BeNull();
+            DarkPlanner.SettleSeconds(-13, -15, TimeSpan.FromSeconds(150)).Should().Be(30);
+            DarkPlanner.SettleSeconds(-13, -15, TimeSpan.FromSeconds(100)).Should().Be(0);
+            DarkPlanner.SettleSeconds(-13, -13.5, TimeSpan.FromSeconds(100)).Should().BeNull();
+        }
+
+        [Test]
         public void TheSetpointRampsAtOneDegreePerMinuteInWholeNinaSteps() {
             DarkPlanner.Ramp(-5, -15).Should().Be(TimeSpan.FromMinutes(10));
             DarkPlanner.Ramp(-15, -5).Should().Be(TimeSpan.FromMinutes(10));
@@ -372,6 +384,10 @@ namespace NINA.Plugin.TargetScheduler.Planning.Test {
                 var again = new DarkState(path);
                 again.Rates().CoolingSecondsPerC.Should().Be(30);
                 again.Rates().WarmingSecondsPerC.Should().Be(10);
+                again.Rates().CoolingSettleSeconds.Should().Be(0);
+                again.Rates().WarmingSettleSeconds.Should().Be(0);
+                s.RecordMove(-13, -18, TimeSpan.FromSeconds(340), Now);
+                new DarkState(path).Rates().CoolingSettleSeconds.Should().Be(40);
                 again.AfterWait().Should().Be(TimeSpan.FromSeconds(42));
                 again.Limits().Should().BeEmpty();
             } finally {

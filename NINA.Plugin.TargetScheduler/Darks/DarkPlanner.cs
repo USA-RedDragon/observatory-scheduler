@@ -43,6 +43,8 @@ namespace NINA.Plugin.TargetScheduler.Darks {
     public class CoolerRates {
         public double? CoolingSecondsPerC { get; set; }
         public double? WarmingSecondsPerC { get; set; }
+        public double? CoolingSettleSeconds { get; set; }
+        public double? WarmingSettleSeconds { get; set; }
     }
 
     public class CoolerLimit {
@@ -196,8 +198,12 @@ namespace NINA.Plugin.TargetScheduler.Darks {
                 return null;
             }
 
-            TimeSpan measured = TimeSpan.FromSeconds(delta * rate.Value);
             TimeSpan ramp = Ramp(from, to);
+            double? settle = to < from ? rates?.CoolingSettleSeconds : rates?.WarmingSettleSeconds;
+            if (settle.HasValue) {
+                return ramp + TimeSpan.FromSeconds(Math.Max(0, settle.Value));
+            }
+            TimeSpan measured = TimeSpan.FromSeconds(delta * rate.Value);
             return measured > ramp ? measured : ramp;
         }
 
@@ -495,6 +501,14 @@ namespace NINA.Plugin.TargetScheduler.Darks {
 
         public static bool Tonight(DarkNeed need, double imagingSetpoint) {
             return double.IsNaN(imagingSetpoint) || need.SetTemp >= imagingSetpoint - AtTargetToleranceC - 0.05;
+        }
+
+        public static double? SettleSeconds(double from, double to, TimeSpan took) {
+            if (Math.Abs(to - from) < 1 || took <= TimeSpan.Zero) {
+                return null;
+            }
+
+            return Math.Max(0, (took - Ramp(from, to)).TotalSeconds);
         }
 
         public static double? SecondsPerC(double from, double to, TimeSpan took) {
