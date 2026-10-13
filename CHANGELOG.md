@@ -1,5 +1,8 @@
 # Observatory Scheduler
 
+## 5.8.2.227 - 2026-10-13
+* Live autofocus points also stream on NINA 3.2.0.9001. The version gate allowed only 3.1, so 3.2 turned the feed off.
+
 ## 5.8.2.226 - 2026-10-13
 * Tie band for the running target: when the planner re-plans while a target is running, a challenger must score more than 1% above the running target to replace it. Within 1%, the running target keeps its turn. On 2026-10-13 at 02:17, M 15 (1.85959) and Sharpless 216 (1.85883) were 0.04% apart, so a tiny change in an input flipped the pick. The band holds only while the running target is still ready to image: visible, not skipped, inside its windows, not complete and not waiting. The live planner and the Tonight simulation apply it through the same planner code.
 * The log records each hold, for example "kept P/Sharpless 216: challenger P/M 15 within 1% (1.85959 vs 1.85883)". The Now page shows the hold under Why this target, the Tonight pick table and timeline show where a run held its turn, and Left out tonight names the running target that held a close challenger off.
