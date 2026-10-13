@@ -15,12 +15,17 @@ concurrency:
 jobs:
   build:
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        nina: ["3.1.2.9001", "3.2.0.9001"]
     permissions:
       contents: write
       checks: write
     env:
       DOTNET_CLI_TELEMETRY_OPTOUT: "1"
       DOTNET_NOLOGO: "1"
+      NINA_VERSION: ${{ matrix.nina }}
     steps:
       - uses: actions/checkout@v4
 
@@ -29,12 +34,12 @@ jobs:
           global-json-file: global.json
 
       - name: Build
-        run: dotnet build NINA.Plugin.TargetScheduler.sln -c Release -p:EnableWindowsTargeting=true
+        run: dotnet build NINA.Plugin.TargetScheduler.sln -c Release -p:EnableWindowsTargeting=true -p:NinaVersion=$NINA_VERSION
 
       - name: Test
         run: |
-          dotnet test NINA.Plugin.TargetScheduler.Remote.Test/NINA.Plugin.TargetScheduler.Remote.Test.csproj -c Release --no-build --logger "trx;LogFileName=remote.trx" --results-directory test-results
-          dotnet test NINA.Plugin.TargetScheduler.Planning.Test/NINA.Plugin.TargetScheduler.Planning.Test.csproj -c Release --no-build --logger "trx;LogFileName=planning.trx" --results-directory test-results
+          dotnet test NINA.Plugin.TargetScheduler.Remote.Test/NINA.Plugin.TargetScheduler.Remote.Test.csproj -c Release --no-build -p:NinaVersion=$NINA_VERSION --logger "trx;LogFileName=remote.trx" --results-directory test-results
+          dotnet test NINA.Plugin.TargetScheduler.Planning.Test/NINA.Plugin.TargetScheduler.Planning.Test.csproj -c Release --no-build -p:NinaVersion=$NINA_VERSION --logger "trx;LogFileName=planning.trx" --results-directory test-results
 
       - name: Package
         id: package
@@ -42,17 +47,17 @@ jobs:
 
       - uses: actions/upload-artifact@v4
         with:
-          name: observatory-scheduler
+          name: observatory-scheduler-nina-${{ matrix.nina }}
           path: ${{ steps.package.outputs.zip }}
 
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: test-results
+          name: test-results-nina-${{ matrix.nina }}
           path: test-results
 
       - name: Release
-        if: startsWith(github.ref, 'refs/tags/v')
+        if: startsWith(github.ref, 'refs/tags/v') && matrix.nina == '3.1.2.9001'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |

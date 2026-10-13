@@ -12,6 +12,8 @@ while read -r f; do
 done < Utilities/package-files.txt
 cp LICENSE.txt "$dir/"
 mkdir -p dist
-rm -f "dist/observatory-scheduler-$version.zip"
-(cd "$stage" && zip -qrX - "Observatory Scheduler") > "dist/observatory-scheduler-$version.zip"
-echo "dist/observatory-scheduler-$version.zip"
+name=observatory-scheduler-$version
+if [ -n "${NINA_VERSION:-}" ] && [ "$NINA_VERSION" != 3.1.2.9001 ]; then name=$name-nina-$NINA_VERSION; fi
+rm -f "dist/$name.zip"
+(cd "$stage" && zip -qrX - "Observatory Scheduler") > "dist/$name.zip"
+echo "dist/$name.zip"

@@ -15,7 +15,11 @@ using System.Runtime.InteropServices;
 [assembly: AssemblyFileVersion("5.8.2.225")]
 
 // The minimum Version of N.I.N.A. that this plugin is compatible with
+#if NINA32
+[assembly: AssemblyMetadata("MinimumApplicationVersion", "3.2.0.9001")]
+#else
 [assembly: AssemblyMetadata("MinimumApplicationVersion", "3.1.2.9001")]
+#endif
 [assembly: AssemblyMetadata("License", "MPL-2.0")]
 [assembly: AssemblyMetadata("LicenseURL", "https://www.mozilla.org/en-US/MPL/2.0/")]
 [assembly: AssemblyMetadata("Repository", "https://github.com/USA-RedDragon/observatory-scheduler/")]

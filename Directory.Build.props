@@ -1,0 +1,13 @@
+<Project>
+  <PropertyGroup>
+    <NinaVersion Condition="'$(NinaVersion)' == ''">3.1.2.9001</NinaVersion>
+    <IsNina32>$([MSBuild]::VersionGreaterThanOrEquals('$(NinaVersion)', '3.2.0.0'))</IsNina32>
+    <GrpcVersion>2.62.0</GrpcVersion>
+    <GrpcPipesVersion>3.0.0</GrpcPipesVersion>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(IsNina32)' == 'true'">
+    <GrpcVersion>2.71.0</GrpcVersion>
+    <GrpcPipesVersion>3.1.0</GrpcPipesVersion>
+    <DefineConstants>$(DefineConstants);NINA32</DefineConstants>
+  </PropertyGroup>
+</Project>
