@@ -435,7 +435,7 @@ namespace NINA.Plugin.TargetScheduler.Sequencer {
                     if (cameraMediator.GetInfo().ReadoutModeForNormalImages != normalReadout) {
                         cameraMediator.SetReadoutModeForNormalImages(normalReadout);
                     }
-                    if (queue.Count > 0) {
+                    if (queue.Count > 0 && Placement != DarkPlacement.EndOfSequence) {
                         await Restore(imagingSetpoint, watch, progress, token);
                     }
                 } catch (Exception ex) {
