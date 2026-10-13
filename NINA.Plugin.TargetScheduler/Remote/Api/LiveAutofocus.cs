@@ -54,7 +54,7 @@ namespace NINA.Plugin.TargetScheduler.Remote.Api {
     }
 
     public class LiveAutofocusExpectation {
-        public Version Nina { get; set; } = new Version(3, 1, 2, 9001);
+        public Version[] Nina { get; set; } = { new Version(3, 1, 2, 9001), new Version(3, 2, 0, 9001) };
         public Version HocusFocus { get; set; } = new Version(3, 0, 0, 21);
         public string HocusFocusAssembly { get; set; } = "NINA.Joko.Plugins.HocusFocus";
         public string ViewModelType { get; set; } = "NINA.Joko.Plugins.HocusFocus.AutoFocus.HocusFocusVM";
@@ -70,8 +70,8 @@ namespace NINA.Plugin.TargetScheduler.Remote.Api {
 
         public static string Check(Version nina, Version hocusFocus, Type viewModel, Type viewModelInterface, LiveAutofocusExpectation expect = null) {
             expect ??= LiveAutofocusExpectation.Default;
-            if (nina != expect.Nina) {
-                return $"NINA is {nina?.ToString() ?? "unknown"}, live autofocus needs exactly {expect.Nina}";
+            if (nina == null || Array.IndexOf(expect.Nina, nina) < 0) {
+                return $"NINA is {nina?.ToString() ?? "unknown"}, live autofocus needs one of {string.Join(", ", expect.Nina.Select(v => v.ToString()))}";
             }
             if (hocusFocus == null) {
                 return HocusFocusNotLoaded;

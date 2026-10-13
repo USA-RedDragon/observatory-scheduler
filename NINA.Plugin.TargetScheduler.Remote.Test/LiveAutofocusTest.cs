@@ -112,7 +112,13 @@ namespace NINA.Plugin.TargetScheduler.Remote.Test {
         }
 
         [Test]
+        public void GatePassesOnNina32() {
+            LiveAutofocusGate.Check(new Version(3, 2, 0, 9001), Hf, typeof(HocusFocusVM), typeof(IAutoFocusVM)).Should().BeNull();
+        }
+
+        [Test]
         public void GateRefusesOtherVersions() {
+            LiveAutofocusGate.Check(new Version(3, 3, 0, 1066), Hf, typeof(HocusFocusVM), typeof(IAutoFocusVM)).Should().Contain("NINA is 3.3.0.1066");
             LiveAutofocusGate.Check(new Version(3, 2, 0, 2001), Hf, typeof(HocusFocusVM), typeof(IAutoFocusVM)).Should().Contain("NINA is 3.2.0.2001");
             LiveAutofocusGate.Check(null, Hf, typeof(HocusFocusVM), typeof(IAutoFocusVM)).Should().Contain("NINA is unknown");
             LiveAutofocusGate.Check(Nina, new Version(3, 0, 0, 22), typeof(HocusFocusVM), typeof(IAutoFocusVM)).Should().Contain("Hocus Focus is 3.0.0.22");
