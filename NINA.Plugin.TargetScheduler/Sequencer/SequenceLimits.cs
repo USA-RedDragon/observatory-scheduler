@@ -18,8 +18,15 @@ namespace NINA.Plugin.TargetScheduler.Sequencer {
 
         public static FlipState Flips => flips.Value;
 
-        public static double WithStandardRefraction(double altitude, ObserverInfo observer) {
-            var location = new NOVAS.OnSurface { Latitude = observer.Latitude, Longitude = observer.Longitude, Height = observer.Elevation };
+        private static readonly bool geometricSun = SunConditionModel.IsGeometric(typeof(SunAltitudeCondition).Assembly.GetName().Version);
+
+        public static double ConditionSunAltitude(DateTime t, ObserverInfo observer) {
+            double altitude = AstroUtil.GetSunAltitude(t, observer);
+            if (geometricSun) {
+                return altitude;
+            }
+            altitude += AstroUtil.ArcminToDegree(0.25);
+            var location = new NOVAS.OnSurface { Latitude = observer.Latitude, Longitude = observer.Longitude };
             return altitude + NOVAS.Refract(ref location, NOVAS.RefractionOption.StandardRefraction, 90.0 - altitude);
         }
 
@@ -30,8 +37,7 @@ namespace NINA.Plugin.TargetScheduler.Sequencer {
             }
 
             var observer = new ObserverInfo { Latitude = a.Latitude, Longitude = a.Longitude, Elevation = a.Elevation };
-            double SunAltitude(DateTime t) => WithStandardRefraction(
-                AstroUtil.GetSunAltitude(t, observer) + AstroUtil.ArcminToDegree(0.25), observer);
+            double SunAltitude(DateTime t) => ConditionSunAltitude(t, observer);
 
             ImagingLimit limit = null;
             bool flipTrigger = false;
@@ -42,7 +48,8 @@ namespace NINA.Plugin.TargetScheduler.Sequencer {
                             continue;
                         }
                         bool endsAbove = sun.Data.Comparator == ComparisonOperatorEnum.GREATER_THAN || sun.Data.Comparator == ComparisonOperatorEnum.GREATER_THAN_OR_EQUAL;
-                        DateTime? end = ImagingLimit.FindEnd(SunAltitude, sun.Data.Offset, endsAbove, atTime, TimeSpan.FromHours(24));
+                        double offset = SunConditionModel.EffectiveOffset(sun.Data.Offset, geometricSun);
+                        DateTime? end = ImagingLimit.FindEnd(SunAltitude, offset, endsAbove, atTime, TimeSpan.FromHours(24));
                         if (!end.HasValue || (limit != null && limit.End <= end.Value)) {
                             continue;
                         }
@@ -50,7 +57,7 @@ namespace NINA.Plugin.TargetScheduler.Sequencer {
                             End = end.Value,
                             Basis = string.Format(CultureInfo.InvariantCulture,
                                 "the Sun Altitude loop condition on '{0}' ends the loop when the sun is {1} {2:0.##}°",
-                                c.Name, endsAbove ? "above" : "at or below", sun.Data.Offset)
+                                c.Name, endsAbove ? "above" : "at or below", offset)
                         };
                     }
                 }

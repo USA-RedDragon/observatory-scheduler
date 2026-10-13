@@ -37,6 +37,7 @@
     <Compile Include="..\NINA.Plugin.TargetScheduler\Darks\CoverMemory.cs" Link="Linked\Darks\CoverMemory.cs" />
     <Compile Include="..\NINA.Plugin.TargetScheduler\Darks\DarkState.cs" Link="Linked\Darks\DarkState.cs" />
     <Compile Include="..\NINA.Plugin.TargetScheduler\Planning\ImagingLimit.cs" Link="Linked\Planning\ImagingLimit.cs" />
+    <Compile Include="..\NINA.Plugin.TargetScheduler\Planning\SunConditionModel.cs" Link="Linked\Planning\SunConditionModel.cs" />
     <Compile Include="..\NINA.Plugin.TargetScheduler\Darks\DarkReadiness.cs" Link="Linked\Darks\DarkReadiness.cs" />
     <Compile Include="..\NINA.Plugin.TargetScheduler\Darks\BiasPlanner.cs" Link="Linked\Darks\BiasPlanner.cs" />
     <Compile Include="..\NINA.Plugin.TargetScheduler\Planning\FilterCadence.cs" Link="Linked\Planning\FilterCadence.cs" />
