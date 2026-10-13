@@ -499,7 +499,7 @@ namespace NINA.Plugin.TargetScheduler.Sequencer {
             DateTime? deadline = null;
             if (w.Placement == DarkPlacement.BeforeWait && w.WaitUntil.HasValue) {
                 TimeSpan back = DarkPlanner.MoveTime(need.SetTemp, imagingSetpoint, DarkRuntime.State.Rates()) ?? TimeSpan.Zero;
-                deadline = w.WaitUntil.Value - (w.AfterWait ?? TimeSpan.Zero) - back - TimeSpan.FromSeconds(need.Exposure);
+                deadline = w.WaitUntil.Value - (w.AfterWait ?? TimeSpan.Zero) - back - TimeSpan.FromSeconds(need.Exposure) - overhead;
             }
             DateTime? sun = DarkPlanner.LatestStart(w, need.Exposure, overhead, TimeSpan.FromHours(18));
             if (sun.HasValue && (!deadline.HasValue || sun.Value < deadline.Value)) {
