@@ -6,11 +6,13 @@ using NINA.Plugin.TargetScheduler.Database.Schema;
 using NINA.Plugin.TargetScheduler.Planning;
 using NINA.Plugin.TargetScheduler.Planning.Entities;
 using NINA.Plugin.TargetScheduler.Planning.Interfaces;
+using NINA.Plugin.TargetScheduler.Planning.Scoring.Rules;
 using NINA.Plugin.TargetScheduler.Test.Astrometry;
 using NINA.Profile.Interfaces;
 using NUnit.Framework;
 using System;
 using System.Collections.Generic;
+using System.Linq;
 
 namespace NINA.Plugin.TargetScheduler.Test.Planning {
 
@@ -818,6 +820,129 @@ namespace NINA.Plugin.TargetScheduler.Test.Planning {
             List<ITarget> reversed = Targets();
             reversed.Reverse();
             sut.SelectTargetByScore(reversed, engine.Object).DatabaseId.Should().Be(1);
+        }
+
+        [Test]
+        public void TheTieBandKeepsTheRunningTargetWithThe0217Scores() {
+            var (running, challenger, ready) = TieBandTargets("Sharpless 216", "M 15");
+            var planner = TieBandPlanner();
+
+            ITarget selected = planner.SelectTargetByScore(ready, TieBandEngine(Reloaded(running), (running, 1.85883), (challenger, 1.85959)));
+
+            selected.Should().BeSameAs(running);
+            running.Rejected.Should().BeFalse();
+            challenger.Rejected.Should().BeTrue();
+            challenger.RejectedReason.Should().Be(Reasons.TargetHeldByRunning);
+            running.ScoringResults.Held.Should().Be("M 15 scored only 0.04% higher (1.8596 vs 1.8588), and a switch needs more than 1%, so Sharpless 216 kept running");
+        }
+
+        [Test]
+        public void AnExactTieThatTheIdOrderGivesTheChallengerKeepsTheRunningTarget() {
+            var (challenger, running, ready) = TieBandTargets("A", "B");
+
+            TieBandPlanner().SelectTargetByScore(ready, TieBandEngine(Reloaded(running), (running, 1.5), (challenger, 1.5))).Should().BeSameAs(running);
+
+            challenger.RejectedReason.Should().Be(Reasons.TargetHeldByRunning);
+            running.ScoringResults.Held.Should().Be("A scored the same (1.5000 vs 1.5000), and a switch needs more than 1%, so B kept running");
+        }
+
+        [Test]
+        public void ARunningTargetScoredZeroHoldsOnlyAgainstZero() {
+            var (running, challenger, ready) = TieBandTargets("A", "B");
+            TieBandPlanner().SelectTargetByScore(ready, TieBandEngine(Reloaded(running), (running, 0.0), (challenger, 0.0001))).Should().BeSameAs(challenger);
+        }
+
+        [Test]
+        public void TheHeldReasonNamesTheBandTheConstantSets() {
+            Reasons.TargetHeldByRunning.Should().Contain($"within {Planner.TieBand * 100:0.#}%");
+        }
+
+        [Test]
+        public void AChallengerOnePointFivePercentBetterWins() {
+            var (running, challenger, ready) = TieBandTargets("A", "B");
+
+            ITarget selected = TieBandPlanner().SelectTargetByScore(ready, TieBandEngine(Reloaded(running), (running, 1.0), (challenger, 1.015)));
+
+            selected.Should().BeSameAs(challenger);
+            running.RejectedReason.Should().Be(Reasons.TargetLowerScore);
+            challenger.ScoringResults.Held.Should().BeNull();
+        }
+
+        [Test]
+        public void AChallengerExactlyOnePercentBetterDoesNotWin() {
+            var (running, challenger, ready) = TieBandTargets("A", "B");
+
+            TieBandPlanner().SelectTargetByScore(ready, TieBandEngine(Reloaded(running), (running, 2.0), (challenger, 2.02))).Should().BeSameAs(running);
+        }
+
+        [Test]
+        public void ARunningTargetThatIsNotReadyNeverHolds() {
+            var (running, challenger, ready) = TieBandTargets("A", "B");
+            ready.Remove(running);
+            Mock<ITarget> third = PlanMocks.GetMockPlanTarget("C", TestData.M31);
+            third.SetupProperty(t => t.DatabaseId, 3);
+            third.Object.Project.DatabaseId = 30;
+            ready.Add(third.Object);
+
+            ITarget selected = TieBandPlanner().SelectTargetByScore(ready, TieBandEngine(Reloaded(running), (running, 1.0), (challenger, 1.005), (third.Object, 0.9)));
+
+            selected.Should().BeSameAs(challenger);
+            third.Object.RejectedReason.Should().Be(Reasons.TargetLowerScore);
+        }
+
+        [Test]
+        public void WithNoRunningTargetTheHighestScoreWins() {
+            var (running, challenger, ready) = TieBandTargets("A", "B");
+
+            TieBandPlanner().SelectTargetByScore(ready, TieBandEngine(null, (running, 1.0), (challenger, 1.001))).Should().BeSameAs(challenger);
+        }
+
+        [Test]
+        public void OnlyChallengersAboveTheRunningScoreAreHeldOff() {
+            var (running, challenger, ready) = TieBandTargets("A", "B");
+            Mock<ITarget> lower = PlanMocks.GetMockPlanTarget("C", TestData.M31);
+            lower.SetupProperty(t => t.DatabaseId, 3);
+            lower.Object.Project.DatabaseId = 30;
+            ready.Add(lower.Object);
+
+            TieBandPlanner().SelectTargetByScore(ready, TieBandEngine(Reloaded(running), (running, 1.0), (challenger, 1.004), (lower.Object, 0.99))).Should().BeSameAs(running);
+
+            challenger.RejectedReason.Should().Be(Reasons.TargetHeldByRunning);
+            lower.Object.RejectedReason.Should().Be(Reasons.TargetLowerScore);
+        }
+
+        private Planner TieBandPlanner() {
+            Mock<IProfileService> profileMock = PlanMocks.GetMockProfileService(TestData.Pittsboro_NC);
+            return new Planner(new DateTime(2024, 12, 1, 20, 0, 0), profileMock.Object.ActiveProfile, GetPrefs(), PlanMocks.GetWeatherDataMediator(false, 0), false, false);
+        }
+
+        private static (ITarget running, ITarget challenger, List<ITarget> ready) TieBandTargets(string runningName, string challengerName) {
+            Mock<ITarget> running = PlanMocks.GetMockPlanTarget(runningName, TestData.M31);
+            running.SetupProperty(t => t.DatabaseId, 1);
+            running.Object.Project.DatabaseId = 10;
+            Mock<ITarget> challenger = PlanMocks.GetMockPlanTarget(challengerName, TestData.M31);
+            challenger.SetupProperty(t => t.DatabaseId, 2);
+            challenger.Object.Project.DatabaseId = 20;
+            return (running.Object, challenger.Object, new List<ITarget> { challenger.Object, running.Object });
+        }
+
+        private static ITarget Reloaded(ITarget target) {
+            Mock<ITarget> copy = PlanMocks.GetMockPlanTarget(target.Name, TestData.M31);
+            copy.SetupProperty(t => t.DatabaseId, target.DatabaseId);
+            copy.Object.Project.DatabaseId = target.Project.DatabaseId;
+            return copy.Object;
+        }
+
+        private static IScoringEngine TieBandEngine(ITarget previous, params (ITarget target, double score)[] scores) {
+            Mock<IScoringEngine> engine = new Mock<IScoringEngine>();
+            engine.SetupAllProperties();
+            engine.Setup(e => e.PreviousPlanTarget).Returns(previous);
+            engine.Setup(e => e.ScoreTarget(It.IsAny<ITarget>())).Returns((ITarget t) => {
+                double score = scores.First(s => ReferenceEquals(s.target, t)).score;
+                t.ScoringResults = new ScoringResults { TotalScore = score };
+                return score;
+            });
+            return engine.Object;
         }
 
         [Test]

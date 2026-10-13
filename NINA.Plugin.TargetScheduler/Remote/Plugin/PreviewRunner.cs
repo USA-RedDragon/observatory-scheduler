@@ -158,6 +158,7 @@ namespace NINA.Plugin.TargetScheduler.Remote.Plugin {
                         LengthBucket = t.SelectedExposure.LengthBucket,
                         NewPick = newPick,
                         TargetEnd = t.EndTime == default ? null : t.EndTime.ToUniversalTime(),
+                        Held = HeldAt(t, current),
                     };
                     if (newPick) {
                         p.Scores = t.ScoringResults?.Results?.Select(r => new RuleScore { Rule = r.ScoringRule.Name, Weight = r.Weight, Score = r.Score }).ToList();
@@ -211,7 +212,11 @@ namespace NINA.Plugin.TargetScheduler.Remote.Plugin {
         }
 
         private static bool LostOnScore(ITarget t, SchedulerPlan plan) {
-            return t.Rejected && t.RejectedReason == Reasons.TargetLowerScore && plan != null && !plan.IsWait && plan.PlanTarget != null;
+            return t.Rejected && (t.RejectedReason == Reasons.TargetLowerScore || t.RejectedReason == Reasons.TargetHeldByRunning) && plan != null && !plan.IsWait && plan.PlanTarget != null;
+        }
+
+        private static string HeldAt(ITarget t, DateTime at) {
+            return t.ScoringResults?.Held is string held ? string.Create(CultureInfo.InvariantCulture, $"{at:HH:mm}: {held}") : null;
         }
 
         private static bool YieldedToEvent(ITarget t) {
@@ -310,7 +315,7 @@ namespace NINA.Plugin.TargetScheduler.Remote.Plugin {
                         ProjectName = p.Name,
                         TargetId = t.DatabaseId,
                         TargetName = t.Name,
-                        Reason = lost ? Reasons.TargetLowerScore : reason,
+                        Reason = lost ? t.RejectedReason : reason,
                         At = at.ToUniversalTime(),
                         Pass = pass,
                     };

@@ -175,6 +175,9 @@ namespace NINA.Plugin.TargetScheduler.Remote.Api {
         [JsonPropertyName("score_total")]
         public double? ScoreTotal { get; set; }
 
+        [JsonPropertyName("score_note")]
+        public string ScoreNote { get; set; }
+
         [JsonPropertyName("skips")]
         public IList<SkipEntry> Skips { get; set; } = new List<SkipEntry>();
 
@@ -300,6 +303,13 @@ namespace NINA.Plugin.TargetScheduler.Remote.Api {
 
         [JsonPropertyName("reason")]
         public string Reason { get; set; }
+
+        /// <summary>
+        /// The first re-plan in this block where the running target kept its turn over a challenger that
+        /// scored within the tie band, in plain words, or null.
+        /// </summary>
+        [JsonPropertyName("held")]
+        public string Held { get; set; }
     }
 
     public class LeftOutReason {
@@ -574,6 +584,7 @@ namespace NINA.Plugin.TargetScheduler.Remote.Api {
         public DateTime? TargetEnd { get; set; }
         public bool CompletesTarget { get; set; }
         public string EndReason { get; set; }
+        public string Held { get; set; }
     }
 
     public class HorizonProfile {

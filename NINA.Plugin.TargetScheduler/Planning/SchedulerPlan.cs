@@ -201,6 +201,7 @@ namespace NINA.Plugin.TargetScheduler.Planning {
                     case Reasons.TargetBeforeMeridianWindow:
                     case Reasons.TargetMeridianFlipClipped:
                     case Reasons.TargetLowerScore:
+                    case Reasons.TargetHeldByRunning:
                         return DateFmt(target.StartTime);
                 }
             }

@@ -6,6 +6,7 @@ namespace NINA.Plugin.TargetScheduler.Remote.Api {
 
     public static class PreviewBuilder {
         public const string LowerScore = "lower score";
+        public const string HeldByRunning = "the running target scored within 1% and kept its turn";
         public const string Complete = "its plans are complete";
         public const string SystemSource = "system";
 
@@ -20,6 +21,7 @@ namespace NINA.Plugin.TargetScheduler.Remote.Api {
                 if (sameTarget && !p.NewPick && SameLength(current, p)) {
                     current.End = p.End;
                     current.Count++;
+                    current.Held ??= p.Held;
                     if (current.LengthBucket != p.LengthBucket) {
                         current.LengthBucket = null;
                     }
@@ -46,6 +48,7 @@ namespace NINA.Plugin.TargetScheduler.Remote.Api {
                     Scores = picked ? p.Scores : null,
                     Total = picked ? p.Total : null,
                     RunnerUp = picked ? p.RunnerUp : null,
+                    Held = p.Held,
                 };
                 blocks.Add(current);
             }
@@ -111,10 +114,10 @@ namespace NINA.Plugin.TargetScheduler.Remote.Api {
                 .OrderBy(r => r.From)
                 .ToList();
 
-            var outscored = night.Where(c => c.Reason == LowerScore && c.Total.HasValue && c.WinnerTotal.HasValue)
+            var outscored = night.Where(c => (c.Reason == LowerScore || c.Reason == HeldByRunning) && c.Total.HasValue && c.WinnerTotal.HasValue)
                 .OrderBy(c => c.WinnerTotal.Value - c.Total.Value).ThenBy(c => c.At).FirstOrDefault();
             if (outscored != null) {
-                result.Reason = LowerScore;
+                result.Reason = outscored.Reason;
                 result.At = outscored.At;
                 result.Until = NextPass(times, outscored.At, end);
                 result.WinnerName = outscored.WinnerName;

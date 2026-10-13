@@ -44,6 +44,7 @@ namespace NINA.Plugin.TargetScheduler.Remote.Plugin {
         private StatusWait wait;
         private List<RuleScore> scores;
         private double? scoreTotal;
+        private string scoreNote;
         private DateTime? lastPlanAt;
         private ITarget pickedTarget;
         private TargetSnapshot pickedSnapshot;
@@ -384,6 +385,7 @@ namespace NINA.Plugin.TargetScheduler.Remote.Plugin {
                 };
                 scores = t.ScoringResults?.Results?.Select(r => new RuleScore { Rule = r.ScoringRule.Name, Weight = r.Weight, Score = r.Score }).ToList();
                 scoreTotal = t.ScoringResults?.TotalScore;
+                scoreNote = t.ScoringResults?.Held;
             }
         }
 
@@ -534,6 +536,7 @@ namespace NINA.Plugin.TargetScheduler.Remote.Plugin {
                     Wait = wait,
                     Scores = target != null ? scores : null,
                     ScoreTotal = target != null ? scoreTotal : null,
+                    ScoreNote = target != null ? scoreNote : null,
                     Skips = skips,
                     Pending = pending,
                     LastPlanAt = lastPlanAt,

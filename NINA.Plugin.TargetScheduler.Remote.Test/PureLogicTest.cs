@@ -199,6 +199,32 @@ namespace NINA.Plugin.TargetScheduler.Remote.Test {
         }
 
         [Test]
+        public void ABlockCarriesTheFirstTieBandHoldInIt() {
+            var plans = new List<PlannedExposure> { Exp(0, 1, "Ha", pick: true), Exp(5, 1, "Ha"), Exp(10, 1, "Ha"), Exp(15, 1, "OIII") };
+            plans[1].Held = "02:17: M 15 scored only 0.04% higher (1.8596 vs 1.8588), and a switch needs more than 1%, so Sharpless 216 kept running";
+            plans[2].Held = "02:22: later";
+            plans[3].Held = "02:27: next block";
+            var blocks = PreviewBuilder.Blocks(plans);
+            blocks.Should().HaveCount(2);
+            blocks[0].Held.Should().Be(plans[1].Held);
+            blocks[1].Held.Should().Be("02:27: next block");
+        }
+
+        [Test]
+        public void LeftOutNamesTheRunningTargetThatHeldItOff() {
+            var passes = new[] { 0, 30, 90, 500 }.Select(m => Now.AddMinutes(m)).ToList();
+            var left = PreviewBuilder.LeftOut(new[] {
+                Rej(3, 30, "lower score", total: 0.5, winner: "M31", winnerTotal: 0.9),
+                Rej(3, 90, PreviewBuilder.HeldByRunning, total: 1.85959, winner: "Sharpless 216", winnerTotal: 1.85883),
+            }, new List<PreviewBlock>(), passes, Now.AddMinutes(500));
+            var l = left.Should().ContainSingle().Which;
+            l.Reason.Should().Be(PreviewBuilder.HeldByRunning);
+            l.WinnerName.Should().Be("Sharpless 216");
+            l.Total.Should().Be(1.85959);
+            l.At.Should().Be(Now.AddMinutes(90));
+        }
+
+        [Test]
         public void LeftOutOnlyAtTheEndIsLabelled() {
             var left = PreviewBuilder.LeftOut(new[] { Rej(4, 600, "not visible", Rejection.PassEnd) }, new List<PreviewBlock>(), new[] { Now.AddMinutes(600) }, Now.AddMinutes(600));
             var l = left.Should().ContainSingle().Which;

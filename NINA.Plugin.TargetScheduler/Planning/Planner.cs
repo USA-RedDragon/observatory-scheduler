@@ -17,6 +17,7 @@ using NINA.Plugin.TargetScheduler.Util;
 using NINA.Profile.Interfaces;
 using System;
 using System.Collections.Generic;
+using System.Globalization;
 using System.Linq;
 
 namespace NINA.Plugin.TargetScheduler.Planning {
@@ -568,26 +569,62 @@ namespace NINA.Plugin.TargetScheduler.Planning {
 
             ITarget highScoreTarget = null;
             double highScore = double.MinValue;
+            ITarget current = RunningTarget(readyTargets, scoringEngine?.PreviousPlanTarget);
+            double currentScore = 0;
+            Dictionary<ITarget, double> scores = new Dictionary<ITarget, double>(ReferenceEqualityComparer.Instance as IEqualityComparer<ITarget>);
 
             foreach (ITarget target in readyTargets) {
                 TSLogger.Trace($"running scoring engine for project/target {target.Project.Name}/{target.Name}");
                 scoringEngine.RuleWeights = target.Project.RuleWeights;
                 double score = scoringEngine.ScoreTarget(target);
+                scores[target] = score;
+                if (ReferenceEquals(target, current)) { currentScore = score; }
                 if (score > highScore || (score == highScore && highScoreTarget != null && TieBreak(target, highScoreTarget) < 0)) {
                     highScoreTarget = target;
                     highScore = score;
                 }
             }
 
-            // Mark losing targets rejected
+            ITarget challenger = null;
+            if (current != null && !ReferenceEquals(current, highScoreTarget) && WithinTieBand(highScore, currentScore)) {
+                challenger = highScoreTarget;
+                highScoreTarget = current;
+                string held = HeldNote(current, currentScore, challenger, highScore);
+                if (current.ScoringResults != null) { current.ScoringResults.Held = held; }
+                TSLogger.Info(string.Create(CultureInfo.InvariantCulture,
+                    $"kept {current.Project?.Name}/{current.Name}: challenger {challenger.Project?.Name}/{challenger.Name} within {TieBand * 100:0.#}% ({highScore:0.#####} vs {currentScore:0.#####})"));
+            }
+
             foreach (ITarget target in readyTargets) {
                 if (target != highScoreTarget) {
                     target.Rejected = true;
-                    target.RejectedReason = Reasons.TargetLowerScore;
+                    target.RejectedReason = challenger != null && (ReferenceEquals(target, challenger) || scores[target] > currentScore) ? Reasons.TargetHeldByRunning : Reasons.TargetLowerScore;
                 }
             }
 
             return highScoreTarget;
+        }
+
+        /// <summary>
+        /// The share of the running target's score a challenger must beat it by to replace it at a re-plan.
+        /// </summary>
+        public const double TieBand = 0.01;
+
+        public static bool WithinTieBand(double challenger, double current) {
+            return challenger <= current + Math.Abs(current) * TieBand;
+        }
+
+        private static ITarget RunningTarget(List<ITarget> readyTargets, ITarget previous) {
+            if (previous == null) { return null; }
+            return readyTargets.FirstOrDefault(t => ReferenceEquals(t, previous))
+                ?? readyTargets.FirstOrDefault(t => t.DatabaseId == previous.DatabaseId && (t.Project?.DatabaseId ?? 0) == (previous.Project?.DatabaseId ?? 0));
+        }
+
+        public static string HeldNote(ITarget current, double currentScore, ITarget challenger, double challengerScore) {
+            double percent = currentScore == 0 ? 0 : (challengerScore - currentScore) / Math.Abs(currentScore) * 100;
+            string gap = percent < 0.005 ? "scored the same" : string.Create(CultureInfo.InvariantCulture, $"scored only {percent:0.##}% higher");
+            return string.Create(CultureInfo.InvariantCulture,
+                $"{challenger.Name} {gap} ({challengerScore:0.0000} vs {currentScore:0.0000}), and a switch needs more than {TieBand * 100:0.#}%, so {current.Name} kept running");
         }
 
         /// <summary>
@@ -788,6 +825,7 @@ namespace NINA.Plugin.TargetScheduler.Planning {
         public const string TargetAltKeep = AltKeep.TargetReason;
         public const string TargetHumidity = "all exposure plans rejected for humidity";
         public const string TargetLowerScore = "lower score";
+        public const string TargetHeldByRunning = Remote.Api.PreviewBuilder.HeldByRunning;
         public const string TargetAllExposurePlans = "all exposure plans rejected";
         public const string TargetSequenceEnd = "exposure ends after the sequence ends imaging";
         public const string TargetBeforeEventWindow = EventWindows.ReasonBefore;

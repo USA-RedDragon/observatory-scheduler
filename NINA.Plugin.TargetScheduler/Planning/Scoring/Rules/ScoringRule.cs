@@ -50,6 +50,11 @@ namespace NINA.Plugin.TargetScheduler.Planning.Scoring.Rules {
         public double TotalScore { get; set; }
         public List<RuleResult> Results { get; private set; }
 
+        /// <summary>
+        /// Why the planner kept this running target over a challenger that scored within the tie band, or null.
+        /// </summary>
+        public string Held { get; set; }
+
         public ScoringResults() {
             Results = new List<RuleResult>();
         }

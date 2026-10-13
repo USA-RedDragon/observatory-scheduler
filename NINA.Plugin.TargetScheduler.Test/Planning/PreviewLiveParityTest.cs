@@ -132,6 +132,68 @@ namespace NINA.Plugin.TargetScheduler.Test.Planning {
             Preview(T0, Projects(), skips, null).PlanTarget.EndTime.Should().BeAfter(limit.End);
         }
 
+        [TestCase(1.005, TargetA)]
+        [TestCase(1.015, TargetB)]
+        public void BothPlannersApplyTheTieBandTheSameWay(double challengerFactor, int expected) {
+            var skips = SkipBUntil(T0.AddMinutes(5));
+            var running = Live(T0, Tied(challengerFactor), skips, null).PlanTarget;
+            running.DatabaseId.Should().Be(TargetA);
+            var t2 = running.MinimumTimeSpanEnd.AddMinutes(1);
+
+            var liveProjects = Tied(challengerFactor);
+            var live = Live(t2, liveProjects, skips, running);
+            var ratio = Find(liveProjects, TargetB).ScoringResults.TotalScore / Find(liveProjects, TargetA).ScoringResults.TotalScore;
+            ratio.Should().BeApproximately(challengerFactor, 1e-9);
+            live.PlanTarget.DatabaseId.Should().Be(expected);
+
+            var fresh = Tied(challengerFactor);
+            var previewRunning = Find(fresh, TargetA);
+            PreviewRunner.KeepLiveWindow(previewRunning, Imaging(running, null));
+            var preview = Preview(t2, fresh, skips, previewRunning);
+            preview.PlanTarget.DatabaseId.Should().Be(live.PlanTarget.DatabaseId);
+            (preview.PlanTarget.ScoringResults.Held != null).Should().Be(expected == TargetA);
+            (live.PlanTarget.ScoringResults.Held != null).Should().Be(expected == TargetA);
+        }
+
+        [Test]
+        public void ASkippedRunningTargetNeverHoldsInEitherPlanner() {
+            var skips = SkipBUntil(T0.AddMinutes(5));
+            var running = Live(T0, Tied(1.005), skips, null).PlanTarget;
+            var t2 = running.MinimumTimeSpanEnd.AddMinutes(1);
+            var skipA = new SkipList();
+            skipA.Add(new SkipPayload { Scope = "target", TargetId = TargetA, ProjectId = ProjectA, TargetName = "A" }, t2.AddHours(1).ToUniversalTime());
+
+            Live(t2, Tied(1.005), skipA, running).PlanTarget.DatabaseId.Should().Be(TargetB);
+
+            var fresh = Tied(1.005);
+            var previewRunning = Find(fresh, TargetA);
+            PreviewRunner.KeepLiveWindow(previewRunning, Imaging(running, null));
+            Preview(t2, fresh, skipA, previewRunning).PlanTarget.DatabaseId.Should().Be(TargetB);
+        }
+
+        [Test]
+        public void ADoneRunningTargetNeverHoldsInEitherPlanner() {
+            var skips = SkipBUntil(T0.AddMinutes(5));
+            var running = Live(T0, Tied(1.005), skips, null).PlanTarget;
+            var t2 = running.MinimumTimeSpanEnd.AddMinutes(1);
+
+            Live(t2, Tied(1.005, aDone: true), skips, running).PlanTarget.DatabaseId.Should().Be(TargetB);
+
+            var fresh = Tied(1.005, aDone: true);
+            var previewRunning = Find(fresh, TargetA);
+            PreviewRunner.KeepLiveWindow(previewRunning, Imaging(running, null));
+            Preview(t2, fresh, skips, previewRunning).PlanTarget.DatabaseId.Should().Be(TargetB);
+        }
+
+        private static List<IProject> Tied(double challengerFactor, bool aDone = false) {
+            var projects = PlanMocks.ProjectsList(Project(ProjectA, TargetA, "A", ProjectPriority.Normal, aDone ? 100 : 0), Project(ProjectB, TargetB, "B", ProjectPriority.Normal));
+            var weights = projects.Single(p => p.DatabaseId == ProjectB).RuleWeights;
+            foreach (var rule in weights.Keys.ToList()) {
+                weights[rule] *= challengerFactor;
+            }
+            return projects;
+        }
+
         private SchedulerPlan Live(DateTime at, List<IProject> projects, SkipList skips, ITarget previous, ImagingLimit limit = null) {
             return new Planner(at, profile, new ProfilePreference("abcd-1234"), weather, false, false, projects) { Skips = skips, Limit = limit }.GetPlan(previous);
         }
@@ -186,7 +248,7 @@ namespace NINA.Plugin.TargetScheduler.Test.Planning {
             return PlanMocks.ProjectsList(Project(ProjectA, TargetA, "A", ProjectPriority.Low), Project(ProjectB, TargetB, "B", ProjectPriority.High));
         }
 
-        private static IProject Project(int projectId, int targetId, string name, ProjectPriority priority) {
+        private static IProject Project(int projectId, int targetId, string name, ProjectPriority priority, int accepted = 0) {
             Mock<IProject> pp = PlanMocks.GetMockPlanProject(name, ProjectState.Active);
             pp.SetupProperty(p => p.DatabaseId, projectId);
             pp.SetupProperty(p => p.Priority, priority);
@@ -195,7 +257,7 @@ namespace NINA.Plugin.TargetScheduler.Test.Planning {
             pt.SetupProperty(t => t.DatabaseId, targetId);
             pt.SetupProperty(t => t.IsPreview, true);
             pt.SetupProperty(t => t.ExposureSelector, new RepeatUntilDoneExposureSelector(pp.Object, pt.Object, new Target()));
-            Mock<IExposure> pf = PlanMocks.GetMockPlanExposure("L", 100, 0, 300, targetId * 100);
+            Mock<IExposure> pf = PlanMocks.GetMockPlanExposure("L", 100, accepted, 300, targetId * 100);
             PlanMocks.AddMockPlanFilter(pt, pf);
             PlanMocks.AddMockPlanTarget(pp, pt);
             return pp.Object;
