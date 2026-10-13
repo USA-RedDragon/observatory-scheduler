@@ -1,5 +1,9 @@
 # Observatory Scheduler
 
+## 5.8.2.225 - 2026-10-13
+* The planner learns the settle time after a ramp: each measured move records how long the sensor took after the ramp ended, per direction. A move is then estimated as the 1 °C per minute ramp plus that settle time. Until a ramped move is measured, the estimate stays the longer of the measured rate and the ramp. A cooling or warming rate must still be measured before Before Wait takes a dark.
+* Target Scheduler Darks Ready counts the cool time the sequence really takes when it powers up for darks: the ramp from ambient to the sequence's imaging setpoint (ambient - 30 °C below 20 °C ambient, else ambient - 25 °C), then the ramp to the dark, or the measured cooling rate when that is longer.
+
 ## 5.8.2.224 - 2026-10-13
 * Fix for 5.8.2.223: a restore to the imaging setpoint now ramps on its own and keeps going when the instruction is canceled. Before, the safety loop that ends a while-unsafe darks run within 5 s of turning safe canceled the ramp partway, and NINA then left the setpoint at the sensor temperature, so lights could resume at the dark temperature. A canceled restore no longer blocks the unsafe handling; the ramp finishes in the background.
 * Only one ramp runs at a time. A darks move first stops a restore ramp that is still running (NINA leaves the setpoint at the sensor temperature), and a darks run that starts while a restore is still ramping takes that restore's target as the imaging setpoint instead of the setpoint in the middle of the ramp.
