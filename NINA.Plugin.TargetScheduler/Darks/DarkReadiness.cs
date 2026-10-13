@@ -49,8 +49,13 @@ namespace NINA.Plugin.TargetScheduler.Darks {
                 return DarkPlanner.UnmeasuredMoveHorizon;
             }
             TimeSpan measured = TimeSpan.FromSeconds((ambient - setTemp) * coolingSecondsPerC.Value);
-            TimeSpan ramp = DarkPlanner.Ramp(ambient, setTemp);
-            return measured > ramp ? measured : ramp;
+            double imaging = SequenceImagingSetpoint(ambient);
+            TimeSpan ramps = DarkPlanner.Ramp(ambient, imaging) + DarkPlanner.Ramp(imaging, setTemp);
+            return measured > ramps ? measured : ramps;
+        }
+
+        public static double SequenceImagingSetpoint(double ambient) {
+            return ambient < 20 ? ambient - 30 : ambient - 25;
         }
 
         public static DarkReadyResult Check(DarkReadyInput i) {

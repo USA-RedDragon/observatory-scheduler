@@ -57,7 +57,7 @@ namespace NINA.Plugin.TargetScheduler.Planning.Test {
             DarkReadyResult r = DarkReadiness.Check(i);
             r.Ready.Should().BeFalse();
             r.Reason.Should().Contain("shortest needed dark (300 s");
-            i.SunAltitudeAt = t => -10 + (t - Now).TotalMinutes * 0.1;
+            i.SunAltitudeAt = t => -14 + (t - Now).TotalMinutes * 0.1;
             r = DarkReadiness.Check(i);
             r.Ready.Should().BeTrue();
             r.Need.ComboKey.Should().Be("short");
@@ -68,22 +68,24 @@ namespace NINA.Plugin.TargetScheduler.Planning.Test {
             DarkReadyInput i = Input(Need("cold", -5, exposure: 300));
             i.Holds.Add(Hold(20, -5));
             i.CoolingSecondsPerC = 1;
-            i.SunAltitudeAt = t => -11.6 + (t - Now).TotalMinutes * 0.1;
+            i.SunAltitudeAt = t => -12.6 + (t - Now).TotalMinutes * 0.1;
             DarkReadiness.Check(i).Ready.Should().BeTrue();
-            i.SunAltitudeAt = t => -10.4 + (t - Now).TotalMinutes * 0.1;
+            i.SunAltitudeAt = t => -12.4 + (t - Now).TotalMinutes * 0.1;
             DarkReadiness.Check(i).Ready.Should().BeFalse();
-            i.SunAltitudeAt = t => -11.6 + (t - Now).TotalMinutes * 0.1;
-            i.CoolingSecondsPerC = 90;
-            DarkReadiness.Check(i).Ready.Should().BeTrue();
+            i.SunAltitudeAt = t => -12.6 + (t - Now).TotalMinutes * 0.1;
             i.CoolingSecondsPerC = 120;
+            DarkReadiness.Check(i).Ready.Should().BeTrue();
+            i.CoolingSecondsPerC = 150;
             DarkReadiness.Check(i).Ready.Should().BeFalse();
             i.CoolingSecondsPerC = null;
             DarkReadiness.Check(i).Ready.Should().BeFalse();
             i.SunAltitudeAt = t => -16 + (t - Now).TotalMinutes * 0.1;
             DarkReadiness.Check(i).Ready.Should().BeTrue();
             DarkReadiness.CoolTime(15, 20, null).Should().Be(TimeSpan.Zero);
-            DarkReadiness.CoolTime(15, -5, 1).Should().Be(TimeSpan.FromMinutes(20));
-            DarkReadiness.CoolTime(15, -5, 90).Should().Be(TimeSpan.FromMinutes(30));
+            DarkReadiness.CoolTime(15, -5, 1).Should().Be(TimeSpan.FromMinutes(30 + 10));
+            DarkReadiness.CoolTime(15, -5, 150).Should().Be(TimeSpan.FromMinutes(50));
+            DarkReadiness.CoolTime(22, -10, 1).Should().Be(TimeSpan.FromMinutes(25 + 7));
+            DarkReadiness.CoolTime(15, -20, 1).Should().Be(TimeSpan.FromMinutes(30 + 5));
         }
 
         [Test]
