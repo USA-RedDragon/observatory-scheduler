@@ -18,6 +18,11 @@ namespace NINA.Plugin.TargetScheduler.Sequencer {
 
         public static FlipState Flips => flips.Value;
 
+        public static double WithStandardRefraction(double altitude, ObserverInfo observer) {
+            var location = new NOVAS.OnSurface { Latitude = observer.Latitude, Longitude = observer.Longitude, Height = observer.Elevation };
+            return altitude + NOVAS.Refract(ref location, NOVAS.RefractionOption.StandardRefraction, 90.0 - altitude);
+        }
+
         public static ImagingLimit Find(ISequenceContainer start, IProfile profile, DateTime atTime) {
             var a = profile?.AstrometrySettings;
             if (start == null || a == null) {
@@ -25,8 +30,8 @@ namespace NINA.Plugin.TargetScheduler.Sequencer {
             }
 
             var observer = new ObserverInfo { Latitude = a.Latitude, Longitude = a.Longitude, Elevation = a.Elevation };
-            double SunAltitude(DateTime t) => AstroUtil.CalculateAltitudeForStandardRefraction(
-                AstroUtil.GetSunAltitude(t, observer) + AstroUtil.ArcminToDegree(0.25), observer.Latitude, observer.Longitude);
+            double SunAltitude(DateTime t) => WithStandardRefraction(
+                AstroUtil.GetSunAltitude(t, observer) + AstroUtil.ArcminToDegree(0.25), observer);
 
             ImagingLimit limit = null;
             bool flipTrigger = false;
