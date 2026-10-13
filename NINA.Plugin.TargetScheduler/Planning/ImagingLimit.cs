@@ -21,6 +21,14 @@ namespace NINA.Plugin.TargetScheduler.Planning {
 
         public DateTime End { get; set; }
         public string Basis { get; set; }
+
+        /// <summary>
+        /// True when this end of imaging falls in the night a plan that starts at start covers, so that plan
+        /// must stop imaging where the running sequence will.
+        /// </summary>
+        public bool Covers(DateTime start) {
+            return End > start && End - start <= TimeSpan.FromHours(24);
+        }
         public FlipSettings Flip { get; set; }
         public TimeSpan? FlipOverhead { get; set; }
 

@@ -1,6 +1,7 @@
 using NINA.Astrometry;
 using NINA.Equipment.Interfaces.Mediator;
 using NINA.Plugin.TargetScheduler.Astrometry;
+using NINA.Plugin.TargetScheduler.Bodies;
 using NINA.Plugin.TargetScheduler.Planning;
 using NINA.Plugin.TargetScheduler.Planning.Exposures;
 using NINA.Plugin.TargetScheduler.Planning.Interfaces;
@@ -46,6 +47,7 @@ namespace NINA.Plugin.TargetScheduler.Remote.Plugin {
         private DateTime? lastPlanAt;
         private ITarget pickedTarget;
         private TargetSnapshot pickedSnapshot;
+        private ImagingLimit liveLimit;
         private TargetSchedulerContainer container;
         private CancellationTokenSource waitCanceller;
         private readonly IFocuserMediator focuserMediator;
@@ -348,9 +350,23 @@ namespace NINA.Plugin.TargetScheduler.Remote.Plugin {
             return tracker.View(DateTime.UtcNow, steps);
         }
 
-        public void PlanComputed() {
+        public void PlanComputed(ImagingLimit limit) {
             lastPlanAt = DateTime.UtcNow;
+            lock (sync) {
+                liveLimit = limit;
+            }
             Control.TakeReplan();
+        }
+
+        /// <summary>
+        /// The end of imaging the running sequence planned with at its last re-plan, or null.
+        /// </summary>
+        public ImagingLimit LiveLimit {
+            get {
+                lock (sync) {
+                    return liveLimit;
+                }
+            }
         }
 
         public bool ReplanRequested => Control.ReplanRequested;
@@ -403,8 +419,7 @@ namespace NINA.Plugin.TargetScheduler.Remote.Plugin {
         }
 
         public string SkipReason(int projectId, int targetId, DateTime atTime) {
-            var s = Control.Skips.Match(projectId, targetId, atTime.ToUniversalTime());
-            return s == null ? null : $"skipped until {s.Until.ToLocalTime():HH:mm}";
+            return SkipList.Reason(Control.Skips.Match(projectId, targetId, atTime.ToUniversalTime()));
         }
 
         private void Invalidate(int? projectId, int? targetId) {
@@ -544,14 +559,21 @@ namespace NINA.Plugin.TargetScheduler.Remote.Plugin {
 
         public CommandResult Cancel(string id) => Processor.Cancel(id);
 
+        /// <summary>
+        /// The target the running sequence is imaging, with the window the live planner holds for it and whether
+        /// it keeps the target at its next re-plan. Between two plans of the same sequence the last target is
+        /// still the live planner's current one, so it is reported then too.
+        /// </summary>
         public LiveImaging Imaging() {
+            var pending = Processor.Pending;
             var view = CurrentView();
-            var planning = tracker.InPlan;
+            LiveImaging live;
+            ITarget picked;
             lock (sync) {
-                if (!containerRunning || containerPaused || target == null || !(planning || view.Exposure != null)) {
+                if (!containerRunning || containerPaused || target == null) {
                     return null;
                 }
-                return new LiveImaging {
+                live = new LiveImaging {
                     TargetId = target.TargetId,
                     TargetName = target.TargetName,
                     PlanId = view.Exposure?.PlanId,
@@ -559,7 +581,25 @@ namespace NINA.Plugin.TargetScheduler.Remote.Plugin {
                     StartedAt = view.Exposure?.StartedAt,
                     EndsAt = view.Exposure?.EndsAt,
                 };
+                picked = pickedTarget != null && pickedTarget.DatabaseId == target.TargetId ? pickedTarget : null;
             }
+            live.PauseWaiting = pending.Any(p => p.Command.Kind == CommandKinds.Pause);
+            if (picked == null) {
+                return live;
+            }
+            live.Window = new PlanWindow {
+                Start = picked.StartTime,
+                End = picked.EndTime,
+                MinimumEnd = picked.MinimumTimeSpanEnd,
+                BonusEnd = picked.BonusTimeSpanEnd,
+                Culmination = picked.CulminationTime,
+            };
+            var at = live.EndsAt?.ToLocalTime() ?? DateTime.Now;
+            live.ReplanReason = PendingPreview.ReplanReason(pending, Control.Skips)
+                ?? ContinuationBlocker(picked, at)
+                ?? (TargetEditGuard.Instance.Marked(picked.DatabaseId) ? "an edit changed it" : null)
+                ?? BodyRecenter.EndReason(picked, at, BodyCenters.Live, BodyField.Current);
+            return live;
         }
 
         public Preview Preview(PreviewRequest request) => new PreviewRunner(profileService, this).Run(request);

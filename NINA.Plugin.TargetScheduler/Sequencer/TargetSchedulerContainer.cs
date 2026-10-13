@@ -312,7 +312,7 @@ namespace NINA.Plugin.TargetScheduler.Sequencer {
                     lastLimitText = limitText;
                 }
                 SchedulerPlan plan = new Planner(atTime, profileService.ActiveProfile, profilePreferences, weatherDataMediator, false, false) { Limit = CurrentLimit }.GetPlan(previousPlanTarget);
-                Remote.Plugin.RemoteHost.Instance?.PlanComputed();
+                Remote.Plugin.RemoteHost.Instance?.PlanComputed(CurrentLimit);
                 SetSyncServerState(ServerState.Ready);
 
                 if (plan == null) {

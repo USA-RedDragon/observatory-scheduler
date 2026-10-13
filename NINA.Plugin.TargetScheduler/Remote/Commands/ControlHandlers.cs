@@ -59,13 +59,18 @@ namespace NINA.Plugin.TargetScheduler.Remote.Commands {
             return null;
         }
 
-        protected override CommandResult Run(CommandEnvelope command, SkipPayload p, ICommandContext context) {
-            DateTime until;
+        /// <summary>
+        /// When a skip applied at now ends: after its minutes, or else at the end of the night.
+        /// </summary>
+        public static DateTime Until(SkipPayload p, DateTime now, Func<DateTime, DateTime?> nightEnd) {
             if (p.Minutes > 0) {
-                until = context.Now.AddMinutes(p.Minutes);
-            } else {
-                until = context.Control.NightEnd(context.Now) ?? context.Now.AddHours(12);
+                return now.AddMinutes(p.Minutes);
             }
+            return nightEnd?.Invoke(now) ?? now.AddHours(12);
+        }
+
+        protected override CommandResult Run(CommandEnvelope command, SkipPayload p, ICommandContext context) {
+            DateTime until = Until(p, context.Now, context.Control.NightEnd);
             context.Control.Skip(p, until);
             context.Control.RequestReplan($"skip {p.Scope} by {command.Author}");
             var name = p.Scope == "project" ? p.ProjectName : p.TargetName;

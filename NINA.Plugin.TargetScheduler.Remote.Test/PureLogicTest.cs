@@ -209,9 +209,104 @@ namespace NINA.Plugin.TargetScheduler.Remote.Test {
 
         [Test]
         public void PreviewStatesItsAssumptions() {
-            var a = PreviewBuilder.Assumptions(30, 10, 20, 5000);
-            a.Select(x => x.Key).Should().Equal("weather", "grading", "overhead", "visibility", "web", "limits");
-            a.Single(x => x.Key == "visibility").Text.Should().Contain("30 s").And.Contain("10 s");
+            var a = PreviewBuilder.Assumptions(20, 5000);
+            a.Select(x => x.Key).Should().Equal("weather", "grading", "overhead", "web", "limits");
+            a.Single(x => x.Key == "web").Text.Should().Contain("plans with the values from before the edit");
+        }
+
+        [Test]
+        public void TheLivePreviewSaysWhetherTheCurrentTargetKeepsItsWindow() {
+            var ends = new DateTime(2026, 10, 13, 2, 51, 25, DateTimeKind.Utc);
+            var window = new PlanWindow { MinimumEnd = new DateTime(2026, 10, 13, 3, 1, 36, DateTimeKind.Utc) };
+            var keeps = new LiveImaging { TargetId = 41, TargetName = "Sagittarius Star Cloud Panel 2", Filter = "Luminance", EndsAt = ends, Window = window };
+            PreviewBuilder.LiveAssumption(ends, keeps, true).Text
+                .Should().Contain("keeps imaging while the live planner would keep it")
+                .And.Contain(window.MinimumEnd.ToLocalTime().ToString("HH:mm"));
+            var replans = new LiveImaging { TargetId = 41, TargetName = "Sagittarius Star Cloud Panel 2", Filter = "Luminance", EndsAt = ends, Window = window, ReplanReason = "a re-plan was requested from the web" };
+            PreviewBuilder.LiveAssumption(ends, replans, true).Text
+                .Should().Contain("re-plans then because a re-plan was requested from the web")
+                .And.NotContain("keeps imaging");
+        }
+
+        [Test]
+        public void PendingSkipsApplyAtTheStartAndLeaveTheLiveListAlone() {
+            var live = new SkipList();
+            live.Add(new SkipPayload { Scope = "target", TargetId = 112, ProjectId = 55, TargetName = "Barnard's E" }, Now.AddHours(9));
+            var preview = live.Copy();
+            var start = Now.AddMinutes(4);
+            DateTime? NightEnd(DateTime t) => Now.AddHours(7);
+            var skip = Pending(Cmd.Of(CommandKinds.Skip, "{\"scope\":\"target\",\"target_id\":41,\"project_id\":20,\"target_name\":\"SSC Panel 2\"}"));
+            var hour = Pending(Cmd.Of(CommandKinds.Skip, "{\"scope\":\"project\",\"project_id\":5,\"project_name\":\"Cygnis Loop\",\"minutes\":60}"));
+            var unskip = Pending(Cmd.Of(CommandKinds.Unskip, "{\"scope\":\"target\",\"target_id\":112,\"project_id\":55}"));
+            var bad = Pending(Cmd.Of(CommandKinds.Skip, "{\"scope\":\"target\"}"));
+            var edit = Pending(Cmd.Of(CommandKinds.ProjectEdit, "{\"id\":5}"));
+
+            PendingPreview.ApplySkips(preview, new[] { skip, hour, unskip, bad, edit }, start, NightEnd);
+
+            preview.Match(20, 41, start).Until.Should().Be(Now.AddHours(7));
+            preview.Match(5, 13, start).Until.Should().Be(start.AddMinutes(60));
+            preview.Match(55, 112, start).Should().BeNull();
+            preview.Active(start).Should().HaveCount(2);
+            live.Match(55, 112, start).Should().NotBeNull();
+            live.Match(20, 41, start).Should().BeNull();
+        }
+
+        [Test]
+        public void PendingSkipsApplyInTheProcessorsOrder() {
+            var skip = Cmd.Of(CommandKinds.Skip, "{\"scope\":\"target\",\"target_id\":41,\"project_id\":20}");
+            var unskip = Cmd.Of(CommandKinds.Unskip, "{\"scope\":\"target\",\"target_id\":41,\"project_id\":20}");
+            skip.CreatedAt = Now.AddMinutes(1);
+            unskip.CreatedAt = Now;
+            var s = new SkipList();
+            PendingPreview.ApplySkips(s, new[] { Pending(skip), Pending(unskip) }, Now.AddMinutes(4), t => null);
+            s.Match(20, 41, Now.AddMinutes(4)).Until.Should().Be(Now.AddMinutes(4).AddHours(12));
+        }
+
+        [Test]
+        public void PendingCommandsThatChangeSomethingMakeTheLivePlannerReplan() {
+            var none = new SkipList();
+            PendingPreview.ReplanReason(new PendingCommand[0], none).Should().BeNull();
+            PendingPreview.ReplanReason(new[] { Pending(Cmd.Of(CommandKinds.Pause, "{\"mount\":\"track\"}")) }, none).Should().BeNull();
+            PendingPreview.ReplanReason(new[] { Pending(Cmd.Of(CommandKinds.Skip, "{\"scope\":\"target\",\"target_id\":168,\"project_id\":78}")) }, none)
+                .Should().Be("the waiting scheduler.skip command applies when the exposure ends");
+            PendingPreview.ReplanReason(new[] { Pending(Cmd.Of(CommandKinds.Skip, "{\"scope\":\"target\"}")) }, none).Should().BeNull();
+            PendingPreview.ReplanReason(new[] { Pending(Cmd.Of(CommandKinds.RuleWeightEdit, "{}")), Pending(Cmd.Of(CommandKinds.RuleWeightEdit, "{}")), Pending(Cmd.Of(CommandKinds.Replan, "{}")) }, none)
+                .Should().Be("the waiting ruleweight.edit, scheduler.replan commands apply when the exposure ends");
+        }
+
+        [Test]
+        public void AnUnskipReplansOnlyWhenItRemovesASkip() {
+            var unskip = Pending(Cmd.Of(CommandKinds.Unskip, "{\"scope\":\"target\",\"target_id\":112,\"project_id\":55}"));
+            PendingPreview.ReplanReason(new[] { unskip }, new SkipList()).Should().BeNull();
+            var skipped = new SkipList();
+            skipped.Add(new SkipPayload { Scope = "target", TargetId = 112, ProjectId = 55 }, Now.AddHours(1));
+            PendingPreview.ReplanReason(new[] { unskip }, skipped).Should().Be("the waiting scheduler.unskip command applies when the exposure ends");
+            skipped.Match(55, 112, Now).Should().NotBeNull();
+        }
+
+        [Test]
+        public void TheLivePreviewSaysAWaitingPauseLeavesNoCurrentTarget() {
+            var ends = new DateTime(2026, 10, 13, 7, 17, 24, DateTimeKind.Utc);
+            var live = new LiveImaging { TargetId = 168, TargetName = "161P/Hartley-IRAS", Filter = "Luminance", EndsAt = ends, PauseWaiting = true, Window = new PlanWindow() };
+            PreviewBuilder.LiveAssumption(ends, live, false).Text.Should().Contain("waiting pause").And.Contain("no current target");
+        }
+
+        [Test]
+        public void ASkipReasonNamesWhenItEnds() {
+            var until = new DateTime(2026, 10, 13, 12, 13, 0, DateTimeKind.Utc);
+            SkipList.Reason(null).Should().BeNull();
+            SkipList.Reason(new SkipEntry { Until = until }).Should().Be("skipped until " + until.ToLocalTime().ToString("HH:mm"));
+        }
+
+        [Test]
+        public void ASkipEndsAfterItsMinutesOrAtTheEndOfTheNight() {
+            SkipHandler.Until(new SkipPayload { Minutes = 60 }, Now, t => Now.AddHours(6)).Should().Be(Now.AddMinutes(60));
+            SkipHandler.Until(new SkipPayload(), Now, t => Now.AddHours(6)).Should().Be(Now.AddHours(6));
+            SkipHandler.Until(new SkipPayload(), Now, t => null).Should().Be(Now.AddHours(12));
+        }
+
+        private static PendingCommand Pending(CommandEnvelope c) {
+            return new PendingCommand { Command = c, Via = "api", ReceivedAt = c.CreatedAt };
         }
 
         [Test]

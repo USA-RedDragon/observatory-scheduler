@@ -16,6 +16,16 @@ namespace NINA.Plugin.TargetScheduler.Planning.Test {
         private static FlipSettings Flip(bool sideOfPier = true) => new FlipSettings { MinutesAfterMeridian = 5, MaxMinutesAfterMeridian = 15, UseSideOfPier = sideOfPier };
 
         [Test]
+        public void ALimitCoversOnlyThePlanThatStartsInItsNight() {
+            var limit = Limit(Dawn);
+            limit.Covers(Dawn.AddHours(-9)).Should().BeTrue();
+            limit.Covers(Dawn.AddMinutes(-1)).Should().BeTrue();
+            limit.Covers(Dawn).Should().BeFalse();
+            limit.Covers(Dawn.AddHours(12)).Should().BeFalse();
+            limit.Covers(Dawn.AddHours(-25)).Should().BeFalse();
+        }
+
+        [Test]
         public void FindEndFindsWhenASunAboveConditionEnds() {
             DateTime? end = ImagingLimit.FindEnd(Sun(Dawn, 0.18), -14, true, Dawn.AddHours(-3), TimeSpan.FromHours(24));
             end.Should().NotBeNull();

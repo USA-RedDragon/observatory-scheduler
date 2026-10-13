@@ -7,6 +7,7 @@ using NINA.Plugin.TargetScheduler.Planning.Entities;
 using NINA.Plugin.TargetScheduler.Planning.Exposures;
 using NINA.Plugin.TargetScheduler.Planning.Interfaces;
 using NINA.Plugin.TargetScheduler.Remote.Api;
+using NINA.Plugin.TargetScheduler.Remote.Commands;
 using NINA.Plugin.TargetScheduler.Shared.Utility;
 using NINA.Profile.Interfaces;
 using System;
@@ -58,14 +59,26 @@ namespace NINA.Plugin.TargetScheduler.Remote.Plugin {
                     CivilDawn = tc.NauticalTwilightEnd?.ToUniversalTime(),
                     Sunrise = tc.CivilTwilightEnd?.ToUniversalTime(),
                 },
-                Skips = host.Control.Skips.Active(DateTime.UtcNow),
-                Assumptions = PreviewBuilder.Assumptions(TargetImagingExpert.TARGET_VISIBILITY_SAMPLE_INTERVAL * TargetImagingExpert.PREVIEW_SAMPLE_FACTOR, TargetImagingExpert.TARGET_VISIBILITY_SAMPLE_INTERVAL, Hours, MaxPlans),
+                Assumptions = PreviewBuilder.Assumptions(Hours, MaxPlans),
             };
+            var pending = host.Processor.Pending;
+            var skips = host.Control.Skips.Copy();
+            var appliesAt = live?.EndsAt ?? DateTime.UtcNow;
+            PendingPreview.ApplySkips(skips, pending, appliesAt, host.Control.NightEnd);
+            var asked = PreviewOverrides.Skips(request.Overrides);
+            foreach (var p in asked) {
+                skips.Add(p, SkipHandler.Until(p, appliesAt, host.Control.NightEnd));
+            }
+            if (live != null && asked.Count > 0) {
+                live.ReplanReason ??= "the skip being simulated applies when the exposure ends";
+            }
+            preview.Skips = skips.Active(startLocal.ToUniversalTime());
+            var limit = host.LiveLimit is ImagingLimit l && l.Covers(startLocal) ? l : null;
 
             var simulated = new SimulatedStackSubs();
             var history = new PanelHistory(null);
             var projects = LoadProjects(profile, prefs, request.Overrides ?? new List<PreviewOverride>(), simulated, history);
-            var running = live == null ? null : projects.SelectMany(p => p.Targets).FirstOrDefault(t => t.DatabaseId == live.TargetId);
+            var running = live == null || live.PauseWaiting ? null : projects.SelectMany(p => p.Targets).FirstOrDefault(t => t.DatabaseId == live.TargetId);
             if (request.Start == null) {
                 preview.Assumptions.Insert(0, PreviewBuilder.LiveAssumption(preview.Start, live, running != null));
             }
@@ -83,6 +96,9 @@ namespace NINA.Plugin.TargetScheduler.Remote.Plugin {
             if (running != null && live.PlanId is int planId && live.EndsAt is DateTime endsAt && endsAt >= preview.Start) {
                 CountRunning(running, planId, simulated, live.StartedAt, endsAt);
             }
+            if (running != null) {
+                KeepLiveWindow(running, live);
+            }
             DateTime current = startLocal;
             var stopAt = startLocal.AddHours(Hours);
             string stopReason = null;
@@ -95,6 +111,9 @@ namespace NINA.Plugin.TargetScheduler.Remote.Plugin {
                 try {
                     var planner = new Planner(current, profile, prefs, weather, false, true, projects) {
                         Filtered = ps => filtered = Snapshot(ps),
+                        Skips = skips,
+                        LiveSampling = true,
+                        Limit = limit,
                     };
                     plan = planner.GetPlan(previous);
                     preempted = planner.PreemptedBy;
@@ -231,6 +250,23 @@ namespace NINA.Plugin.TargetScheduler.Remote.Plugin {
             return nowLocal;
         }
 
+        /// <summary>
+        /// Gives the running target the window the live planner holds for it, so the simulation keeps it exactly
+        /// as long as the live planner will. A target loaded fresh has no window, and the planner would re-plan
+        /// at once. When the live planner re-plans at the end of the running exposure anyway, the target keeps
+        /// no window and the simulation re-plans there too.
+        /// </summary>
+        public static void KeepLiveWindow(ITarget running, LiveImaging live) {
+            if (running == null || live?.Window == null || live.ReplanReason != null) {
+                return;
+            }
+            running.StartTime = live.Window.Start;
+            running.EndTime = live.Window.End;
+            running.MinimumTimeSpanEnd = live.Window.MinimumEnd;
+            running.BonusTimeSpanEnd = live.Window.BonusEnd;
+            running.CulminationTime = live.Window.Culmination;
+        }
+
         private static void CountRunning(ITarget t, int planId, SimulatedStackSubs simulated, DateTime? startedAt, DateTime endsAt) {
             var exposure = t.AllExposurePlans.FirstOrDefault(e => e.DatabaseId == planId);
             if (exposure == null) {
@@ -310,10 +346,7 @@ namespace NINA.Plugin.TargetScheduler.Remote.Plugin {
             var overridden = new HashSet<int>(overrides.Where(o => o.Entity == PreviewOverrides.Project).Select(o => o.Id));
             var result = new List<IProject>();
             using (var context = new SchedulerDatabaseInteraction().GetContext()) {
-                ForkDatabase.RefreshPanelHistory(context);
-                ForkDatabase.RefreshSubLengths(context);
-                ForkDatabase.RefreshManagedTemplates(context);
-                ForkDatabase.RefreshBodies(context);
+                ForkDatabase.RefreshGoalSource(context);
                 var projects = context.ProjectSet
                     .Include("targets.exposureplans.exposuretemplate")
                     .Include("ruleweights")

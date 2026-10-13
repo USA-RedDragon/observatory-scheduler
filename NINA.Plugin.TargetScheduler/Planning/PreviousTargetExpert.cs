@@ -24,6 +24,11 @@ namespace NINA.Plugin.TargetScheduler.Planning {
 
         public ImagingLimit Limit { get; set; }
 
+        /// <summary>
+        /// The skips the planner honors; a skipped previous target does not continue.
+        /// </summary>
+        public Remote.Commands.SkipList Skips { get; set; }
+
         public PreviousTargetExpert(IProfile profile, ProfilePreference profilePreferences, bool isPreview, ObserverInfo observerInfo) {
             this.activeProfile = profile;
             this.profilePreferences = profilePreferences;
@@ -47,6 +52,11 @@ namespace NINA.Plugin.TargetScheduler.Planning {
         /// <returns></returns>
         public bool CanContinue(DateTime atTime, IWeatherDataMediator weatherDataMediator, ITarget previousTarget) {
             if (previousTarget == null) { return false; }
+
+            if (Remote.Commands.SkipList.Reason(Skips?.Match(previousTarget.Project.DatabaseId, previousTarget.DatabaseId, atTime)) is string skipped) {
+                TSLogger.Info($"not continuing previous target at {atTime}, {previousTarget.Name}: {skipped}");
+                return false;
+            }
 
             if (!isPreview && Remote.Plugin.RemoteHost.Instance?.ContinuationBlocker(previousTarget, atTime) is string blocker) {
                 TSLogger.Info($"not continuing previous target at {atTime}, {previousTarget.Name}: {blocker}");
@@ -240,6 +250,15 @@ namespace NINA.Plugin.TargetScheduler.Planning {
                 this.targetId = targetId;
                 edited = true;
                 TSLogger.Trace($"TargetEditGuard mark edited: {targetId}");
+            }
+        }
+
+        /// <summary>
+        /// True when an edit marked this target since it was picked, without the mismatch warning IsEdited logs.
+        /// </summary>
+        public bool Marked(int targetId) {
+            lock (lockObj) {
+                return edited && targetId == this.targetId;
             }
         }
 

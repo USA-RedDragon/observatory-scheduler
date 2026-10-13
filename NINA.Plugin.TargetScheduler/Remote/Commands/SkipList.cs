@@ -62,6 +62,24 @@ namespace NINA.Plugin.TargetScheduler.Remote.Commands {
             }
         }
 
+        /// <summary>
+        /// The reason the planner gives for a target that a skip holds back, or null for no skip.
+        /// </summary>
+        public static string Reason(SkipEntry s) {
+            return s == null ? null : $"skipped until {s.Until.ToLocalTime():HH:mm}";
+        }
+
+        /// <summary>
+        /// An independent list with the same entries, for a simulation to change without touching the live skips.
+        /// </summary>
+        public SkipList Copy() {
+            var copy = new SkipList();
+            lock (sync) {
+                copy.entries = entries.Select(e => new SkipEntry { Scope = e.Scope, TargetId = e.TargetId, ProjectId = e.ProjectId, Name = e.Name, Until = e.Until }).ToList();
+            }
+            return copy;
+        }
+
         public IList<SkipEntry> Active(DateTime now) {
             var t = now.ToUniversalTime();
             lock (sync) {

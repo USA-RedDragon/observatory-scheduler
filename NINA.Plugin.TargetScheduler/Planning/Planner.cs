@@ -11,6 +11,7 @@ using NINA.Plugin.TargetScheduler.Goals;
 using NINA.Plugin.TargetScheduler.Planning.Exposures;
 using NINA.Plugin.TargetScheduler.Planning.Interfaces;
 using NINA.Plugin.TargetScheduler.Planning.Scoring;
+using NINA.Plugin.TargetScheduler.Remote.Commands;
 using NINA.Plugin.TargetScheduler.Shared.Utility;
 using NINA.Plugin.TargetScheduler.Util;
 using NINA.Profile.Interfaces;
@@ -33,6 +34,17 @@ namespace NINA.Plugin.TargetScheduler.Planning {
 
         public Action<List<IProject>> Filtered { get; set; }
 
+        /// <summary>
+        /// The skips this run honors. Null means the web skips the live scheduler holds now.
+        /// </summary>
+        public SkipList Skips { get; set; }
+
+        /// <summary>
+        /// Sample target visibility at the live planner's interval even in a preview, so the preview finds
+        /// the same visibility windows as the live planner.
+        /// </summary>
+        public bool LiveSampling { get; set; }
+
         private ImagingLimit limit;
 
         public ImagingLimit Limit {
@@ -44,7 +56,7 @@ namespace NINA.Plugin.TargetScheduler.Planning {
         }
 
         private TargetImagingExpert Expert() {
-            return new TargetImagingExpert(activeProfile, profilePreferences, isPreview) { Limit = limit };
+            return new TargetImagingExpert(activeProfile, profilePreferences, isPreview && !LiveSampling) { Limit = limit };
         }
 
         public Planner(DateTime atTime, IProfile profile, ProfilePreference profilePreferences, IWeatherDataMediator weatherDataMediator, bool checkCondition, bool isPreview)
@@ -85,6 +97,8 @@ namespace NINA.Plugin.TargetScheduler.Planning {
                     if (limit != null) {
                         TSLogger.Info($"sequence end of imaging: {limit.End:yyyy-MM-dd HH:mm:ss} ({limit.Basis})");
                     }
+
+                    previousTargetExpert.Skips = ActiveSkips();
 
                     // If the previous target still has time in it's initial minimum time span and is still acceptable, then stick with it
                     if (previousTargetExpert.CanContinue(atTime, weatherDataMediator, previousTarget) && !HighEventPreempts(previousTarget)) {
@@ -164,15 +178,20 @@ namespace NINA.Plugin.TargetScheduler.Planning {
             }
         }
 
+        private SkipList ActiveSkips() {
+            return Skips ?? Remote.Plugin.RemoteHost.Instance?.Control.Skips;
+        }
+
         private (ITarget, int)? SkippedTargetToWaitFor(List<IProject> projects) {
             var host = Remote.Plugin.RemoteHost.Instance;
-            if (host == null || projects == null) { return null; }
+            var skips = ActiveSkips();
+            if (host == null || skips == null || projects == null) { return null; }
             var nightEnd = host.Control.NightEnd(atTime.ToUniversalTime());
             ITarget best = null;
             DateTime bestUntil = DateTime.MaxValue;
             foreach (IProject project in projects) {
                 foreach (ITarget target in project.Targets) {
-                    var skip = host.Control.Skips.Match(project.DatabaseId, target.DatabaseId, atTime.ToUniversalTime());
+                    var skip = skips.Match(project.DatabaseId, target.DatabaseId, atTime.ToUniversalTime());
                     if (skip == null || skip.Until >= bestUntil) { continue; }
                     if (nightEnd.HasValue && skip.Until >= nightEnd.Value) { continue; }
                     best = target;
@@ -185,12 +204,12 @@ namespace NINA.Plugin.TargetScheduler.Planning {
         }
 
         public List<IProject> FilterForSkips(List<IProject> projects) {
-            var host = Remote.Plugin.RemoteHost.Instance;
-            if (NoProjects(projects) || host == null) { return projects; }
+            var skips = ActiveSkips();
+            if (NoProjects(projects) || skips == null) { return projects; }
 
             foreach (IProject project in projects) {
                 foreach (ITarget target in project.Targets) {
-                    string reason = host.SkipReason(project.DatabaseId, target.DatabaseId, atTime);
+                    string reason = SkipList.Reason(skips.Match(project.DatabaseId, target.DatabaseId, atTime));
                     if (reason != null) {
                         SetRejected(target, reason);
                     }

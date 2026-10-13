@@ -148,23 +148,30 @@ namespace NINA.Plugin.TargetScheduler.Remote.Api {
             if (live == null) {
                 return new PreviewAssumption { Key = key, Text = "Nothing is imaging now, so no target starts as the current one." };
             }
+            if (live.PauseWaiting) {
+                return new PreviewAssumption { Key = key, Text = $"{live.TargetName} is imaging now, but a waiting pause stops the scheduler when the exposure ends. The pause is not simulated: the simulation plans as if the scheduler resumed at once, with no current target." };
+            }
             if (!simulated) {
                 return new PreviewAssumption { Key = key, Text = $"{live.TargetName} is imaging now but is not among the simulated projects, so no target starts as the current one." };
             }
             var current = $"{live.TargetName} starts as the current target, so it keeps the Target Switch Penalty score the live planner gives it";
+            if (live.ReplanReason != null) {
+                current += $". The live planner re-plans then because {live.ReplanReason}, so the simulation re-plans too";
+            } else if (live.Window != null) {
+                current += $", and it keeps imaging while the live planner would keep it: its minimum time runs to {live.Window.MinimumEnd.ToLocalTime():HH:mm}";
+            }
             if (live.EndsAt is DateTime end && end >= startUtc) {
                 return new PreviewAssumption { Key = key, Text = $"The simulation starts when the running {live.Filter} exposure ends at {end.ToLocalTime():HH:mm} and counts that exposure as acquired. {current}." };
             }
             return new PreviewAssumption { Key = key, Text = $"No exposure is running, so the simulation starts now; the rest of the current step (slew, centering, focus, download or save) is not simulated. {current}." };
         }
 
-        public static List<PreviewAssumption> Assumptions(int previewSampleSeconds, int liveSampleSeconds, double hours, int maxPlans) {
+        public static List<PreviewAssumption> Assumptions(double hours, int maxPlans) {
             return new List<PreviewAssumption> {
                 new PreviewAssumption { Key = "weather", Text = "No weather data is used, so humidity never rejects a target and no weather stop happens." },
                 new PreviewAssumption { Key = "grading", Text = "Every simulated sub counts as acquired, and as accepted on projects that use the grader." },
                 new PreviewAssumption { Key = "overhead", Text = "Each sub takes exactly its exposure time: no download, dither, slew, centering, autofocus or meridian flip time." },
-                new PreviewAssumption { Key = "visibility", Text = $"Target visibility is sampled every {previewSampleSeconds} s instead of the live planner's {liveSampleSeconds} s." },
-                new PreviewAssumption { Key = "web", Text = "Web pauses, re-plan requests and edits made after the simulation starts are not simulated; skips active now are applied until they end." },
+                new PreviewAssumption { Key = "web", Text = "Skips waiting for the running exposure to end apply when it ends, and run until they end. A waiting re-plan request or edit makes the simulation re-plan when the exposure ends, as the live planner does, but it plans with the values from before the edit. Web pauses, and anything sent after the simulation starts, are not simulated." },
                 new PreviewAssumption { Key = "limits", Text = $"The simulation stops after {hours:0} hours or {maxPlans} plans." },
             };
         }
@@ -177,5 +184,34 @@ namespace NINA.Plugin.TargetScheduler.Remote.Api {
         public string Filter { get; set; }
         public DateTime? StartedAt { get; set; }
         public DateTime? EndsAt { get; set; }
+
+        /// <summary>
+        /// The live planner's time window for the target, which decides whether it keeps the target at its
+        /// next re-plan. Null when the live planner holds no window for it.
+        /// </summary>
+        public PlanWindow Window { get; set; }
+
+        /// <summary>
+        /// Why the live planner will re-plan when the running exposure ends instead of keeping the target, or
+        /// null when it keeps the target while its window allows.
+        /// </summary>
+        public string ReplanReason { get; set; }
+
+        /// <summary>
+        /// A pause waits for the running exposure to end. After a pause the live planner has no current target.
+        /// </summary>
+        public bool PauseWaiting { get; set; }
+    }
+
+    /// <summary>
+    /// The times the live planner set for a target when it picked it: visibility, the end of the project's
+    /// minimum time, the end of any extension to the end of visibility, and the transit.
+    /// </summary>
+    public class PlanWindow {
+        public DateTime Start { get; set; }
+        public DateTime End { get; set; }
+        public DateTime MinimumEnd { get; set; }
+        public DateTime BonusEnd { get; set; }
+        public DateTime Culmination { get; set; }
     }
 }

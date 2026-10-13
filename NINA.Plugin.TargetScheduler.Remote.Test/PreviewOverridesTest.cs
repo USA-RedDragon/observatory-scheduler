@@ -21,6 +21,27 @@ namespace NINA.Plugin.TargetScheduler.Remote.Test {
         }
 
         [Test]
+        public void SkipOverridesReadAsTheSkipsTheyWouldSend() {
+            var o = new List<PreviewOverride> {
+                new PreviewOverride { Entity = PreviewOverrides.Skip, Id = 168, Field = "target", Value = 60 },
+                new PreviewOverride { Entity = PreviewOverrides.Skip, Id = 78, Field = "project", Value = 0 },
+                new PreviewOverride { Entity = PreviewOverrides.Skip, Id = 0, Field = "target", Value = 60 },
+                new PreviewOverride { Entity = PreviewOverrides.Skip, Id = 5, Field = "panel", Value = 60 },
+                new PreviewOverride { Entity = PreviewOverrides.Skip, Id = 5, Field = "target", Value = -1 },
+                Weight(0, "Novelty", 40),
+            };
+            var skips = PreviewOverrides.Skips(o);
+            skips.Should().HaveCount(2);
+            skips[0].Scope.Should().Be("target");
+            skips[0].TargetId.Should().Be(168);
+            skips[0].Minutes.Should().Be(60);
+            skips[1].Scope.Should().Be("project");
+            skips[1].ProjectId.Should().Be(78);
+            skips[1].Minutes.Should().Be(0);
+            PreviewOverrides.Kinds.Should().Contain(PreviewOverrides.Skip);
+        }
+
+        [Test]
         public void EveryProjectWeightsApplyToAnyProject() {
             var o = new List<PreviewOverride> { Weight(0, "Novelty", 40), Weight(0, "Rarity", 25) };
             PreviewOverrides.RuleWeights(o, 7).Should().BeEquivalentTo(new Dictionary<string, double> { ["Novelty"] = 40, ["Rarity"] = 25 });
@@ -58,7 +79,7 @@ namespace NINA.Plugin.TargetScheduler.Remote.Test {
         [Test]
         public void PreviewReportsTheOverrideKindsItApplies() {
             var json = JsonSerializer.Serialize(new Preview(), CommandJson.Options);
-            json.Should().Contain("\"override_kinds\":[\"project\",\"ruleweight\"]");
+            json.Should().Contain("\"override_kinds\":[\"project\",\"ruleweight\",\"skip\"]");
         }
 
         [Test]
