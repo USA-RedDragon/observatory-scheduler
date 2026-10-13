@@ -790,6 +790,37 @@ namespace NINA.Plugin.TargetScheduler.Test.Planning {
         }
 
         [Test]
+        public void testSelectTargetByScoreBreaksTiesById() {
+            Mock<IProfileService> profileMock = PlanMocks.GetMockProfileService(TestData.Pittsboro_NC);
+            IProfile profile = profileMock.Object.ActiveProfile;
+            IWeatherDataMediator weatherData = PlanMocks.GetWeatherDataMediator(false, 0);
+            DateTime atTime = new DateTime(2024, 12, 1, 20, 0, 0);
+            Mock<IScoringEngine> engine = new Mock<IScoringEngine>();
+            engine.SetupAllProperties();
+            engine.Setup(e => e.ScoreTarget(It.IsAny<ITarget>())).Returns(0.5);
+
+            List<ITarget> Targets() {
+                Mock<IProject> p1 = PlanMocks.GetMockPlanProject("p1", ProjectState.Active);
+                p1.SetupProperty(p => p.DatabaseId, 10);
+                Mock<ITarget> t1 = PlanMocks.GetMockPlanTarget("T1", TestData.M31);
+                t1.SetupProperty(t => t.DatabaseId, 1);
+                PlanMocks.AddMockPlanTarget(p1, t1);
+                Mock<IProject> p2 = PlanMocks.GetMockPlanProject("p2", ProjectState.Active);
+                p2.SetupProperty(p => p.DatabaseId, 20);
+                Mock<ITarget> t2 = PlanMocks.GetMockPlanTarget("T2", TestData.M31);
+                t2.SetupProperty(t => t.DatabaseId, 2);
+                PlanMocks.AddMockPlanTarget(p2, t2);
+                return new List<ITarget> { t1.Object, t2.Object };
+            }
+
+            Planner sut = new Planner(atTime, profile, GetPrefs(), weatherData, false, false);
+            sut.SelectTargetByScore(Targets(), engine.Object).DatabaseId.Should().Be(1);
+            List<ITarget> reversed = Targets();
+            reversed.Reverse();
+            sut.SelectTargetByScore(reversed, engine.Object).DatabaseId.Should().Be(1);
+        }
+
+        [Test]
         public void testGetNextPossibleTarget() {
             Mock<IProfileService> profileMock = PlanMocks.GetMockProfileService(TestData.Pittsboro_NC);
             IProfile profile = profileMock.Object.ActiveProfile;

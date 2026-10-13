@@ -449,7 +449,7 @@ namespace NINA.Plugin.TargetScheduler.Planning {
             ITarget nextAvailableTarget = null;
             DateTime? nextAvailableTime = DateTime.MaxValue;
             foreach (ITarget target in imagableTargets) {
-                if (target.StartTime < nextAvailableTime) {
+                if (target.StartTime < nextAvailableTime || (target.StartTime == nextAvailableTime && TieBreak(target, nextAvailableTarget) < 0)) {
                     nextAvailableTarget = target;
                     nextAvailableTime = target.StartTime;
                 }
@@ -554,7 +554,7 @@ namespace NINA.Plugin.TargetScheduler.Planning {
                 TSLogger.Trace($"running scoring engine for project/target {target.Project.Name}/{target.Name}");
                 scoringEngine.RuleWeights = target.Project.RuleWeights;
                 double score = scoringEngine.ScoreTarget(target);
-                if (score > highScore) {
+                if (score > highScore || (score == highScore && highScoreTarget != null && TieBreak(target, highScoreTarget) < 0)) {
                     highScoreTarget = target;
                     highScore = score;
                 }
@@ -569,6 +569,16 @@ namespace NINA.Plugin.TargetScheduler.Planning {
             }
 
             return highScoreTarget;
+        }
+
+        /// <summary>
+        /// Orders targets that tie on score or start time by project and target id, so the pick does not depend
+        /// on the order the database returned them in.
+        /// </summary>
+        public static int TieBreak(ITarget a, ITarget b) {
+            if (b == null) { return -1; }
+            int byProject = (a.Project?.DatabaseId ?? 0).CompareTo(b.Project?.DatabaseId ?? 0);
+            return byProject != 0 ? byProject : a.DatabaseId.CompareTo(b.DatabaseId);
         }
 
         private List<IProject> GetProjects() {
