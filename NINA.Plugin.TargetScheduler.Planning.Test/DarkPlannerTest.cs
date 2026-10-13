@@ -53,9 +53,26 @@ namespace NINA.Plugin.TargetScheduler.Planning.Test {
         public void MoveTimeNeedsAMeasuredRateInThatDirection() {
             var rates = new CoolerRates { CoolingSecondsPerC = 20 };
             DarkPlanner.MoveTime(-13, -13, rates).Should().Be(TimeSpan.Zero);
-            DarkPlanner.MoveTime(-13, -15, rates).Should().Be(TimeSpan.FromSeconds(40));
+            DarkPlanner.MoveTime(-13, -15, rates).Should().Be(TimeSpan.FromMinutes(2));
+            DarkPlanner.MoveTime(-13, -15, new CoolerRates { CoolingSecondsPerC = 90 }).Should().Be(TimeSpan.FromSeconds(180));
             DarkPlanner.MoveTime(-13, -5, rates).Should().BeNull();
-            DarkPlanner.MoveTime(-13, -5, new CoolerRates { WarmingSecondsPerC = 5 }).Should().Be(TimeSpan.FromSeconds(40));
+            DarkPlanner.MoveTime(-13, -5, new CoolerRates { WarmingSecondsPerC = 5 }).Should().Be(TimeSpan.FromMinutes(8));
+        }
+
+        [Test]
+        public void TheSetpointRampsAtOneDegreePerMinuteInWholeNinaSteps() {
+            DarkPlanner.Ramp(-5, -15).Should().Be(TimeSpan.FromMinutes(10));
+            DarkPlanner.Ramp(-15, -5).Should().Be(TimeSpan.FromMinutes(10));
+            DarkPlanner.Ramp(20, -5).Should().Be(TimeSpan.FromMinutes(25));
+            DarkPlanner.Ramp(-13.1, -15).Should().Be(TimeSpan.FromSeconds(120));
+            DarkPlanner.Ramp(-13.3, -15).Should().Be(TimeSpan.FromSeconds(105));
+            DarkPlanner.Ramp(-14.6, -15).Should().Be(DarkPlanner.MinRamp);
+            DarkPlanner.Ramp(-15, -15).Should().Be(DarkPlanner.MinRamp);
+            DarkPlanner.Ramp(40, -40).Should().Be(DarkPlanner.MaxRamp);
+            DarkPlanner.Ramp(double.NaN, -15).Should().Be(DarkPlanner.MaxRamp);
+            for (double from = -30; from <= 30; from += 0.7) {
+                (DarkPlanner.Ramp(from, -10).TotalSeconds % 15).Should().Be(0);
+            }
         }
 
         [Test]
@@ -75,12 +92,12 @@ namespace NINA.Plugin.TargetScheduler.Planning.Test {
 
         [Test]
         public void BeforeWaitStartsOnlyADarkThatEndsWithRoomForRestoreAndAfterWait() {
-            var w = new DarkWindow { Placement = DarkPlacement.BeforeWait, Now = Now, WaitUntil = Now.AddSeconds(450), AfterWait = TimeSpan.FromSeconds(40), SunAltitudeAt = Night };
+            var w = new DarkWindow { Placement = DarkPlacement.BeforeWait, Now = Now, WaitUntil = Now.AddSeconds(600), AfterWait = TimeSpan.FromSeconds(40), SunAltitudeAt = Night };
             var rates = new CoolerRates { CoolingSecondsPerC = 30, WarmingSecondsPerC = 10 };
             TimeSpan download = TimeSpan.FromSeconds(2);
 
             DarkPlanner.FitReason(w, Need("same", 1, -13), -13, -13, rates, download).Should().BeNull();
-            DarkPlanner.FitReason(w, Need("long", 1, -13, exposure: 420), -13, -13, rates, download).Should().Contain("after the wait ends");
+            DarkPlanner.FitReason(w, Need("long", 1, -13, exposure: 600), -13, -13, rates, download).Should().Contain("after the wait ends");
             DarkPlanner.FitReason(w, Need("warm", 1, -11), -13, -13, rates, download).Should().BeNull();
             DarkPlanner.FitReason(w, Need("warmer", 1, -9), -13, -13, rates, download).Should().Contain("after the wait ends");
             DarkPlanner.FitReason(w, Need("warm", 1, -11), -13, -13, new CoolerRates { WarmingSecondsPerC = 10 }, download).Should().Contain("not been measured");

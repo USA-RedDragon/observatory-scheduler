@@ -48,7 +48,9 @@ namespace NINA.Plugin.TargetScheduler.Darks {
             if (!coolingSecondsPerC.HasValue || coolingSecondsPerC.Value <= 0) {
                 return DarkPlanner.UnmeasuredMoveHorizon;
             }
-            return TimeSpan.FromSeconds((ambient - setTemp) * coolingSecondsPerC.Value);
+            TimeSpan measured = TimeSpan.FromSeconds((ambient - setTemp) * coolingSecondsPerC.Value);
+            TimeSpan ramp = DarkPlanner.Ramp(ambient, setTemp);
+            return measured > ramp ? measured : ramp;
         }
 
         public static DarkReadyResult Check(DarkReadyInput i) {

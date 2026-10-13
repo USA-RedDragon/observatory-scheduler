@@ -124,6 +124,24 @@ namespace NINA.Plugin.TargetScheduler.Darks {
 
         public static readonly TimeSpan UnmeasuredMoveHorizon = TimeSpan.FromHours(1);
 
+        public const double RampCPerMinute = 1.0;
+
+        public static readonly TimeSpan MinRamp = TimeSpan.FromMinutes(1);
+
+        public static readonly TimeSpan MaxRamp = TimeSpan.FromMinutes(60);
+
+        private const double RampStepSeconds = 15;
+
+        public static TimeSpan Ramp(double from, double to) {
+            if (double.IsNaN(from) || double.IsNaN(to)) {
+                return MaxRamp;
+            }
+            double seconds = Math.Abs(to - from) / RampCPerMinute * 60;
+            seconds = Math.Ceiling(seconds / RampStepSeconds) * RampStepSeconds;
+            seconds = Math.Min(MaxRamp.TotalSeconds, Math.Max(MinRamp.TotalSeconds, seconds));
+            return TimeSpan.FromSeconds(seconds);
+        }
+
         private static readonly TimeSpan SunStep = TimeSpan.FromMinutes(1);
 
         public static TimeSpan SessionGap(DarkNeed need) {
@@ -178,7 +196,9 @@ namespace NINA.Plugin.TargetScheduler.Darks {
                 return null;
             }
 
-            return TimeSpan.FromSeconds(delta * rate.Value);
+            TimeSpan measured = TimeSpan.FromSeconds(delta * rate.Value);
+            TimeSpan ramp = Ramp(from, to);
+            return measured > ramp ? measured : ramp;
         }
 
         public static string CoverStopReason(DarkCover c) {

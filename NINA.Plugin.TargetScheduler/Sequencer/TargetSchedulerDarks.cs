@@ -523,7 +523,7 @@ namespace NINA.Plugin.TargetScheduler.Sequencer {
             DateTime start = DateTime.UtcNow;
             DisplayText = $"Setting the camera to {target} °C";
             try {
-                bool ok = await cameraMediator.CoolCamera(target, TimeSpan.Zero, progress, cts.Token);
+                bool ok = await RampTo(target, progress, cts.Token);
                 if (!ok) {
                     return $"NINA could not reach {target} °C: the cooler stopped making progress at full power";
                 }
@@ -539,6 +539,18 @@ namespace NINA.Plugin.TargetScheduler.Sequencer {
 
             DarkRuntime.State.RecordMove(from, target, DateTime.UtcNow - start, DateTime.UtcNow);
             return null;
+        }
+
+        private async Task<bool> RampTo(double target, IProgress<ApplicationStatus> progress, CancellationToken token) {
+            CameraInfo info = cameraMediator.GetInfo();
+            double from = double.IsNaN(info.Temperature) ? info.TemperatureSetPoint : info.Temperature;
+            TimeSpan ramp = DarkPlanner.Ramp(from, target);
+            TSLogger.Info($"TS Darks: ramping the setpoint from {info.TemperatureSetPoint} °C (sensor {info.Temperature} °C) to {target} °C over {ramp.TotalMinutes:0.##} min");
+            bool ok = await cameraMediator.CoolCamera(target, ramp, progress, token);
+            if (ok && !DarkPlanner.SameSetpoint(cameraMediator.GetInfo().TemperatureSetPoint, target)) {
+                ok = await cameraMediator.CoolCamera(target, TimeSpan.Zero, progress, token);
+            }
+            return ok;
         }
 
         private async Task<string> WaitAtTemperature(double target, TemperatureWatch watch, CancellationToken token) {
@@ -572,13 +584,13 @@ namespace NINA.Plugin.TargetScheduler.Sequencer {
 
             TSLogger.Info($"TS Darks: restoring the imaging setpoint {imagingSetpoint} °C from {info.TemperatureSetPoint} °C");
             if (token.IsCancellationRequested) {
-                _ = cameraMediator.CoolCamera(imagingSetpoint, TimeSpan.Zero, progress, CancellationToken.None);
+                _ = RampTo(imagingSetpoint, progress, CancellationToken.None);
                 return;
             }
 
             double from = info.Temperature;
             DateTime start = DateTime.UtcNow;
-            bool ok = await cameraMediator.CoolCamera(imagingSetpoint, TimeSpan.Zero, progress, token);
+            bool ok = await RampTo(imagingSetpoint, progress, token);
             string held = ok ? await WaitAtTemperature(imagingSetpoint, watch, token) : "NINA could not reach it";
             if (held != null) {
                 TSLogger.Warning($"TS Darks: the setpoint is back at {imagingSetpoint} °C but the sensor is not there yet: {held}");
