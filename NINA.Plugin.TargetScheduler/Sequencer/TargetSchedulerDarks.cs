@@ -260,6 +260,7 @@ namespace NINA.Plugin.TargetScheduler.Sequencer {
             if (Placement == DarkPlacement.WhileUnsafe) {
                 safetyMonitorMediator.IsSafeChanged += OnSafeChanged;
             }
+            using IDisposable cooler = CoolerRuntime.Own("darks");
             try {
                 await Run(progress, token, yieldSource.Token);
             } finally {

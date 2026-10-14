@@ -47,6 +47,10 @@ namespace NINA.Plugin.TargetScheduler {
         private IPlanetariumFactory planetariumFactory;
         private IFocuserMediator focuserMediator;
         private IFilterWheelMediator filterWheelMediator;
+        private ICameraMediator cameraMediator;
+        private IWeatherDataMediator weatherDataMediator;
+        private ISafetyMonitorMediator safetyMonitorMediator;
+        private IFlatDeviceMediator flatDeviceMediator;
 
         [ImportingConstructor]
         public TargetScheduler(IProfileService profileService,
@@ -56,7 +60,11 @@ namespace NINA.Plugin.TargetScheduler {
             IDeepSkyObjectSearchVM deepSkyObjectSearchVM,
             IPlanetariumFactory planetariumFactory,
             IFocuserMediator focuserMediator,
-            IFilterWheelMediator filterWheelMediator) {
+            IFilterWheelMediator filterWheelMediator,
+            ICameraMediator cameraMediator,
+            IWeatherDataMediator weatherDataMediator,
+            ISafetyMonitorMediator safetyMonitorMediator,
+            IFlatDeviceMediator flatDeviceMediator) {
             if (Properties.Settings.Default.UpdateSettings) {
                 Properties.Settings.Default.Upgrade();
                 Properties.Settings.Default.UpdateSettings = false;
@@ -70,6 +78,10 @@ namespace NINA.Plugin.TargetScheduler {
             this.planetariumFactory = planetariumFactory;
             this.focuserMediator = focuserMediator;
             this.filterWheelMediator = filterWheelMediator;
+            this.cameraMediator = cameraMediator;
+            this.weatherDataMediator = weatherDataMediator;
+            this.safetyMonitorMediator = safetyMonitorMediator;
+            this.flatDeviceMediator = flatDeviceMediator;
 
             profileService.ProfileChanged += ProfileService_ProfileChanged;
 
@@ -87,6 +99,7 @@ namespace NINA.Plugin.TargetScheduler {
 
             Remote.Plugin.RemoteHost.Start(profileService, focuserMediator, filterWheelMediator);
             RemoteOptions = new Remote.Plugin.RemoteOptionsVM();
+            Darks.CoolerRuntime.Start(cameraMediator, weatherDataMediator, safetyMonitorMediator, flatDeviceMediator);
 
             //new ExportProfile(profileService.ActiveProfile, false).Export();
             //new ImportProfile(profileService.ActiveProfile, "C:\\Users\\Tom\\AppData\\Local\\NINA\\SchedulerPlugin\\exported-all.zip", true).Import();
@@ -219,6 +232,7 @@ namespace NINA.Plugin.TargetScheduler {
         public override Task Teardown() {
             ImageGradingController.Instance.Shutdown();
             Remote.Plugin.RemoteHost.Shutdown();
+            Darks.CoolerRuntime.Stop();
 
             if (SyncManager.Instance.IsRunning) {
                 SyncManager.Instance.Shutdown();

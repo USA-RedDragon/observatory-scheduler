@@ -66,6 +66,9 @@ namespace NINA.Plugin.TargetScheduler.Sequencer {
 
         public Func<string> Guard { get; set; }
 
+        /// <summary>Runs before a light once the guard passes; a non-null result skips the exposure.</summary>
+        public Func<IProgress<ApplicationStatus>, CancellationToken, Task<string>> BeforeCapture { get; set; }
+
         public CancellationToken? ProcessingToken { get; set; }
 
         public bool FrameCompleted { get; private set; }
@@ -75,6 +78,14 @@ namespace NINA.Plugin.TargetScheduler.Sequencer {
             if (skip != null) {
                 TSLogger.Info($"not starting the exposure: {skip}");
                 return;
+            }
+
+            if (BeforeCapture != null && IsLightSequence()) {
+                skip = await BeforeCapture(progress, token);
+                if (skip != null) {
+                    TSLogger.Info($"not starting the exposure: {skip}");
+                    return;
+                }
             }
 
             var capture = new CaptureSequence() {
