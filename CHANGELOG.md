@@ -1,5 +1,13 @@
 # Observatory Scheduler
 
+## 5.8.2.229 - 2026-10-14
+* Cooler power controller: before each scheduler light, the scheduler sets the cooler setpoint on a 2 °C grid. At the first light of the night it picks the setpoint that its fit of past cooler power against ambient predicts at the 80% target power. It steps 2 °C warmer when the 5-minute median power is above 88%, and 2 °C colder when every 5-minute median over 15 min is below 70% and the colder setpoint is predicted at 85% or less. Steps are at least 20 min apart, ramp at 1 °C per minute, and the scheduler plans again after a move. A colder step that is not reached goes back to the grid point above the sensor and stops colder steps for the night. Darks and flats own the setpoint while they run.
+* The thresholds and an on/off switch are on the plugin options page under TS Cooler (defaults: enabled, 80/70/88/85%). Each decision is stored in the new ts_cooler_setpoint table, which the plugin creates at start.
+* The darks setpoint ramp moved into a shared ramp that the cooler controller also uses.
+* Sensor gate: before each light, the scheduler waits until the sensor holds within 0.5 °C of the setpoint. It plans again after a wait, and skips the light when the sensor does not settle within 20 min.
+* The scheduler no longer continues a target that the end time trigger just stopped.
+* After Each Exposure instructions run only when the plan saved a frame.
+
 ## 5.8.2.228 - 2026-10-14
 * Safety stop during a plan: when the safety monitor stays unsafe for 4 s while the scheduler runs a plan, the scheduler cancels the running plan instruction (exposure, slew, center, autofocus, dither or wait) and runs the When Becomes Unsafe trigger at once. On 2026-10-14 the monitor went unsafe at 02:54:27 but the trigger ran only at 03:03:03, when a retrying CenterAndRotate ended, so the flap stayed open for 8 min 47 s. NINA runs the scheduler container's triggers only between instructions, and the Powerups interrupt watchdog never starts inside this container.
 * Only the plan is cancelled. The sequence keeps running, so NINA does not exit with --exitaftersequence. Nothing happens when no safety monitor is connected or when no enabled When Becomes Unsafe trigger is on the container or above it. The trigger's own safe check is used, so a SAFE variable still applies.
