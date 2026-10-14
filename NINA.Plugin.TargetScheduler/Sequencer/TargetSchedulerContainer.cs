@@ -75,6 +75,7 @@ namespace NINA.Plugin.TargetScheduler.Sequencer {
         private readonly IFramingAssistantVM framingAssistantVM;
         private readonly IApplicationMediator applicationMediator;
         private readonly IMessageBroker messageBroker;
+        private readonly ISafetyMonitorMediator safetyMonitorMediator;
         private IImageSaveWatcher imageSaveWatcher;
         private bool synchronizationEnabled;
         private WaitStartPublisher waitStartPublisher;
@@ -102,6 +103,7 @@ namespace NINA.Plugin.TargetScheduler.Sequencer {
 
         public object lockObj = new object();
         private static readonly TimeSpan UnknownPositionRetry = TimeSpan.FromSeconds(10);
+        private bool recenterAfterUnsafe;
         public int TotalExposureCount { get; set; }
 
         public PlanExecutionHistory PlanExecutionHistory { get; private set; }
@@ -126,7 +128,8 @@ namespace NINA.Plugin.TargetScheduler.Sequencer {
                 IWindowServiceFactory windowServiceFactory,
                 IFramingAssistantVM framingAssistantVM,
                 IApplicationMediator applicationMediator,
-                IMessageBroker messageBroker) : base() {
+                IMessageBroker messageBroker,
+                ISafetyMonitorMediator safetyMonitorMediator) : base() {
             this.profileService = profileService;
             this.dateTimeProviders = dateTimeProviders;
             this.telescopeMediator = telescopeMediator;
@@ -145,6 +148,7 @@ namespace NINA.Plugin.TargetScheduler.Sequencer {
             this.windowServiceFactory = windowServiceFactory;
             this.applicationMediator = applicationMediator;
             this.messageBroker = messageBroker;
+            this.safetyMonitorMediator = safetyMonitorMediator;
             this.framingAssistantVM = framingAssistantVM;
 
             BeforeWaitContainer = new InstructionContainer(EventContainerType.BeforeWait, this);
@@ -330,6 +334,13 @@ namespace NINA.Plugin.TargetScheduler.Sequencer {
                     return;
                 }
 
+                if (recenterAfterUnsafe && !plan.IsWait) {
+                    if (plan.PlanTarget.Equals(previousPlanTarget) && !plan.PlanInstructions.Any(i => i is Planning.Entities.PlanSlew)) {
+                        TSLogger.Info("adding a slew and center to this plan: the unsafe trigger ran during the last plan and may have moved the mount");
+                        plan.PlanInstructions.Insert(0, new Planning.Entities.PlanSlew(plan.PlanTarget, true));
+                    }
+                }
+
                 if (plan.IsWait) {
                     if (previousPlanTarget != null) {
                         await ExecuteEventContainer(AfterTargetContainer, progress, token);
@@ -399,11 +410,21 @@ namespace NINA.Plugin.TargetScheduler.Sequencer {
 
                         // Create a container for this exposure, add the instructions, and execute
                         PlanContainer planContainer = GetPlanContainer(previousPlanTarget, plan, SchedulerProgress);
+                        recenterAfterUnsafe = false;
                         Remote.Plugin.RemoteHost.Instance?.PlanStarting(target, previousPlanTarget, planContainer);
                         TargetScheduler.EventMediator.InvokeExposureStarting(plan.PlanTarget, plan.PlanTarget.SelectedExposure, !target.Equals(previousPlanTarget));
+                        bool unsafeStop;
+                        UnsafeStopGuard unsafeGuard;
+                        CancellationTokenSource planCts = CancellationTokenSource.CreateLinkedTokenSource(token);
+                        unsafeGuard = new UnsafeStopGuard(safetyMonitorMediator, this, planContainer, planCts, UnsafeStopRule.DefaultHold);
                         try {
-                            planContainer.Execute(progress, token).Wait();
+                            planContainer.Execute(progress, planCts.Token, token).Wait();
+                        } catch (Exception ex) when (unsafeGuard.Cancelled && !token.IsCancellationRequested && Utils.IsCancelException(ex)) {
+                            TSLogger.Warning($"the plan was cancelled because the safety monitor is unsafe ({ex.GetBaseException().Message}), running the unsafe trigger now, then planning again");
                         } finally {
+                            unsafeGuard.Dispose();
+                            unsafeStop = unsafeGuard.Interrupted;
+                            planCts.Dispose();
                             Remote.Plugin.RemoteHost.Instance?.PlanEnded();
                         }
                         TargetScheduler.EventMediator.InvokeExposureStopping();
@@ -416,8 +437,17 @@ namespace NINA.Plugin.TargetScheduler.Sequencer {
                         }
 
                         previousPlanTarget = target;
+                        recenterAfterUnsafe |= unsafeStop;
 
                         PlanExecutionHistory.Add(historyItem);
+
+                        if (unsafeGuard.Cancelled) {
+                            foreach (ISequenceTrigger flip in unsafeGuard.InterruptedFlips) {
+                                TSLogger.Info($"resetting '{flip.Name}' so the cancelled meridian flip is evaluated again");
+                                flip.AfterParentChanged();
+                            }
+                            await RunUnsafeTriggers(progress, token);
+                        }
                     } catch (Exception ex) {
                         ClearTarget();
                         PauseEnabled = false;
@@ -528,6 +558,20 @@ namespace NINA.Plugin.TargetScheduler.Sequencer {
         private ProfilePreference GetProfilePreferences() {
             SchedulerPlanLoader loader = new SchedulerPlanLoader(profileService.ActiveProfile);
             return loader.GetProfilePreferences(new SchedulerDatabaseInteraction().GetContext());
+        }
+
+        private async Task RunUnsafeTriggers(IProgress<ApplicationStatus> progress, CancellationToken token) {
+            foreach (ISequenceTrigger trigger in UnsafeStopGuard.UnsafeTriggers(this)) {
+                try {
+                    if (trigger.ShouldTrigger(this, null)) {
+                        TSLogger.Warning($"running the '{trigger.Name}' trigger now, before planning again");
+                        await trigger.Run(this, progress, token);
+                        TSLogger.Info($"the '{trigger.Name}' trigger is done");
+                    }
+                } catch (Exception ex) {
+                    TSLogger.Error($"could not run the '{trigger.Name}' trigger after the unsafe stop: {ex}");
+                }
+            }
         }
 
         private void WaitForNextTarget(DateTime? waitForNextTargetTime, IProgress<ApplicationStatus> progress, CancellationToken token) {
@@ -898,7 +942,8 @@ namespace NINA.Plugin.TargetScheduler.Sequencer {
                 cloneMe.windowServiceFactory,
                 cloneMe.framingAssistantVM,
                 cloneMe.applicationMediator,
-                cloneMe.messageBroker
+                cloneMe.messageBroker,
+                cloneMe.safetyMonitorMediator
             ) {
             CopyMetaData(cloneMe);
         }
@@ -923,7 +968,8 @@ namespace NINA.Plugin.TargetScheduler.Sequencer {
                 windowServiceFactory,
                 framingAssistantVM,
                 applicationMediator,
-                messageBroker) {
+                messageBroker,
+                safetyMonitorMediator) {
                 Icon = Icon,
                 Name = Name,
                 Category = Category,

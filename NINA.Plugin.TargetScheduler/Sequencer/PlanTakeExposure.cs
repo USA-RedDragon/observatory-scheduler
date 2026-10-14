@@ -6,7 +6,9 @@ using NINA.Equipment.Model;
 using NINA.Image.Interfaces;
 using NINA.Plugin.TargetScheduler.Planning.Interfaces;
 using NINA.Plugin.TargetScheduler.Shared.Utility;
+using NINA.Plugin.TargetScheduler.Remote.Commands;
 using NINA.Plugin.TargetScheduler.SyncService.Sync;
+using NINA.Plugin.TargetScheduler.Util;
 using NINA.Profile.Interfaces;
 using NINA.Sequencer.Container;
 using NINA.Sequencer.Utility;
@@ -64,6 +66,10 @@ namespace NINA.Plugin.TargetScheduler.Sequencer {
 
         public Func<string> Guard { get; set; }
 
+        public CancellationToken? ProcessingToken { get; set; }
+
+        public bool FrameCompleted { get; private set; }
+
         public override async Task Execute(IProgress<ApplicationStatus> progress, CancellationToken token) {
             string skip = Guard?.Invoke();
             if (skip != null) {
@@ -89,20 +95,24 @@ namespace NINA.Plugin.TargetScheduler.Sequencer {
 
             var inputTarget = RetrieveTarget(dsoContainer);
             string exposureId = "";
-            target.ExposureSelector.ExposureTaken(exposure); // we assume the exposure won't be canceled ...
-
-            if (synchronizationEnabled) {
-                exposureId = Guid.NewGuid().ToString();
-                progress?.Report(new ApplicationStatus() { Status = "Target Scheduler: waiting for sync clients to accept exposure" });
-                await TrySendExposureToClients(exposureId, inputTarget, token);
-                progress?.Report(new ApplicationStatus() { Status = "" });
-            }
+            target.ExposureSelector.ExposureTaken(exposure);
 
             var host = Remote.Plugin.RemoteHost.Instance;
-            var opened = host?.ShutterOpening(exposure, null, synchronizationEnabled);
-            IExposureData exposureData;
+            CaptureKey opened = null;
+            bool shutterOpened = false;
+            IExposureData exposureData = null;
             bool aborted = false;
+            bool cancelled = false;
             try {
+                if (synchronizationEnabled) {
+                    exposureId = Guid.NewGuid().ToString();
+                    progress?.Report(new ApplicationStatus() { Status = "Target Scheduler: waiting for sync clients to accept exposure" });
+                    await TrySendExposureToClients(exposureId, inputTarget, token);
+                    progress?.Report(new ApplicationStatus() { Status = "" });
+                }
+
+                opened = host?.ShutterOpening(exposure, null, synchronizationEnabled);
+                shutterOpened = true;
                 if (host == null) {
                     exposureData = await imagingMediator.CaptureImage(capture, token, progress);
                 } else {
@@ -114,11 +124,17 @@ namespace NINA.Plugin.TargetScheduler.Sequencer {
                         host.Control.RequestReplan(outcome.Reason);
                     }
                 }
+            } catch (Exception ex) when (Utils.IsCancelException(ex)) {
+                cancelled = true;
+                TSLogger.Info("exposure cancelled before the frame was saved, the partial frame is not counted");
+                throw;
             } finally {
-                if (aborted) {
+                if (aborted || cancelled) {
                     RevertExposureTaken();
                 }
-                host?.CaptureEnded(aborted);
+                if (shutterOpened) {
+                    host?.CaptureEnded(aborted || cancelled);
+                }
             }
 
             if (aborted) {
@@ -135,8 +151,9 @@ namespace NINA.Plugin.TargetScheduler.Sequencer {
                 imageHistoryVM.Add(exposureData.MetaData.Image.Id, ImageType);
             }
 
-            imageProcessingTask = ProcessImageData(inputTarget, exposureData, progress, token);
+            imageProcessingTask = ProcessImageData(inputTarget, exposureData, progress, ProcessingToken ?? token);
             await imageProcessingTask;
+            FrameCompleted = true;
 
             // If any sync clients accepted this exposure, we have to wait for them to finish before continuing
             if (synchronizationEnabled) {

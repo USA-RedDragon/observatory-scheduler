@@ -31,6 +31,7 @@ using NINA.WPF.Base.Interfaces.Mediator;
 using NINA.WPF.Base.Interfaces.ViewModel;
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 
@@ -69,6 +70,7 @@ namespace NINA.Plugin.TargetScheduler.Sequencer {
         private readonly object flipLock = new object();
         private DateTime? flipStart;
         private TimeSpan flipWait;
+        private CancellationToken sequenceToken;
         private NewTargetStartPublisher newTargetStartPublisher;
         private TargetStartPublisher targetStartPublisher;
 
@@ -137,29 +139,43 @@ namespace NINA.Plugin.TargetScheduler.Sequencer {
         }
 
         public override Task Execute(IProgress<ApplicationStatus> progress, CancellationToken token) {
+            return Execute(progress, token, token);
+        }
+
+        /// <summary>
+        /// Runs the plan under planToken. The after-exposure and after-target-complete event containers
+        /// and the image processing of a finished exposure run under sequenceToken, so a cancel of the plan
+        /// alone does not cancel them.
+        /// </summary>
+        public Task Execute(IProgress<ApplicationStatus> progress, CancellationToken planToken, CancellationToken sequenceToken) {
             TSLogger.Debug("executing target container");
+            this.sequenceToken = sequenceToken;
 
             try {
                 telescopeMediator.BeforeMeridianFlip += BeforeMeridianFlip;
                 telescopeMediator.AfterMeridianFlip += AfterMeridianFlip;
                 AddEndTimeTrigger(plan.PlanTarget);
                 AddInstructions(plan);
-                EnsureUnparked(progress, token);
+                EnsureUnparked(progress, planToken);
 
                 targetStartPublisher.Publish(plan);
 
-                base.Execute(progress, token).Wait();
+                base.Execute(progress, planToken).Wait();
             } catch (Exception ex) {
                 throw;
             } finally {
                 telescopeMediator.BeforeMeridianFlip -= BeforeMeridianFlip;
                 telescopeMediator.AfterMeridianFlip -= AfterMeridianFlip;
                 imageSaveWatcher.WaitForAllImagesSaved();
-                parentContainer.ExecuteEventContainer(parentContainer.AfterEachExposureContainer, progress, token).Wait();
+                if (planToken.IsCancellationRequested && !sequenceToken.IsCancellationRequested && !GetItemsSnapshot().Any(i => i is PlanTakeExposure t && (t.FrameCompleted || t.Status == SequenceEntityStatus.FINISHED))) {
+                    TSLogger.Info("the plan was cancelled before its exposure finished, so the after each exposure instructions are not run");
+                } else {
+                    parentContainer.ExecuteEventContainer(parentContainer.AfterEachExposureContainer, progress, sequenceToken).Wait();
+                }
 
                 ITarget target = ReloadTarget(plan.PlanTarget);
                 if (target != null && !target.Project.ExposureCompletionHelper.IsIncomplete(target)) {
-                    parentContainer.ExecuteEventContainer(parentContainer.AfterTargetCompleteContainer, progress, token).Wait();
+                    parentContainer.ExecuteEventContainer(parentContainer.AfterTargetCompleteContainer, progress, sequenceToken).Wait();
                     TargetScheduler.EventMediator.InvokeTargetComplete(target);
                     parentContainer.targetCompletePublisher.Publish(plan);
                 }
@@ -325,6 +341,7 @@ namespace NINA.Plugin.TargetScheduler.Sequencer {
                         exposure);
             SetItemDefaults(takeExposure, nameof(TakeExposure));
             takeExposure.Guard = () => BeforeExposure(exposure);
+            takeExposure.ProcessingToken = sequenceToken;
 
             takeExposure.ExposureCount = GetExposureCount();
             takeExposure.ExposureTime = exposure.ExposureLength;
