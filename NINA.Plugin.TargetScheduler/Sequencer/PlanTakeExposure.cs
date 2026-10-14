@@ -66,6 +66,12 @@ namespace NINA.Plugin.TargetScheduler.Sequencer {
 
         public Func<string> Guard { get; set; }
 
+        /// <summary>
+        /// Waits, before a light, until the sensor is at the setpoint. It returns null to take the
+        /// light, or the reason to skip it so the scheduler plans again.
+        /// </summary>
+        public Func<IProgress<ApplicationStatus>, CancellationToken, Task<string>> SensorGate { get; set; }
+
         /// <summary>Runs before a light once the guard passes; a non-null result skips the exposure.</summary>
         public Func<IProgress<ApplicationStatus>, CancellationToken, Task<string>> BeforeCapture { get; set; }
 
@@ -74,6 +80,14 @@ namespace NINA.Plugin.TargetScheduler.Sequencer {
         public bool FrameCompleted { get; private set; }
 
         public override async Task Execute(IProgress<ApplicationStatus> progress, CancellationToken token) {
+            if (SensorGate != null && IsLightSequence()) {
+                string notReady = await SensorGate(progress, token);
+                if (notReady != null) {
+                    TSLogger.Info($"not starting the exposure: {notReady}");
+                    return;
+                }
+            }
+
             string skip = Guard?.Invoke();
             if (skip != null) {
                 TSLogger.Info($"not starting the exposure: {skip}");

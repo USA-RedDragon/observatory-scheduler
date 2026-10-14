@@ -2,6 +2,7 @@
 using NINA.Core.Enum;
 using NINA.Core.Model;
 using NINA.Core.Utility.WindowService;
+using NINA.Equipment.Equipment.MyCamera;
 using NINA.Equipment.Equipment.MyTelescope;
 using NINA.Equipment.Interfaces;
 using NINA.Equipment.Interfaces.Mediator;
@@ -341,7 +342,9 @@ namespace NINA.Plugin.TargetScheduler.Sequencer {
                         exposure);
             SetItemDefaults(takeExposure, nameof(TakeExposure));
             takeExposure.Guard = () => BeforeExposure(exposure);
+            takeExposure.SensorGate = WaitForSensor;
             takeExposure.BeforeCapture = CoolerStep;
+            CameraConnections.Watch(cameraMediator);
             takeExposure.ProcessingToken = sequenceToken;
 
             takeExposure.ExposureCount = GetExposureCount();
@@ -404,6 +407,39 @@ namespace NINA.Plugin.TargetScheduler.Sequencer {
                 }
             }
             return $"{moved}, so the rest of this plan is skipped and the scheduler plans again with the triggers run first";
+        }
+
+        private async Task<string> WaitForSensor(IProgress<ApplicationStatus> progress, CancellationToken token) {
+            SensorGate gate = new SensorGate(ReadSensor, (d, t) => Task.Delay(d, t), () => DateTime.Now,
+                SensorGate.DefaultHold, SensorGate.DefaultPoll, SensorGate.DefaultTimeout);
+            SensorGateOutcome outcome;
+            bool reported = false;
+            try {
+                outcome = await gate.WaitAsync(msg => {
+                    TSLogger.Info($"sensor gate: {msg}");
+                    progress?.Report(new ApplicationStatus { Status = $"Target Scheduler: {msg}" });
+                    reported = true;
+                }, token);
+            } finally {
+                if (reported) {
+                    progress?.Report(new ApplicationStatus { Status = "" });
+                }
+            }
+            switch (outcome) {
+                case SensorGateOutcome.Settled:
+                    return "the sensor is back at the setpoint after a wait, so the scheduler plans again with the current time";
+                case SensorGateOutcome.TimedOut:
+                    TSLogger.Warning($"sensor gate: no light while the sensor is off the setpoint: {SensorGate.Describe(ReadSensor())}");
+                    return "the sensor is off the setpoint";
+                default:
+                    return null;
+            }
+        }
+
+        private SensorReading ReadSensor() {
+            CameraInfo info = cameraMediator.GetInfo();
+            return new SensorReading(info.Connected, info.CanSetTemperature, info.CoolerOn, info.Temperature, info.TemperatureSetPoint,
+                TargetSchedulerDarks.PendingRestore(), CameraConnections.ConnectedAt);
         }
 
         private string BeforeExposure(IExposure exposure) {
