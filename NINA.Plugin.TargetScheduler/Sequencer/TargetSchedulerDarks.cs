@@ -549,66 +549,20 @@ namespace NINA.Plugin.TargetScheduler.Sequencer {
             return null;
         }
 
-        private static readonly object restoreSync = new object();
-        private static CancellationTokenSource restoreCts;
-        private static Task<bool> restoreTask;
-        private static double restoreTarget;
-
-        private static double? PendingRestore() {
-            lock (restoreSync) {
-                return restoreTask != null && !restoreTask.IsCompleted ? restoreTarget : (double?)null;
-            }
+        internal static double? PendingRestore() {
+            return CoolerRamp.Pending();
         }
 
-        private static async Task StopRestore() {
-            CancellationTokenSource cts;
-            Task<bool> task;
-            lock (restoreSync) {
-                cts = restoreCts;
-                task = restoreTask;
-                restoreCts = null;
-                restoreTask = null;
-            }
-            if (task == null) {
-                return;
-            }
-            if (!task.IsCompleted) {
-                TSLogger.Info("TS Darks: stopping the restore ramp that is still running");
-                cts.Cancel();
-                try {
-                    await task;
-                } catch (Exception) {
-                }
-            }
-            cts.Dispose();
+        private static Task StopRestore() {
+            return CoolerRamp.Stop("TS Darks");
         }
 
         private Task<bool> StartRestore(double target, IProgress<ApplicationStatus> progress) {
-            var cts = new CancellationTokenSource();
-            Task<bool> task = RampTo(target, progress, cts.Token);
-            _ = task.ContinueWith(t => TSLogger.Warning($"TS Darks: the restore ramp to {target} °C ended: {t.Exception?.GetBaseException().Message ?? "canceled"}"),
-                CancellationToken.None, TaskContinuationOptions.NotOnRanToCompletion, TaskScheduler.Default);
-            lock (restoreSync) {
-                restoreCts = cts;
-                restoreTask = task;
-                restoreTarget = target;
-            }
-            return task;
+            return CoolerRamp.StartBackground(cameraMediator, target, "restore", "TS Darks", progress);
         }
 
-        private async Task<bool> RampTo(double target, IProgress<ApplicationStatus> progress, CancellationToken token) {
-            CameraInfo info = cameraMediator.GetInfo();
-            if (double.IsNaN(info.Temperature)) {
-                TSLogger.Warning($"TS Darks: not moving the setpoint to {target} °C: {DarkPlanner.SensorUnknown}");
-                return false;
-            }
-            TimeSpan ramp = DarkPlanner.Ramp(info.Temperature, target);
-            TSLogger.Info($"TS Darks: ramping the setpoint from {info.TemperatureSetPoint} °C (sensor {info.Temperature} °C) to {target} °C over {ramp.TotalMinutes:0.##} min");
-            bool ok = await cameraMediator.CoolCamera(target, ramp, progress, token);
-            if (ok && !DarkPlanner.SameSetpoint(cameraMediator.GetInfo().TemperatureSetPoint, target)) {
-                ok = await cameraMediator.CoolCamera(target, TimeSpan.Zero, progress, token);
-            }
-            return ok;
+        private Task<bool> RampTo(double target, IProgress<ApplicationStatus> progress, CancellationToken token) {
+            return CoolerRamp.RampTo(cameraMediator, target, "TS Darks", progress, token);
         }
 
         private async Task<string> WaitAtTemperature(double target, TemperatureWatch watch, CancellationToken token) {
