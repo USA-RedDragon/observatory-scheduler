@@ -59,6 +59,7 @@
     <Compile Include="..\NINA.Plugin.TargetScheduler\Sequencer\UnsafeStopRule.cs" Link="Linked\Sequencer\UnsafeStopRule.cs" />
     <Compile Include="..\NINA.Plugin.TargetScheduler\Sequencer\SensorGate.cs" Link="Linked\Sequencer\SensorGate.cs" />
     <Compile Include="..\NINA.Plugin.TargetScheduler\Planning\EndTimeStops.cs" Link="Linked\Planning\EndTimeStops.cs" />
+    <Compile Include="..\NINA.Plugin.TargetScheduler\Sequencer\PlanOutcome.cs" Link="Linked\Sequencer\PlanOutcome.cs" />
   </ItemGroup>
 
   <ItemGroup>

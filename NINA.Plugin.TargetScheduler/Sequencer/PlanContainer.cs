@@ -168,8 +168,8 @@ namespace NINA.Plugin.TargetScheduler.Sequencer {
                 telescopeMediator.BeforeMeridianFlip -= BeforeMeridianFlip;
                 telescopeMediator.AfterMeridianFlip -= AfterMeridianFlip;
                 imageSaveWatcher.WaitForAllImagesSaved();
-                if (planToken.IsCancellationRequested && !sequenceToken.IsCancellationRequested && !GetItemsSnapshot().Any(i => i is PlanTakeExposure t && (t.FrameCompleted || t.Status == SequenceEntityStatus.FINISHED))) {
-                    TSLogger.Info("the plan was cancelled before its exposure finished, so the after each exposure instructions are not run");
+                if (!PlanOutcome.RunsAfterEachExposure(sequenceToken.IsCancellationRequested, GetItemsSnapshot().Any(i => i is PlanTakeExposure t && t.FrameCompleted))) {
+                    TSLogger.Info("the plan ended without saving a frame, so the after each exposure instructions are not run");
                 } else {
                     parentContainer.ExecuteEventContainer(parentContainer.AfterEachExposureContainer, progress, sequenceToken).Wait();
                 }
