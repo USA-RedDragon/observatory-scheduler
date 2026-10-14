@@ -100,6 +100,7 @@ namespace NINA.Plugin.TargetScheduler {
             Remote.Plugin.RemoteHost.Start(profileService, focuserMediator, filterWheelMediator);
             RemoteOptions = new Remote.Plugin.RemoteOptionsVM();
             Darks.CoolerRuntime.Start(cameraMediator, weatherDataMediator, safetyMonitorMediator, flatDeviceMediator);
+            CoolerOptions = new Darks.CoolerOptionsVM();
 
             //new ExportProfile(profileService.ActiveProfile, false).Export();
             //new ImportProfile(profileService.ActiveProfile, "C:\\Users\\Tom\\AppData\\Local\\NINA\\SchedulerPlugin\\exported-all.zip", true).Import();
@@ -134,6 +135,16 @@ namespace NINA.Plugin.TargetScheduler {
             set {
                 remoteOptions = value;
                 RaisePropertyChanged(nameof(RemoteOptions));
+            }
+        }
+
+        private Darks.CoolerOptionsVM coolerOptions;
+
+        public Darks.CoolerOptionsVM CoolerOptions {
+            get => coolerOptions;
+            set {
+                coolerOptions = value;
+                RaisePropertyChanged(nameof(CoolerOptions));
             }
         }
 
