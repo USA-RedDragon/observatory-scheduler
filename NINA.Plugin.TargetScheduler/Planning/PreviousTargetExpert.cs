@@ -63,6 +63,11 @@ namespace NINA.Plugin.TargetScheduler.Planning {
                 return false;
             }
 
+            if (!isPreview && EndTimeStops.StoppedUntil(previousTarget.DatabaseId, atTime) is DateTime stoppedAt) {
+                TSLogger.Info($"not continuing previous target at {atTime}, {previousTarget.Name}: the target end time trigger stopped it, as the next instruction would run past {stoppedAt}");
+                return false;
+            }
+
             // If we detect that the active target has been edited since it started, we have to abort
             if (!isPreview && TargetEditGuard.Instance.IsEdited(previousTarget.DatabaseId)) {
                 TSLogger.Info($"not continuing previous target at {atTime}, {previousTarget.Name}: detected impacting edit to target");

@@ -204,7 +204,7 @@ namespace NINA.Plugin.TargetScheduler.Sequencer {
 
         private void AddEndTimeTrigger(ITarget planTarget) {
             TSLogger.Debug($"adding target end time trigger, run until: {Utils.FormatDateTimeFull(planTarget.EndTime)}");
-            Add(new SchedulerTargetEndTimeTrigger(planTarget.EndTime));
+            Add(new SchedulerTargetEndTimeTrigger(planTarget.EndTime, planTarget.DatabaseId));
         }
 
         private void AddInstructions(SchedulerPlan plan) {

@@ -58,6 +58,7 @@
     <Compile Include="..\NINA.Plugin.TargetScheduler.Shared\Utility\LogThrottle.cs" Link="Linked\Shared\LogThrottle.cs" />
     <Compile Include="..\NINA.Plugin.TargetScheduler\Sequencer\UnsafeStopRule.cs" Link="Linked\Sequencer\UnsafeStopRule.cs" />
     <Compile Include="..\NINA.Plugin.TargetScheduler\Sequencer\SensorGate.cs" Link="Linked\Sequencer\SensorGate.cs" />
+    <Compile Include="..\NINA.Plugin.TargetScheduler\Planning\EndTimeStops.cs" Link="Linked\Planning\EndTimeStops.cs" />
   </ItemGroup>
 
   <ItemGroup>

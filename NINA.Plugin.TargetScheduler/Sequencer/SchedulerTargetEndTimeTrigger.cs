@@ -12,11 +12,13 @@ namespace NINA.Plugin.TargetScheduler.Sequencer {
 
     public class SchedulerTargetEndTimeTrigger : SequenceTrigger {
         private DateTime EndTime;
+        private int TargetId;
 
-        public SchedulerTargetEndTimeTrigger(DateTime endTime) {
+        public SchedulerTargetEndTimeTrigger(DateTime endTime, int targetId) {
             Name = nameof(SchedulerTargetEndTimeTrigger);
             Category = PlanContainer.INSTRUCTION_CATEGORY;
             this.EndTime = endTime;
+            this.TargetId = targetId;
         }
 
         public override object Clone() {
@@ -25,6 +27,7 @@ namespace NINA.Plugin.TargetScheduler.Sequencer {
 
         public override Task Execute(ISequenceContainer context, IProgress<ApplicationStatus> progress, CancellationToken token) {
             TSLogger.Info("target stop time exceeded, interrupting target container");
+            Planning.EndTimeStops.Record(TargetId, EndTime);
             this.Parent.Interrupt().Wait(token);
             return Task.CompletedTask;
         }
