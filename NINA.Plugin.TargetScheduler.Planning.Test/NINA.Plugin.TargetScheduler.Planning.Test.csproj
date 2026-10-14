@@ -39,6 +39,9 @@
     <Compile Include="..\NINA.Plugin.TargetScheduler\Planning\ImagingLimit.cs" Link="Linked\Planning\ImagingLimit.cs" />
     <Compile Include="..\NINA.Plugin.TargetScheduler\Planning\SunConditionModel.cs" Link="Linked\Planning\SunConditionModel.cs" />
     <Compile Include="..\NINA.Plugin.TargetScheduler\Darks\DarkReadiness.cs" Link="Linked\Darks\DarkReadiness.cs" />
+    <Compile Include="..\NINA.Plugin.TargetScheduler\Darks\CoolerControl.cs" Link="Linked\Darks\CoolerControl.cs" />
+    <Compile Include="..\NINA.Plugin.TargetScheduler\Darks\CoolerMove.cs" Link="Linked\Darks\CoolerMove.cs" />
+    <Compile Include="..\NINA.Plugin.TargetScheduler\Darks\CoolerSettings.cs" Link="Linked\Darks\CoolerSettings.cs" />
     <Compile Include="..\NINA.Plugin.TargetScheduler\Darks\BiasPlanner.cs" Link="Linked\Darks\BiasPlanner.cs" />
     <Compile Include="..\NINA.Plugin.TargetScheduler\Planning\FilterCadence.cs" Link="Linked\Planning\FilterCadence.cs" />
     <Compile Include="..\NINA.Plugin.TargetScheduler\Planning\Interfaces\IFilterCadenceItem.cs" Link="Linked\Planning\Interfaces\IFilterCadenceItem.cs" />
