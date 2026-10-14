@@ -1,5 +1,12 @@
 # Observatory Scheduler
 
+## 5.8.2.228 - 2026-10-14
+* Safety stop during a plan: when the safety monitor stays unsafe for 4 s while the scheduler runs a plan, the scheduler cancels the running plan instruction (exposure, slew, center, autofocus, dither or wait) and runs the When Becomes Unsafe trigger at once. On 2026-10-14 the monitor went unsafe at 02:54:27 but the trigger ran only at 03:03:03, when a retrying CenterAndRotate ended, so the flap stayed open for 8 min 47 s. NINA runs the scheduler container's triggers only between instructions, and the Powerups interrupt watchdog never starts inside this container.
+* Only the plan is cancelled. The sequence keeps running, so NINA does not exit with --exitaftersequence. Nothing happens when no safety monitor is connected or when no enabled When Becomes Unsafe trigger is on the container or above it. The trigger's own safe check is used, so a SAFE variable still applies.
+* A cancelled exposure is not counted: the filter cadence and dither count are restored and the web frame number goes back. A frame that finished downloading is still saved. After Each Exposure does not run for a plan whose exposure did not finish.
+* After the trigger runs, the next plan for the same target adds a slew and center, because the trigger homes the mount. If the trigger runs between instructions inside a plan, the rest of that plan is skipped and the scheduler plans again. A meridian flip cancelled by the stop is evaluated again.
+* The log says "safety monitor unsafe since HH:mm:ss: cancelled the running plan instruction (...)" in the scheduler log and the NINA log.
+
 ## 5.8.2.227 - 2026-10-13
 * Live autofocus points also stream on NINA 3.2.0.9001. The version gate allowed only 3.1, so 3.2 turned the feed off.
 
