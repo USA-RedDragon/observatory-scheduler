@@ -341,6 +341,7 @@ namespace NINA.Plugin.TargetScheduler.Sequencer {
                         exposure);
             SetItemDefaults(takeExposure, nameof(TakeExposure));
             takeExposure.Guard = () => BeforeExposure(exposure);
+            takeExposure.BeforeCapture = CoolerStep;
             takeExposure.ProcessingToken = sequenceToken;
 
             takeExposure.ExposureCount = GetExposureCount();
@@ -390,6 +391,19 @@ namespace NINA.Plugin.TargetScheduler.Sequencer {
                 TSLogger.Info($"meridian flip measured from NINA's flip start and end events: {elapsed.TotalSeconds:0} s in total, {wait.TotalSeconds:0} s of it waiting to pass the meridian, {overhead.Value.TotalSeconds:0} s for the slew, recenter and settle");
             }
             return Task.CompletedTask;
+        }
+
+        private async Task<string> CoolerStep(IProgress<ApplicationStatus> progress, CancellationToken token) {
+            string moved = await Darks.CoolerRuntime.BeforeExposure(progress, token);
+            if (moved == null) {
+                return null;
+            }
+            foreach (ISequenceItem item in GetItemsSnapshot()) {
+                if (item.Status == SequenceEntityStatus.CREATED) {
+                    item.Skip();
+                }
+            }
+            return $"{moved}, so the rest of this plan is skipped and the scheduler plans again with the triggers run first";
         }
 
         private string BeforeExposure(IExposure exposure) {

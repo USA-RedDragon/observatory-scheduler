@@ -65,6 +65,7 @@ namespace NINA.Plugin.TargetScheduler.Sequencer {
         }
 
         public override async Task Execute(IProgress<ApplicationStatus> progress, CancellationToken token) {
+            using IDisposable cooler = Darks.CoolerRuntime.Own("flats");
             try {
                 DisplayText = "Determining needed flats";
                 List<LightSession> neededFlats = GetNeededFlats();
