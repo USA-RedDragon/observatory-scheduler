@@ -1,5 +1,11 @@
 # Observatory Scheduler
 
+## 5.8.2.230 - 2026-10-14
+* Sensor gate: after any setpoint change (a cooler controller move, the end of a ramp, a darks restore, a camera connect, the cooler starting, or a setpoint set from outside the scheduler), no light starts until the sensor has been less than 0.5 °C from the final setpoint for 60 s without a break. The plugin follows every camera update to tell how long the sensor has held the setpoint, so a sensor that left the band during an exposure also makes the next light wait. While a ramp runs, the hold does not start. Before, the gate passed at once when the sensor was within 0.5 °C at the moment the light started: on 2026-10-14 a 600 s light started at 20:46:18, 1 s after the cooler move to -4 °C ended with the sensor at -3.50 °C.
+* A sensor exactly 0.5 °C off the setpoint now counts as outside the band.
+* The gate also runs after the cooler step, so a light does not start right after the cooler step waited for the sensor.
+* Each wait and release is logged with its time and the reason the hold restarted. The 20 min limit and the warning stay; cameras that do not regulate their temperature do not wait.
+
 ## 5.8.2.229 - 2026-10-14
 * Cooler power controller: before each scheduler light, the scheduler sets the cooler setpoint on a 2 °C grid. At the first light of the night it picks the setpoint that its fit of past cooler power against ambient predicts at the 80% target power. It steps 2 °C warmer when the 5-minute median power is above 88%, and 2 °C colder when every 5-minute median over 15 min is below 70% and the colder setpoint is predicted at 85% or less. Steps are at least 20 min apart, ramp at 1 °C per minute, and the scheduler plans again after a move. A colder step that is not reached goes back to the grid point above the sensor and stops colder steps for the night. Darks and flats own the setpoint while they run.
 * The thresholds and an on/off switch are on the plugin options page under TS Cooler (defaults: enabled, 80/70/88/85%). Each decision is stored in the new ts_cooler_setpoint table, which the plugin creates at start.
