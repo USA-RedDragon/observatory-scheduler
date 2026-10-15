@@ -2,7 +2,6 @@
 using NINA.Core.Enum;
 using NINA.Core.Model;
 using NINA.Core.Utility.WindowService;
-using NINA.Equipment.Equipment.MyCamera;
 using NINA.Equipment.Equipment.MyTelescope;
 using NINA.Equipment.Interfaces;
 using NINA.Equipment.Interfaces.Mediator;
@@ -410,8 +409,8 @@ namespace NINA.Plugin.TargetScheduler.Sequencer {
         }
 
         private async Task<string> WaitForSensor(IProgress<ApplicationStatus> progress, CancellationToken token) {
-            SensorGate gate = new SensorGate(ReadSensor, (d, t) => Task.Delay(d, t), () => DateTime.Now,
-                SensorGate.DefaultHold, SensorGate.DefaultPoll, SensorGate.DefaultTimeout);
+            SensorGate gate = new SensorGate(ReadSensor, (d, t) => Task.Delay(d, t), () => DateTime.UtcNow,
+                SensorGate.DefaultHold, SensorGate.DefaultPoll, SensorGate.DefaultTimeout, CameraConnections.Hold);
             SensorGateOutcome outcome;
             bool reported = false;
             try {
@@ -432,14 +431,13 @@ namespace NINA.Plugin.TargetScheduler.Sequencer {
                     TSLogger.Warning($"sensor gate: no light while the sensor is off the setpoint: {SensorGate.Describe(ReadSensor())}");
                     return "the sensor is off the setpoint";
                 default:
+                    TSLogger.Debug($"sensor gate: {gate.Status(ReadSensor())}");
                     return null;
             }
         }
 
         private SensorReading ReadSensor() {
-            CameraInfo info = cameraMediator.GetInfo();
-            return new SensorReading(info.Connected, info.CanSetTemperature, info.CoolerOn, info.Temperature, info.TemperatureSetPoint,
-                TargetSchedulerDarks.PendingRestore(), CameraConnections.ConnectedAt);
+            return CameraConnections.Read(cameraMediator.GetInfo());
         }
 
         private string BeforeExposure(IExposure exposure) {
