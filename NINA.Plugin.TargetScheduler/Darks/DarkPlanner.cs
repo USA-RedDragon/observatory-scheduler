@@ -237,47 +237,54 @@ namespace NINA.Plugin.TargetScheduler.Darks {
         }
 
         public static string StopReason(DarkWindow w) {
+            return Stop(w).Reason;
+        }
+
+        /// <summary>
+        /// Why darks must stop now, with a short code for it: cover, time_limit, sun, wait_end, replan, safe or no_safety.
+        /// </summary>
+        public static (string Code, string Reason) Stop(DarkWindow w) {
             string cover = CoverStopReason(w.Cover);
             if (cover != null) {
-                return cover;
+                return ("cover", cover);
             }
 
             if (w.StopBy.HasValue && w.Now >= w.StopBy.Value) {
-                return "the instruction's time limit is up";
+                return ("time_limit", "the instruction's time limit is up");
             }
 
             string sun = SunStopReason(w);
             if (sun != null) {
-                return sun;
+                return ("sun", sun);
             }
 
             switch (w.Placement) {
                 case DarkPlacement.BeforeWait:
                     if (!w.WaitUntil.HasValue) {
-                        return "not inside a Target Scheduler wait";
+                        return ("wait_end", "not inside a Target Scheduler wait");
                     }
                     if (w.ReplanOrPause) {
-                        return "a re-plan or pause was requested from the web";
+                        return ("replan", "a re-plan or pause was requested from the web");
                     }
                     if (!w.AfterWait.HasValue) {
-                        return "the AfterWait instructions have not been timed yet, so the margin before imaging is not known";
+                        return ("wait_end", "the AfterWait instructions have not been timed yet, so the margin before imaging is not known");
                     }
                     if (w.Now >= w.WaitUntil.Value - w.AfterWait.Value) {
-                        return "the wait is over";
+                        return ("wait_end", "the wait is over");
                     }
-                    return null;
+                    return (null, null);
 
                 case DarkPlacement.WhileUnsafe:
                     if (!w.Safe.HasValue) {
-                        return "no safety monitor is connected, so it is not known when imaging can resume";
+                        return ("no_safety", "no safety monitor is connected, so it is not known when imaging can resume");
                     }
                     if (w.Safe.Value) {
-                        return "it is safe again";
+                        return ("safe", "it is safe again");
                     }
-                    return null;
+                    return (null, null);
 
                 default:
-                    return null;
+                    return (null, null);
             }
         }
 
@@ -351,39 +358,46 @@ namespace NINA.Plugin.TargetScheduler.Darks {
         }
 
         public static string FitReason(DarkWindow w, DarkNeed need, double currentSetpoint, double imagingSetpoint, CoolerRates rates, TimeSpan overhead) {
+            return Fit(w, need, currentSetpoint, imagingSetpoint, rates, overhead).Reason;
+        }
+
+        /// <summary>
+        /// Why the next dark of <paramref name="need"/> does not fit now, with a short code for it: unmeasured_move, sun or wait_end.
+        /// </summary>
+        public static (string Code, string Reason) Fit(DarkWindow w, DarkNeed need, double currentSetpoint, double imagingSetpoint, CoolerRates rates, TimeSpan overhead) {
             TimeSpan? there = MoveTime(currentSetpoint, need.SetTemp, rates);
             if (!there.HasValue) {
                 string unmeasured = UnmeasuredMoveReason(w, need, currentSetpoint, overhead);
                 if (unmeasured != null) {
-                    return unmeasured;
+                    return ("unmeasured_move", unmeasured);
                 }
             }
 
             string sun = SunFitReason(w, there ?? TimeSpan.Zero, need.Exposure, overhead);
             if (sun != null) {
-                return sun;
+                return ("sun", sun);
             }
 
             if (w.Placement != DarkPlacement.BeforeWait) {
-                return null;
+                return (null, null);
             }
 
             TimeSpan? back = MoveTime(need.SetTemp, imagingSetpoint, rates);
             if (!there.HasValue || !back.HasValue) {
-                return string.Format(CultureInfo.InvariantCulture,
+                return ("unmeasured_move", string.Format(CultureInfo.InvariantCulture,
                     "it needs the setpoint moved to {0} °C and back to {1} °C, and the cooler's rate in that direction has not been measured yet",
-                    need.SetTemp, imagingSetpoint);
+                    need.SetTemp, imagingSetpoint));
             }
 
             DateTime end = w.Now + there.Value + TimeSpan.FromSeconds(need.Exposure) + overhead + back.Value + (w.AfterWait ?? TimeSpan.Zero);
             if (end > w.WaitUntil.Value) {
-                return string.Format(CultureInfo.InvariantCulture,
+                return ("wait_end", string.Format(CultureInfo.InvariantCulture,
                     "a {0} s dark with {1:0} s to reach {2} °C, {3:0} s to return and {4:0} s of AfterWait would end at {5:HH:mm:ss}, after the wait ends at {6:HH:mm:ss}",
                     need.Exposure, there.Value.TotalSeconds, need.SetTemp, back.Value.TotalSeconds, (w.AfterWait ?? TimeSpan.Zero).TotalSeconds,
-                    end.ToLocalTime(), w.WaitUntil.Value.ToLocalTime());
+                    end.ToLocalTime(), w.WaitUntil.Value.ToLocalTime()));
             }
 
-            return null;
+            return (null, null);
         }
 
         public static string UnmeasuredMoveReason(DarkWindow w, DarkNeed need, double currentSetpoint, TimeSpan overhead) {

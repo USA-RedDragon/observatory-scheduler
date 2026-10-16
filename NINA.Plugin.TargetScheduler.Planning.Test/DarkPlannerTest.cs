@@ -103,6 +103,35 @@ namespace NINA.Plugin.TargetScheduler.Planning.Test {
         }
 
         [Test]
+        public void StopAndFitNameTheirCause() {
+            var w = new DarkWindow { Placement = DarkPlacement.BeforeWait, Now = Now, SunAltitudeAt = Night };
+            DarkPlanner.Stop(w).Code.Should().Be("wait_end");
+            w.WaitUntil = Now.AddHours(1);
+            w.AfterWait = TimeSpan.FromSeconds(40);
+            DarkPlanner.Stop(w).Should().Be(((string)null, (string)null));
+            w.ReplanOrPause = true;
+            DarkPlanner.Stop(w).Code.Should().Be("replan");
+            var u = new DarkWindow { Placement = DarkPlacement.WhileUnsafe, Now = Now, SunAltitudeAt = Night, Safe = true };
+            DarkPlanner.Stop(u).Should().Be(("safe", "it is safe again"));
+            u.Safe = null;
+            DarkPlanner.Stop(u).Code.Should().Be("no_safety");
+            u.StopBy = Now;
+            DarkPlanner.Stop(u).Code.Should().Be("time_limit");
+            u.SunAltitudeAt = t => null;
+            u.StopBy = null;
+            DarkPlanner.Stop(u).Code.Should().Be("sun");
+
+            var need = new DarkNeed { Exposure = 300, SetTemp = 0 };
+            var wait = new DarkWindow { Placement = DarkPlacement.BeforeWait, Now = Now, WaitUntil = Now.AddSeconds(200), AfterWait = TimeSpan.FromSeconds(40), SunAltitudeAt = Night };
+            var rates = new CoolerRates { CoolingSecondsPerC = 30, WarmingSecondsPerC = 10 };
+            DarkPlanner.Fit(wait, need, 0, 0, rates, TimeSpan.Zero).Code.Should().Be("wait_end");
+            DarkPlanner.Fit(wait, need, 5, 5, new CoolerRates(), TimeSpan.Zero).Code.Should().Be("unmeasured_move");
+            var unsafeWindow = new DarkWindow { Placement = DarkPlacement.WhileUnsafe, Now = Now, SunAltitudeAt = Night };
+            DarkPlanner.Fit(unsafeWindow, need, 0, 0, rates, TimeSpan.Zero).Should().Be(((string)null, (string)null));
+            DarkPlanner.FitReason(wait, need, 0, 0, rates, TimeSpan.Zero).Should().Be(DarkPlanner.Fit(wait, need, 0, 0, rates, TimeSpan.Zero).Reason);
+        }
+
+        [Test]
         public void BeforeWaitStartsOnlyADarkThatEndsWithRoomForRestoreAndAfterWait() {
             var w = new DarkWindow { Placement = DarkPlacement.BeforeWait, Now = Now, WaitUntil = Now.AddSeconds(600), AfterWait = TimeSpan.FromSeconds(40), SunAltitudeAt = Night };
             var rates = new CoolerRates { CoolingSecondsPerC = 30, WarmingSecondsPerC = 10 };
