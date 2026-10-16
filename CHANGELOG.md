@@ -1,5 +1,11 @@
 # Observatory Scheduler
 
+## 5.8.2.231 - 2026-10-15
+* Status API: /os/v1/status has a new `calibration` block while darks, bias frames or flats are taken, while the sequence cools the camera after a passed darks check, and after a darks or flats run ends. It reports the kind (cooling, darks, bias, flats, done), the placement, the set being taken with its exposure, gain, offset, binning, set temperature, filter, target and panel brightness, frames done of the set size, the exposure in progress, the run's queue with each set's status, plain skip reason and estimated start, end and frames that fit before the sun reaches -8°, the sets taken tonight, why the last run stopped, and up to 20 plain steps of the night's calibration.
+* The state is "calibrating" instead of "stopped" while calibration runs outside the scheduler, in its wait, or in its unsafe trigger.
+* The sequence's own Cool Camera instruction is found in the running sequence, so the status shows its target and an estimated end.
+* Each darks stop and skip now has a short cause code next to its reason.
+
 ## 5.8.2.230 - 2026-10-14
 * Sensor gate: after any setpoint change (a cooler controller move, the end of a ramp, a darks restore, a camera connect, the cooler starting, or a setpoint set from outside the scheduler), no light starts until the sensor has been less than 0.5 °C from the final setpoint for 60 s without a break. The plugin follows every camera update to tell how long the sensor has held the setpoint, so a sensor that left the band during an exposure also makes the next light wait. While a ramp runs, the hold does not start. Before, the gate passed at once when the sensor was within 0.5 °C at the moment the light started: on 2026-10-14 a 600 s light started at 20:46:18, 1 s after the cooler move to -4 °C ended with the sensor at -3.50 °C.
 * A sensor exactly 0.5 °C off the setpoint now counts as outside the band.
