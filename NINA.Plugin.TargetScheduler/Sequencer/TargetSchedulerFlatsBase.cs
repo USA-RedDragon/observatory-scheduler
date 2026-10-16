@@ -13,6 +13,7 @@ using NINA.Equipment.Model;
 using NINA.Plugin.TargetScheduler.Database;
 using NINA.Plugin.TargetScheduler.Database.Schema;
 using NINA.Plugin.TargetScheduler.Flats;
+using NINA.Plugin.TargetScheduler.Remote.Api;
 using NINA.Plugin.TargetScheduler.Shared.Utility;
 using NINA.Plugin.TargetScheduler.SyncService.Sync;
 using NINA.Plugin.TargetScheduler.Util;
@@ -168,6 +169,83 @@ namespace NINA.Plugin.TargetScheduler.Sequencer {
         private string targetName = null;
         public string TargetName { get => targetName; set => targetName = value; }
 
+        private double currentFlatExposure;
+        protected bool calibrationStarted;
+        protected string calibrationEndCode;
+        protected string calibrationEndReason;
+
+        public static string FlatKey(LightSession s) => "flat:" + s;
+
+        protected string FlatsPlacement() {
+            ISequenceContainer p = Parent;
+            while (p != null) {
+                if (p is TargetSchedulerContainer) {
+                    return "before_wait";
+                }
+                p = p.Parent;
+            }
+            return "end_of_night";
+        }
+
+        protected void PublishFlats(IList<LightSession> needed) {
+            CalibrationWatch.Remember(this);
+            calibrationStarted = false;
+            calibrationEndCode = null;
+            calibrationEndReason = null;
+            try {
+                var names = new Dictionary<int, string>();
+                var items = new List<StatusCalibrationQueueItem>();
+                foreach (LightSession s in needed) {
+                    if (!names.TryGetValue(s.TargetId, out string name)) {
+                        name = GetTarget(s.TargetId)?.Name;
+                        names[s.TargetId] = name;
+                    }
+                    TrainedFlatExposureSetting setting = flatsExpert?.GetTrainedFlatExposureSetting(profileService.ActiveProfile, s.FlatSpec);
+                    items.Add(new StatusCalibrationQueueItem {
+                        Kind = CalibrationActivity.KindFlats,
+                        ComboKey = FlatKey(s),
+                        Exposure = setting?.Time,
+                        Gain = setting != null && setting.Gain != -1 ? setting.Gain : s.FlatSpec.Gain,
+                        Offset = setting != null && setting.Offset != -1 ? setting.Offset : s.FlatSpec.Offset,
+                        Binning = s.FlatSpec.BinningMode?.X,
+                        Filter = s.FlatSpec.FilterName,
+                        TargetName = name,
+                        FramesTotal = FlatCount,
+                        Remaining = FlatCount,
+                    });
+                }
+                double download = cameraMediator.GetInfo()?.LastDownloadTime ?? 0;
+                var ctx = new CalibrationPlanContext { Overhead = TimeSpan.FromSeconds(Math.Max(0, double.IsNaN(download) ? 0 : download)) };
+                CalibrationActivity.Current.RunStarted(CalibrationActivity.KindFlats, FlatsPlacement(), items, null, null, ctx);
+                calibrationStarted = true;
+            } catch (Exception ex) {
+                TSLogger.Warning($"TS Flats: could not list the flats for the status: {ex.Message}");
+            }
+        }
+
+        protected void FlatsEnded() {
+            if (calibrationStarted) {
+                calibrationStarted = false;
+                CalibrationActivity.Current.RunEnded(calibrationEndCode, calibrationEndReason);
+            }
+        }
+
+        protected void FlatSkipped(LightSession s, string code, string reason) {
+            if (calibrationStarted) {
+                CalibrationActivity.Current.SetFinished(FlatKey(s), CalibrationActivity.Skipped, code, reason);
+            }
+        }
+
+        internal void FlatFramesDone(int completed) {
+            if (!calibrationStarted) {
+                return;
+            }
+            CalibrationActivity.Current.FrameTaken(completed);
+            if (completed < Iterations) {
+                CalibrationActivity.Current.FrameStarted(completed + 1, currentFlatExposure);
+            }
+        }
+
         protected void InitSync() {
             if (SyncManager.Instance.RunningClient) {
                 flatsExpert.InitSync(true, SyncClient.Instance.ServerProfileId);
@@ -179,12 +257,14 @@ namespace NINA.Plugin.TargetScheduler.Sequencer {
             FlatSpec flatSpec = neededFlat.FlatSpec;
             Target target = GetTarget(neededFlat.TargetId);
             if (target == null) {
+                FlatSkipped(neededFlat, "error", $"target {neededFlat.TargetId} is not in the scheduler database");
                 return false;
             }
 
             try {
                 TrainedFlatExposureSetting setting = new FlatsExpert().GetTrainedFlatExposureSetting(profileService.ActiveProfile, flatSpec);
                 if (setting == null) {
+                    FlatSkipped(neededFlat, "untrained", $"the flat panel has no trained exposure for {flatSpec.FilterName} at gain {flatSpec.Gain}");
                     TSLogger.Warning($"TS Flats: failed to find trained settings for {flatSpec}");
                     Notification.ShowWarning($"TS Flats: failed to find trained settings for {flatSpec}");
                     return false;
@@ -196,6 +276,24 @@ namespace NINA.Plugin.TargetScheduler.Sequencer {
                 DisplayText = $"{flatSpec.FilterName} {setting.Time.ToString("0.##")}s ({GetFlatSpecDisplay(flatSpec)})";
                 Iterations = flatCount;
                 CompletedIterations = 0;
+                currentFlatExposure = setting.Time;
+                if (calibrationStarted) {
+                    CalibrationActivity.Current.SetStarted(FlatKey(neededFlat), 0, 0, s => {
+                        s.TargetName = target.Name;
+                        s.TargetId = target.Id;
+                        s.Filter = flatSpec.FilterName;
+                        s.Exposure = setting.Time;
+                        s.Gain = setting.Gain != -1 ? setting.Gain : flatSpec.Gain;
+                        s.Offset = setting.Offset != -1 ? setting.Offset : flatSpec.Offset;
+                        s.Binning = flatSpec.BinningMode?.X;
+                        s.ReadoutMode = flatSpec.ReadoutMode.ToString(System.Globalization.CultureInfo.InvariantCulture);
+                        s.Rotation = flatSpec.Rotation != ImageMetadata.NO_ROTATOR_ANGLE ? flatSpec.Rotation : null;
+                        s.PanelBrightness = setting.Brightness;
+                        s.SessionDate = neededFlat.SessionDate.ToUniversalTime();
+                        s.FramesTotal = flatCount;
+                        s.Count = TotalFlatSets;
+                    });
+                }
 
                 // Set rotation angle, if applicable
                 if (applyRotation && flatSpec.Rotation != ImageMetadata.NO_ROTATOR_ANGLE && rotatorMediator.GetInfo().Connected) {
@@ -238,11 +336,23 @@ namespace NINA.Plugin.TargetScheduler.Sequencer {
 
                 FlatTargetContainer container = new FlatTargetContainer(this, target, flatCount, neededFlat.SessionId);
                 container.Add(takeExposure);
+                if (calibrationStarted) {
+                    CalibrationActivity.Current.FrameStarted(1, setting.Time);
+                }
                 await container.Execute(progress, token);
+                if (calibrationStarted) {
+                    CalibrationActivity.Current.SetFinished(FlatKey(neededFlat), CalibrationActivity.Done);
+                }
 
                 return true;
             } catch (Exception ex) {
                 TSLogger.Error($"Exception taking automated flat: {ex.Message}\n{ex}");
+                if (Utils.IsCancelException(ex)) {
+                    calibrationEndCode = "canceled";
+                    calibrationEndReason = "the sequence stopped the instruction";
+                } else {
+                    FlatSkipped(neededFlat, "error", ex.Message);
+                }
                 return false;
             } finally {
                 imageSaveWatcher?.WaitForAllImagesSaved(token);
@@ -473,6 +583,7 @@ namespace NINA.Plugin.TargetScheduler.Sequencer {
         private void LoopCondition_PropertyChanged(object sender, PropertyChangedEventArgs args) {
             if (args.PropertyName == "CompletedIterations") {
                 parent.CompletedIterations = loopCondition.CompletedIterations;
+                parent.FlatFramesDone(loopCondition.CompletedIterations);
             }
         }
 

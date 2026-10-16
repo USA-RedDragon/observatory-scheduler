@@ -9,6 +9,7 @@ using NINA.Equipment.Interfaces.Mediator;
 using NINA.Equipment.Interfaces.ViewModel;
 using NINA.Equipment.Model;
 using NINA.Plugin.TargetScheduler.Darks;
+using NINA.Plugin.TargetScheduler.Remote.Api;
 using NINA.Plugin.TargetScheduler.Shared.Utility;
 using NINA.Plugin.TargetScheduler.Util;
 using NINA.Profile.Interfaces;
@@ -107,6 +108,9 @@ namespace NINA.Plugin.TargetScheduler.Sequencer {
         private DateTime? stopBy;
         private int biasDone;
         private string coverStop;
+        private string endCode;
+        private string endReason;
+        private bool runStarted;
         private CancellationTokenSource yieldCts;
 
         public IList<DarkPlacement> Placements => Enum.GetValues(typeof(DarkPlacement)).Cast<DarkPlacement>().ToList();
@@ -218,6 +222,7 @@ namespace NINA.Plugin.TargetScheduler.Sequencer {
         }
 
         private void LogStop(DarkWindow w, string message) {
+            (endCode, endReason) = DarkPlanner.Stop(w);
             string cover = DarkPlanner.CoverStopReason(w.Cover);
             if (cover != null) {
                 coverStop = cover;
@@ -261,12 +266,106 @@ namespace NINA.Plugin.TargetScheduler.Sequencer {
                 safetyMonitorMediator.IsSafeChanged += OnSafeChanged;
             }
             using IDisposable cooler = CoolerRuntime.Own("darks");
+            endCode = null;
+            endReason = null;
+            runStarted = false;
+            CalibrationWatch.Remember(this);
             try {
                 await Run(progress, token, yieldSource.Token);
+            } catch (Exception ex) when (Utils.IsCancelException(ex)) {
+                endCode = "canceled";
+                endReason = "the sequence stopped the instruction";
+                throw;
+            } catch (Exception ex) {
+                endCode = "error";
+                endReason = ex.Message;
+                throw;
             } finally {
                 safetyMonitorMediator.IsSafeChanged -= OnSafeChanged;
                 yieldCts = null;
+                try {
+                    if (runStarted) {
+                        CalibrationActivity.Current.RunEnded(endCode, endReason);
+                    } else if (endCode != null) {
+                        CalibrationActivity.Current.RunNotStarted(CalibrationActivity.KindDarks, PlacementName(Placement), endCode, endReason, Ambient(), SunLimit());
+                    }
+                } catch (Exception ex) {
+                    TSLogger.Warning($"TS Darks: could not report the end of the run for the status: {ex.Message}");
+                }
             }
+        }
+
+        public static string PlacementName(DarkPlacement p) {
+            switch (p) {
+                case DarkPlacement.BeforeWait:
+                    return "before_wait";
+
+                case DarkPlacement.WhileUnsafe:
+                    return "while_unsafe";
+
+                default:
+                    return "end_of_night";
+            }
+        }
+
+        private DateTime? SunLimit() {
+            var sun = SunAltitude();
+            if (sun == null) {
+                return null;
+            }
+            return DarkPlanner.SunLimitAt(new DarkWindow { Now = DateTime.UtcNow, SunAltitudeAt = sun }, TimeSpan.FromHours(18));
+        }
+
+        private CalibrationPlanContext PlanContext(TimeSpan overhead) {
+            CoolerRates rates = DarkRuntime.State.Rates();
+            DateTime? limit = SunLimit();
+            if (Placement == DarkPlacement.BeforeWait) {
+                DateTime? until = FindContainer()?.CurrentWaitUntil?.ToUniversalTime();
+                if (until.HasValue) {
+                    DateTime end = until.Value - (DarkRuntime.State.AfterWait() ?? TimeSpan.Zero);
+                    limit = limit.HasValue && limit.Value < end ? limit : end;
+                }
+            }
+            return new CalibrationPlanContext {
+                Overhead = overhead,
+                Move = (a, b) => DarkPlanner.MoveTime(a, b, rates) ?? DarkPlanner.Ramp(a, b),
+                Limit = limit
+            };
+        }
+
+        public static StatusCalibrationQueueItem Item(DarkNeed n, IEnumerable<DarkTaken> taken, DateTime nowUtc) {
+            int remaining = DarkPlanner.Remaining(n, taken, nowUtc);
+            return new StatusCalibrationQueueItem {
+                Kind = CalibrationActivity.KindDarks,
+                ComboKey = n.ComboKey,
+                Exposure = n.Exposure,
+                Gain = n.Gain,
+                Offset = n.Offset,
+                Binning = n.Binning,
+                SetTemp = n.SetTemp,
+                FramesTotal = n.FramesNeeded,
+                FramesHave = Math.Max(0, n.FramesNeeded - remaining),
+                Remaining = remaining,
+                LightsBlocked = n.LightsBlocked,
+                LightsScaled = n.LightsScaled,
+            };
+        }
+
+        public static string BiasKey(BiasNeed n) => "bias:" + n.ComboKey;
+
+        public static StatusCalibrationQueueItem Item(BiasNeed n, IEnumerable<BiasTaken> taken, DateTime nowUtc, double exposure) {
+            int remaining = BiasPlanner.Remaining(n, taken, nowUtc);
+            return new StatusCalibrationQueueItem {
+                Kind = CalibrationActivity.KindBias,
+                ComboKey = BiasKey(n),
+                Exposure = exposure,
+                Gain = n.Gain,
+                Offset = n.Offset,
+                Binning = n.Binning,
+                FramesTotal = n.FramesNeeded,
+                FramesHave = Math.Max(0, n.FramesNeeded - remaining),
+                Remaining = remaining,
+            };
         }
 
         private async Task Run(IProgress<ApplicationStatus> progress, CancellationToken token, CancellationToken yieldToken) {
@@ -319,6 +418,8 @@ namespace NINA.Plugin.TargetScheduler.Sequencer {
             }
 
             if (queue.Count == 0 && biasQueue.Count == 0) {
+                endCode = "nothing_left";
+                endReason = cam.CanSetTemperature ? "no dark or bias set in the backlog still needs frames" : "the camera cannot set its temperature, so no darks are taken, and no bias set is needed";
                 return;
             }
 
@@ -337,6 +438,18 @@ namespace NINA.Plugin.TargetScheduler.Sequencer {
                 RecordImagingHold(cam, imagingPower);
                 queue = Order(queue, imagingSetpoint);
             }
+
+            try {
+                DateTime listedAt = DateTime.UtcNow;
+                double biasExposure = BiasPlanner.Exposure(cam.ExposureMin);
+                var items = biasQueue.Select(n => Item(n, biasTaken, listedAt, biasExposure)).Concat(queue.Select(n => Item(n, taken, listedAt))).ToList();
+                TimeSpan listOverhead = TimeSpan.FromSeconds(Math.Max(0, cam.LastDownloadTime)) + (DarkRuntime.State.SaveTime() ?? TimeSpan.Zero);
+                CalibrationActivity.Current.RunStarted(CalibrationActivity.KindDarks, PlacementName(Placement), items, Ambient(), SunLimit(), PlanContext(listOverhead));
+                runStarted = true;
+            } catch (Exception ex) {
+                TSLogger.Warning($"TS Darks: could not list the darks for the status: {ex.Message}");
+            }
+            int biasCount = biasQueue.Count;
 
             using var watch = new TemperatureWatch(cameraMediator);
             try {
@@ -363,24 +476,35 @@ namespace NINA.Plugin.TargetScheduler.Sequencer {
 
                         int remaining = DarkPlanner.Remaining(need, taken, DateTime.UtcNow);
                         if (remaining == 0) {
+                            CalibrationActivity.Current.SetFinished(need.ComboKey, CalibrationActivity.Done);
                             break;
                         }
 
                         double? ambient = Ambient();
                         IList<CoolerLimit> limits = DarkRuntime.State.Limits(ambient.HasValue);
-                        string skip = DarkPlanner.AboveAmbientReason(need.SetTemp, ambient)
-                            ?? DarkPlanner.CapacityReason(DarkPlanner.Capacity(DarkRuntime.State.Holds(), limits), need.SetTemp, ambient)
-                            ?? DarkPlanner.LimitReason(limits, need.SetTemp, ambient, imagingSetpoint, imagingPower);
+                        string skipCode = null;
+                        string skip = DarkPlanner.AboveAmbientReason(need.SetTemp, ambient);
+                        if (skip != null) {
+                            skipCode = "above_ambient";
+                        } else if ((skip = DarkPlanner.CapacityReason(DarkPlanner.Capacity(DarkRuntime.State.Holds(), limits), need.SetTemp, ambient)) != null) {
+                            skipCode = "cooler_capacity";
+                        } else if ((skip = DarkPlanner.LimitReason(limits, need.SetTemp, ambient, imagingSetpoint, imagingPower)) != null) {
+                            skipCode = "cooler_limit";
+                        }
                         CameraInfo info = cameraMediator.GetInfo();
                         TimeSpan overhead = TimeSpan.FromSeconds(Math.Max(0, info.LastDownloadTime));
-                        skip ??= DarkPlanner.FitReason(w, need, currentSetpoint, imagingSetpoint, DarkRuntime.State.Rates(), overhead);
+                        if (skip == null) {
+                            (skipCode, skip) = DarkPlanner.Fit(w, need, currentSetpoint, imagingSetpoint, DarkRuntime.State.Rates(), overhead);
+                        }
                         if (skip != null) {
                             TSLogger.Info($"TS Darks: skipping {need}: {skip}");
+                            CalibrationActivity.Current.SetFinished(need.ComboKey, CalibrationActivity.Skipped, skipCode, skip);
                             break;
                         }
 
                         DisplayText = $"{need} ({ci + 1}/{queue.Count})";
                         ProgressText = $"{need.FramesNeeded - remaining}/{need.FramesNeeded}";
+                        CalibrationActivity.Current.SetStarted(need.ComboKey, need.FramesNeeded - remaining, biasCount + ci + 1, s => s.ReadoutMode = need.ReadoutMode);
 
                         DateTime? deadline = Deadline(w, need, imagingSetpoint, overhead);
                         string reach = await Reach(need.SetTemp, watch, deadline, progress, token, yieldToken);
@@ -391,6 +515,7 @@ namespace NINA.Plugin.TargetScheduler.Sequencer {
                                 DarkRuntime.State.AddLimit(Limit(need.SetTemp, imagingSetpoint, imagingPower, reach, reached.Connected && !double.IsNaN(reached.Temperature) ? reached.Temperature : (double?)null));
                             }
                             TSLogger.Info($"TS Darks: skipping {need}: {reach}");
+                            CalibrationActivity.Current.SetFinished(need.ComboKey, CalibrationActivity.Skipped, yieldToken.IsCancellationRequested ? "stopped" : "not_reached", reach);
                             break;
                         }
 
@@ -404,10 +529,11 @@ namespace NINA.Plugin.TargetScheduler.Sequencer {
                         string sunSkip = DarkPlanner.SunFitReason(Window(), TimeSpan.Zero, need.Exposure, overhead);
                         if (sunSkip != null) {
                             TSLogger.Info($"TS Darks: skipping {need}: {sunSkip}");
+                            CalibrationActivity.Current.SetFinished(need.ComboKey, CalibrationActivity.Skipped, "sun", sunSkip);
                             break;
                         }
 
-                        (double deviation, double? peakPower, DateTime takenAt, string path) = await TakeDark(need, watch, info.ReadoutModes?.ToList(), progress, token);
+                        (double deviation, double? peakPower, DateTime takenAt, string path) = await TakeDark(need, need.FramesNeeded - DarkPlanner.Remaining(need, taken, DateTime.UtcNow) + 1, watch, info.ReadoutModes?.ToList(), progress, token);
                         if (deviation <= DarkPlanner.AtTargetToleranceC) {
                             RecordHold(need, peakPower);
                         }
@@ -420,7 +546,9 @@ namespace NINA.Plugin.TargetScheduler.Sequencer {
                         DarkRuntime.Store.RecordTaken(need, takenAt, cameraMediator.GetInfo().Temperature, deviation, path);
                         taken.Add(new DarkTaken { ComboKey = need.ComboKey, TakenAt = takenAt });
                         done++;
+                        CalibrationActivity.Current.FrameTaken(need.FramesNeeded - DarkPlanner.Remaining(need, taken, DateTime.UtcNow));
                         if (deviation > DarkPlanner.AtTargetToleranceC) {
+                            CalibrationActivity.Current.SetFinished(need.ComboKey, CalibrationActivity.Skipped, "drift", $"the sensor drifted {deviation:0.0} °C from {need.SetTemp} °C during the dark");
                             break;
                         }
                     }
@@ -438,6 +566,7 @@ namespace NINA.Plugin.TargetScheduler.Sequencer {
                     }
                     if (queue.Count > 0 && Placement != DarkPlacement.EndOfSequence) {
                         await Restore(imagingSetpoint, watch, progress, token);
+                        CalibrationActivity.Current.MoveEnded();
                     }
                 } catch (Exception ex) {
                     TSLogger.Error($"TS Darks: restoring the imaging setpoint {imagingSetpoint} °C failed: {ex.Message}");
@@ -531,6 +660,7 @@ namespace NINA.Plugin.TargetScheduler.Sequencer {
             double from = info.Temperature;
             DateTime start = DateTime.UtcNow;
             DisplayText = $"Setting the camera to {target} °C";
+            CalibrationActivity.Current.MoveStarted(target, from, DarkPlanner.MoveTime(info.TemperatureSetPoint, target, DarkRuntime.State.Rates()) ?? DarkPlanner.Ramp(info.TemperatureSetPoint, target), "darks");
             try {
                 bool ok = await RampTo(target, progress, cts.Token);
                 if (!ok) {
@@ -544,6 +674,8 @@ namespace NINA.Plugin.TargetScheduler.Sequencer {
                 return yieldToken.IsCancellationRequested
                     ? $"imaging can resume, so the move to {target} °C was stopped"
                     : $"{target} °C was not reached by {deadline?.ToLocalTime():HH:mm:ss}, the latest start for the dark";
+            } finally {
+                CalibrationActivity.Current.MoveEnded();
             }
 
             DarkRuntime.State.RecordMove(from, target, DateTime.UtcNow - start, DateTime.UtcNow);
@@ -601,6 +733,7 @@ namespace NINA.Plugin.TargetScheduler.Sequencer {
             }
 
             TSLogger.Info($"TS Darks: restoring the imaging setpoint {imagingSetpoint} °C from {info.TemperatureSetPoint} °C");
+            CalibrationActivity.Current.MoveStarted(imagingSetpoint, info.Temperature, DarkPlanner.MoveTime(info.TemperatureSetPoint, imagingSetpoint, DarkRuntime.State.Rates()) ?? DarkPlanner.Ramp(info.TemperatureSetPoint, imagingSetpoint), "imaging");
             await StopRestore();
             double from = info.Temperature;
             DateTime start = DateTime.UtcNow;
@@ -625,7 +758,7 @@ namespace NINA.Plugin.TargetScheduler.Sequencer {
             DarkRuntime.State.RecordMove(from, imagingSetpoint, DateTime.UtcNow - start, DateTime.UtcNow);
         }
 
-        private async Task<(double deviation, double? peakPower, DateTime takenAt, string path)> TakeDark(DarkNeed need, TemperatureWatch watch, IList<string> readoutModes, IProgress<ApplicationStatus> progress, CancellationToken token) {
+        private async Task<(double deviation, double? peakPower, DateTime takenAt, string path)> TakeDark(DarkNeed need, int number, TemperatureWatch watch, IList<string> readoutModes, IProgress<ApplicationStatus> progress, CancellationToken token) {
             short? readout = DarkPlanner.ReadoutIndex(need.ReadoutMode, readoutModes);
             if (readout.HasValue && cameraMediator.GetInfo().ReadoutModeForNormalImages != readout.Value) {
                 cameraMediator.SetReadoutModeForNormalImages(readout.Value);
@@ -650,6 +783,7 @@ namespace NINA.Plugin.TargetScheduler.Sequencer {
             CameraInfo before = cameraMediator.GetInfo();
             watch.BeginHold(need.SetTemp, before.Temperature, before.CoolerPower);
             DateTime takenAt = DateTime.UtcNow;
+            CalibrationActivity.Current.FrameStarted(number, need.Exposure);
             DisplayText = $"Dark {need}";
             TSLogger.Info($"TS Darks: taking a dark: {need}, sensor {before.Temperature} °C, cooler {before.CoolerPower}%");
             imageSaveMediator.ImageSaved += OnSaved;
@@ -695,6 +829,7 @@ namespace NINA.Plugin.TargetScheduler.Sequencer {
 
                     int remaining = BiasPlanner.Remaining(need, taken, DateTime.UtcNow);
                     if (remaining == 0) {
+                        CalibrationActivity.Current.SetFinished(BiasKey(need), CalibrationActivity.Done);
                         break;
                     }
 
@@ -704,16 +839,20 @@ namespace NINA.Plugin.TargetScheduler.Sequencer {
                     string skip = BiasPlanner.FitReason(w, exposure, overhead);
                     if (skip != null) {
                         TSLogger.Info($"TS Bias: skipping {need}: {skip}");
+                        CalibrationActivity.Current.SetFinished(BiasKey(need), CalibrationActivity.Skipped, DarkPlanner.SunFitReason(w, TimeSpan.Zero, exposure, overhead) != null ? "sun" : "wait_end", skip);
                         break;
                     }
 
                     DisplayText = $"{need} ({ci + 1}/{queue.Count})";
                     ProgressText = $"{need.FramesNeeded - remaining}/{need.FramesNeeded}";
+                    CalibrationActivity.Current.SetStarted(BiasKey(need), need.FramesNeeded - remaining, ci + 1, s => s.ReadoutMode = need.ReadoutMode);
+                    CalibrationActivity.Current.FrameStarted(need.FramesNeeded - remaining + 1, exposure);
 
                     (DateTime takenAt, double? sensorTemp, string path) = await TakeBias(need, exposure, info.ReadoutModes?.ToList(), progress, token);
                     DarkRuntime.BiasStore.RecordTaken(need, takenAt, exposure, sensorTemp, path);
                     taken.Add(new BiasTaken { ComboKey = need.ComboKey, TakenAt = takenAt });
                     biasDone++;
+                    CalibrationActivity.Current.FrameTaken(need.FramesNeeded - BiasPlanner.Remaining(need, taken, DateTime.UtcNow));
                 }
             }
 

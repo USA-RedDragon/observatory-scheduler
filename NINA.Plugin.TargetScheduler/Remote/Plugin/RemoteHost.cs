@@ -56,6 +56,7 @@ namespace NINA.Plugin.TargetScheduler.Remote.Plugin {
         private AutofocusObserver autofocusObserver;
         private readonly IFilterWheelMediator filterWheelMediator;
         private LiveAutofocusProbe liveAutofocus;
+        private readonly ICameraMediator cameraMediator;
 
         public RemoteSettings Settings { get; }
         public SchedulerControl Control { get; }
@@ -81,13 +82,13 @@ namespace NINA.Plugin.TargetScheduler.Remote.Plugin {
         public IReadOnlyDictionary<string, double> DefaultRuleWeights => Planning.Scoring.Rules.ScoringRule.GetDefaultRuleWeights().ToDictionary(w => w.name, w => w.weight);
         ISchedulerControl ICommandContext.Control => Control;
 
-        public static void Start(IProfileService profileService, IFocuserMediator focuserMediator = null, IFilterWheelMediator filterWheelMediator = null) {
+        public static void Start(IProfileService profileService, IFocuserMediator focuserMediator = null, IFilterWheelMediator filterWheelMediator = null, ICameraMediator cameraMediator = null) {
             lock (initLock) {
                 if (Instance != null) {
                     return;
                 }
                 try {
-                    Instance = new RemoteHost(profileService, focuserMediator, filterWheelMediator);
+                    Instance = new RemoteHost(profileService, focuserMediator, filterWheelMediator, cameraMediator);
                     Instance.Run();
                 } catch (Exception e) {
                     TSLogger.Error($"remote control failed to start: {e}");
@@ -103,8 +104,9 @@ namespace NINA.Plugin.TargetScheduler.Remote.Plugin {
             }
         }
 
-        private RemoteHost(IProfileService profileService, IFocuserMediator focuserMediator, IFilterWheelMediator filterWheelMediator) {
+        private RemoteHost(IProfileService profileService, IFocuserMediator focuserMediator, IFilterWheelMediator filterWheelMediator, ICameraMediator cameraMediator) {
             this.profileService = profileService;
+            this.cameraMediator = cameraMediator;
             this.focuserMediator = focuserMediator;
             this.filterWheelMediator = filterWheelMediator;
             connectionString = $"Data Source={Path.Combine(Common.PLUGIN_HOME, "schedulerdb.sqlite")};";
@@ -127,6 +129,7 @@ namespace NINA.Plugin.TargetScheduler.Remote.Plugin {
             };
             Settings.Changed += ApplySettings;
             autofocus.Changed += () => Push("status", null);
+            CalibrationActivity.Current.Changed += () => Push("status", null);
         }
 
         private DbConnection Connect() {
@@ -220,6 +223,7 @@ namespace NINA.Plugin.TargetScheduler.Remote.Plugin {
                 if (!inPlan) {
                     Processor.ApplyPending();
                 }
+                CalibrationWatch.Poll(cameraMediator);
                 var activity = CurrentView().Activity;
                 if (activity != lastActivity) {
                     lastActivity = activity;
@@ -507,10 +511,13 @@ namespace NINA.Plugin.TargetScheduler.Remote.Plugin {
             var skips = Control.Skips.Active(DateTime.UtcNow);
             var view = CurrentView();
             var planning = tracker.InPlan;
+            StatusCalibration calibration = CalibrationActivity.Current.Snapshot(CameraReading(), out bool calibrating);
             lock (sync) {
                 string state;
                 if (!containerRunning) {
-                    state = "stopped";
+                    state = calibrating ? "calibrating" : "stopped";
+                } else if (!containerPaused && calibrating && (wait != null || (!planning && view.Exposure == null))) {
+                    state = "calibrating";
                 } else if (containerPaused) {
                     state = "paused";
                 } else if (planning || view.Exposure != null) {
@@ -541,7 +548,27 @@ namespace NINA.Plugin.TargetScheduler.Remote.Plugin {
                     Pending = pending,
                     LastPlanAt = lastPlanAt,
                     Autofocus = liveAutofocus?.Snapshot() ?? autofocus.Snapshot(),
+                    Calibration = calibration,
                 };
+            }
+        }
+
+        private StatusCalibrationCamera CameraReading() {
+            try {
+                var info = cameraMediator?.GetInfo();
+                if (info == null) {
+                    return null;
+                }
+                static double? Finite(double v) => double.IsNaN(v) || double.IsInfinity(v) ? null : v;
+                return new StatusCalibrationCamera {
+                    Connected = info.Connected,
+                    Temperature = info.Connected ? Finite(info.Temperature) : null,
+                    Setpoint = info.Connected ? Finite(info.TemperatureSetPoint) : null,
+                    CoolerPower = info.Connected ? Finite(info.CoolerPower) : null,
+                };
+            } catch (Exception e) {
+                TSLogger.Warning($"remote: could not read the camera for the status: {e.Message}");
+                return null;
             }
         }
 

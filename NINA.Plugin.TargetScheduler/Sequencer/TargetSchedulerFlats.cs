@@ -133,6 +133,7 @@ namespace NINA.Plugin.TargetScheduler.Sequencer {
 
                 TotalFlatSets = neededFlats.Count;
                 CompletedFlatSets = 0;
+                PublishFlats(neededFlats);
 
                 LogTrainedFlatDetails();
 
@@ -142,6 +143,8 @@ namespace NINA.Plugin.TargetScheduler.Sequencer {
                 if (FindContainer()?.CurrentWaitUntil != null) {
                     var info = flatDeviceMediator.GetInfo();
                     if (FlatWaitFit.CoverStopReason(info.Connected, info.SupportsOpenClose, info.CoverState.ToString()) is string coverStop) {
+                        calibrationEndCode = "cover";
+                        calibrationEndReason = coverStop;
                         TSLogger.Warning($"TS Flats: not taking flats in this wait: {coverStop}");
                         DisplayText = $"Not taken: {coverStop}";
                         return;
@@ -175,6 +178,7 @@ namespace NINA.Plugin.TargetScheduler.Sequencer {
                                 allTakenFlats.Add(neededFlat.FlatSpec);
                             }
                         } else {
+                            FlatSkipped(neededFlat, "already_taken", "the same flats were already taken in this run");
                             TSLogger.Info($"TS Flats: flat already taken, skipping: {neededFlat}");
                         }
 
@@ -193,10 +197,14 @@ namespace NINA.Plugin.TargetScheduler.Sequencer {
                 DisplayText = "";
 
                 if (Utils.IsCancelException(ex)) {
+                    calibrationEndCode = "canceled";
+                    calibrationEndReason = "the sequence stopped the instruction";
                     TSLogger.Warning("TS Flats: sequence was canceled/interrupted");
                     Status = SequenceEntityStatus.CREATED;
                     token.ThrowIfCancellationRequested();
                 } else {
+                    calibrationEndCode = "error";
+                    calibrationEndReason = ex.Message;
                     TSLogger.Error($"Exception taking flats: {ex.Message}:\n{ex.StackTrace}");
                 }
 
@@ -206,6 +214,7 @@ namespace NINA.Plugin.TargetScheduler.Sequencer {
 
                 throw new SequenceEntityFailedException($"exception taking flats: {ex.Message}", ex);
             } finally {
+                FlatsEnded();
                 await LightOffAfterFailure();
                 DisplayText = "";
                 TotalFlatSets = 0;

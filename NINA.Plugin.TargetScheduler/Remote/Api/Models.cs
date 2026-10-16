@@ -189,6 +189,9 @@ namespace NINA.Plugin.TargetScheduler.Remote.Api {
 
         [JsonPropertyName("autofocus")]
         public StatusAutofocus Autofocus { get; set; }
+
+        [JsonPropertyName("calibration")]
+        public StatusCalibration Calibration { get; set; }
     }
 
     public class PreviewOverride {

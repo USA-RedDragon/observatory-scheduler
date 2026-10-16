@@ -3,12 +3,14 @@ using NINA.Astrometry;
 using NINA.Core.Model;
 using NINA.Equipment.Interfaces.Mediator;
 using NINA.Plugin.TargetScheduler.Darks;
+using NINA.Plugin.TargetScheduler.Remote.Api;
 using NINA.Plugin.TargetScheduler.Shared.Utility;
 using NINA.Profile.Interfaces;
 using NINA.Sequencer.SequenceItem;
 using System;
 using System.Collections.Generic;
 using System.ComponentModel.Composition;
+using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 
@@ -58,6 +60,7 @@ namespace NINA.Plugin.TargetScheduler.Sequencer {
         }
 
         public override Task Execute(IProgress<ApplicationStatus> progress, CancellationToken token) {
+            CalibrationWatch.Remember(this);
             DateTime now = DateTime.UtcNow;
             string night = DarkReadiness.NightOf(now.ToLocalTime());
             List<DarkNeed> queue;
@@ -94,8 +97,10 @@ namespace NINA.Plugin.TargetScheduler.Sequencer {
 
             DarkReadyResult r = DarkReadiness.Check(input);
             if (!r.Ready) {
+                CalibrationActivity.Current.DarksChecked(false, r.Reason, null, input.Ambient, null);
                 throw Fail(r.Reason);
             }
+            Publish(input, queue, biasQueue, now);
 
             if (r.Need == null) {
                 DisplayText = $"Ready: bias, {r.Bias.Count} combos";
@@ -107,6 +112,47 @@ namespace NINA.Plugin.TargetScheduler.Sequencer {
             DisplayText = $"Ready: {r.Need}";
             TSLogger.Info($"TS Darks Ready: ready, {queue.Count} combos need darks, ambient {input.Ambient.Value:0.#} °C; {r.Need}: {r.Basis}; the sun check counted {counted}");
             return Task.CompletedTask;
+        }
+
+        private void Publish(DarkReadyInput input, List<DarkNeed> queue, List<BiasNeed> biasQueue, DateTime now) {
+            try {
+                List<DarkTaken> taken = DarkRuntime.Store.LoadTaken(now.AddDays(-7)).ToList();
+                List<BiasTaken> biasTaken = DarkRuntime.BiasStore.LoadTaken(now.AddDays(-7)).ToList();
+                CoolerCapacity capacity = DarkPlanner.Capacity(input.Holds, input.Limits);
+                var items = biasQueue.Select(n => TargetSchedulerDarks.Item(n, biasTaken, now, 0)).ToList();
+                foreach (StatusCalibrationQueueItem i in items) {
+                    i.Exposure = null;
+                }
+                foreach (DarkNeed n in DarkPlanner.WarmFirst(queue)) {
+                    StatusCalibrationQueueItem i = TargetSchedulerDarks.Item(n, taken, now);
+                    string why;
+                    if ((why = DarkPlanner.AboveAmbientReason(n.SetTemp, input.Ambient)) != null) {
+                        i.Status = CalibrationActivity.Skipped;
+                        i.ReasonCode = "above_ambient";
+                    } else if ((why = DarkPlanner.CapacityReason(capacity, n.SetTemp, input.Ambient)) != null) {
+                        i.Status = CalibrationActivity.Skipped;
+                        i.ReasonCode = "cooler_capacity";
+                    } else if ((why = DarkPlanner.LimitReason(input.Limits, n.SetTemp, input.Ambient, double.NaN, null)) != null) {
+                        i.Status = CalibrationActivity.Skipped;
+                        i.ReasonCode = "cooler_limit";
+                    } else {
+                        i.Status = CalibrationActivity.Waiting;
+                    }
+                    i.Reason = why;
+                    items.Add(i);
+                }
+                bool first = true;
+                foreach (StatusCalibrationQueueItem i in items) {
+                    if (i.Status == null || i.Status == CalibrationActivity.Waiting) {
+                        i.Status = first ? CalibrationActivity.Next : CalibrationActivity.Waiting;
+                        first = false;
+                    }
+                }
+                DateTime? sunLimit = input.SunAltitudeAt == null ? null : DarkPlanner.SunLimitAt(new DarkWindow { Now = now, SunAltitudeAt = input.SunAltitudeAt }, TimeSpan.FromHours(18));
+                CalibrationActivity.Current.DarksChecked(true, null, items, input.Ambient, sunLimit);
+            } catch (Exception ex) {
+                TSLogger.Warning($"TS Darks Ready: could not list the darks for the status: {ex.Message}");
+            }
         }
 
         private SequenceEntityFailedException Fail(string reason) {

@@ -97,7 +97,7 @@ namespace NINA.Plugin.TargetScheduler {
                 SyncManager.Instance.Start(profileService);
             }
 
-            Remote.Plugin.RemoteHost.Start(profileService, focuserMediator, filterWheelMediator);
+            Remote.Plugin.RemoteHost.Start(profileService, focuserMediator, filterWheelMediator, cameraMediator);
             RemoteOptions = new Remote.Plugin.RemoteOptionsVM();
             Darks.CoolerRuntime.Start(cameraMediator, weatherDataMediator, safetyMonitorMediator, flatDeviceMediator);
             Sequencer.CameraConnections.Watch(cameraMediator);
