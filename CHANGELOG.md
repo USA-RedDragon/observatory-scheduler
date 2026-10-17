@@ -1,5 +1,10 @@
 # Observatory Scheduler
 
+## 5.8.2.232 - 2026-10-16
+* Darks order: every darks run first cools to the coldest needed set temperature that the cooler holds at 80% power or less at the current ambient, then takes the sets in order from that temperature to warmer ones. The 80% setpoint comes from the cooler power fit of tonight's samples, or the measured fit (power = -37.4 + 3.77 x (ambient - setpoint)) without enough samples, so it is about 31 °C below ambient.
+* Sets colder than that limit are skipped with the reason "the cooler can't hold X °C at Y °C air" and the cause code cooler_power. When the cooler needs more than 80% after it reaches a set, that set and colder ones are skipped for the run, and the run continues with the next warmer set.
+* The darks check and the status calibration block list the queue in the same order with the same skip reasons.
+
 ## 5.8.2.231 - 2026-10-15
 * Status API: /os/v1/status has a new `calibration` block while darks, bias frames or flats are taken, while the sequence cools the camera after a passed darks check, and after a darks or flats run ends. It reports the kind (cooling, darks, bias, flats, done), the placement, the set being taken with its exposure, gain, offset, binning, set temperature, filter, target and panel brightness, frames done of the set size, the exposure in progress, the run's queue with each set's status, plain skip reason and estimated start, end and frames that fit before the sun reaches -8°, the sets taken tonight, why the last run stopped, and up to 20 plain steps of the night's calibration.
 * The state is "calibrating" instead of "stopped" while calibration runs outside the scheduler, in its wait, or in its unsafe trigger.
