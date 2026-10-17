@@ -90,11 +90,113 @@ namespace NINA.Plugin.TargetScheduler.Planning.Test {
         }
 
         [Test]
-        public void RefitNeedsTenSamples() {
-            var few = Enumerable.Range(0, 5).Select(i => new CoolerSample { At = T0.AddMinutes(i), Power = 70, Setpoint = -16, Ambient = 15 });
+        public void RefitBelowSixtyPercentNeedsTenSamples() {
+            var few = Enumerable.Range(0, 5).Select(i => new CoolerSample { At = T0.AddMinutes(i), Power = 55, Setpoint = -10, Ambient = 15 });
             CoolerFit f = CoolerFit.Refit(few);
             f.Intercept.Should().Be(CoolerFit.PriorIntercept);
             f.Slope.Should().Be(CoolerFit.PriorSlope);
+        }
+
+        [Test]
+        public void OneSampleAtSixtyPercentOrMoreReplacesThePrior() {
+            var few = new List<CoolerSample> {
+                new CoolerSample { At = T0, Power = 55, Setpoint = -10, Ambient = 15 },
+                new CoolerSample { At = T0.AddMinutes(1), Power = 70, Setpoint = -16, Ambient = 15 }
+            };
+            CoolerFit f = CoolerFit.Refit(few);
+            f.Samples.Should().Be(1);
+            f.Slope.Should().Be(CoolerFit.PriorSlope);
+            f.Power(15, -16).Should().BeApproximately(70, 1e-9);
+            f.Margin.Should().Be(0);
+            f.Basis.Should().Contain("60% cooler power or more tonight");
+        }
+
+        [Test]
+        public void ACapacityPointFromDarksSetsTheEightyPercentLimitFromTonight() {
+            CoolerFit.ColdestSetpoint(10, CoolerFit.Prior()).Value.Should().BeLessThan(-21);
+            var night = Enumerable.Range(0, 40).Select(i => new CoolerSample { At = T0.AddMinutes(i), Power = 60 + (i % 5), Setpoint = -10 - (i % 5) * 0.5, Ambient = 10 }).ToList();
+            night.Add(new CoolerSample { At = T0.AddHours(1), Power = 80, Setpoint = -16.2, Sensor = -16.2, Ambient = 10, Capacity = true });
+            CoolerFit f = CoolerFit.Refit(night);
+            f.Samples.Should().Be(1);
+            f.Margin.Should().Be(1);
+            f.Basis.Should().Contain("measured during darks tonight");
+            CoolerFit.ColdestSetpoint(10, f).Value.Should().BeApproximately(-15.2, 1e-9);
+            DarkPlanner.PowerLimitReason(-21, 10, CoolerFit.ColdestSetpoint(10, f)).Should().StartWith("the cooler can't hold -21 °C at 10 °C air");
+            DarkPlanner.PowerLimitReason(-15, 10, CoolerFit.ColdestSetpoint(10, f)).Should().BeNull();
+        }
+
+        [Test]
+        public void TheControllerKeepsCapacityPointsForTheNight() {
+            var c = new CoolerController();
+            c.NewNight("2026-10-16");
+            c.AddCapacity(new CoolerSample { At = T0, Power = 80, Setpoint = -16.2, Sensor = -16.2, Ambient = 10 });
+            CoolerFit.ColdestSetpoint(10, c.Fit()).Value.Should().BeApproximately(-15.2, 1e-9);
+            c.NewNight("2026-10-17");
+            c.Fit().Samples.Should().Be(0);
+        }
+
+        private static CoolerTrip Feed(CoolerGuard g, DateTime start, int seconds, Func<int, (double sensor, double power, double setpoint)> at) {
+            for (int t = 0; t <= seconds; t += 2) {
+                (double sensor, double power, double setpoint) = at(t);
+                CoolerTrip trip = g.Observe(start.AddSeconds(t), sensor, power, setpoint);
+                if (trip != null) {
+                    return trip;
+                }
+            }
+            return null;
+        }
+
+        [Test]
+        public void TwoMinutesAtEightyPercentShortOfTheSetStopsTheCoolDown() {
+            var g = new CoolerGuard(-21, 10);
+            CoolerTrip trip = Feed(g, T0, 600, t => (t < 60 ? -14 - t / 30.0 : -16.2, t < 60 ? 70 : (t == 60 ? 80 : 100), -17));
+            trip.Should().NotBeNull();
+            trip.Stalled.Should().BeFalse();
+            (trip.At - T0).Should().Be(TimeSpan.FromSeconds(180));
+            trip.Sensor.Should().Be(-16.2);
+            trip.Power.Should().Be(80);
+            trip.Floor.Should().BeApproximately(-15.2, 1e-9);
+            trip.Reason.Should().Be("the cooler can't hold -21 °C at 10 °C air (at 80% power it reached about -16.2 °C)");
+            trip.ReasonFor(-18).Should().Be("the cooler can't hold -18 °C at 10 °C air (at 80% power it reached about -16.2 °C)");
+            CoolerSample s = trip.Sample();
+            s.Capacity.Should().BeTrue();
+            s.Setpoint.Should().Be(-16.2);
+            s.Power.Should().Be(80);
+            s.Ambient.Should().Be(10);
+        }
+
+        [Test]
+        public void ABriefPowerPeakOrAHoldWithinHalfADegreeDoesNotStop() {
+            var g = new CoolerGuard(-21, 10);
+            Feed(g, T0, 600, t => (-17, (t / 60) % 2 == 0 ? 90 : 70, -17)).Should().BeNull();
+            g = new CoolerGuard(-21, 10);
+            Feed(g, T0, 600, t => (-20.6, 100, -21)).Should().BeNull();
+        }
+
+        [Test]
+        public void ASensorThatStopsFallingForThreeMinutesStopsTheCoolDown() {
+            var g = new CoolerGuard(-21, 10);
+            CoolerTrip trip = Feed(g, T0, 600, t => (t < 60 ? -14 - t / 30.0 : -16.2, 75, -21));
+            trip.Should().NotBeNull();
+            trip.Stalled.Should().BeTrue();
+            (trip.At - T0).Should().Be(TimeSpan.FromSeconds(240));
+            trip.Reason.Should().Be("the cooler can't hold -21 °C at 10 °C air (the sensor stopped cooling at about -16.2 °C at 75% power)");
+            trip.Floor.Should().BeApproximately(-15.2, 1e-9);
+            trip.Sample().Power.Should().Be(75);
+        }
+
+        [Test]
+        public void ASensorTrackingASlowRampIsNotAStall() {
+            var g = new CoolerGuard(-21, 10);
+            Feed(g, T0, 600, t => (-10.2, 50, -10)).Should().BeNull();
+        }
+
+        [Test]
+        public void ATripWithoutAmbientOrBelowSixtyPercentKeepsTheFitUnchanged() {
+            var trip = new CoolerTrip { At = T0, SetTemp = -21, Ambient = null, Sensor = -16, Power = 85 };
+            trip.Sample().Should().BeNull();
+            trip.Reason.Should().Be("the cooler can't hold -21 °C (at 80% power it reached about -16 °C)");
+            new CoolerTrip { At = T0, SetTemp = -21, Ambient = 10, Sensor = -16, Power = 40, Stalled = true }.Sample().Should().BeNull();
         }
 
         [Test]

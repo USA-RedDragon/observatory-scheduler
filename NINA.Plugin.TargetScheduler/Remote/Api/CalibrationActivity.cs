@@ -391,7 +391,9 @@ namespace NINA.Plugin.TargetScheduler.Remote.Api {
                     if (darks > 0) {
                         parts.Add($"{darks} dark {(darks == 1 ? "set" : "sets")}");
                     }
-                    Log(now, $"Darks start: {string.Join(", then ", parts)}{(place == "while_unsafe" && darks > 1 ? ", warmest first" : "")}.");
+                    StatusCalibrationQueueItem first = queue.FirstOrDefault(q => q.Kind == KindDarks);
+                    string order = darks > 1 && first != null ? $", coldest first, starting with {CalibrationText.Describe(first)}" : "";
+                    Log(now, $"Darks start: {string.Join(", then ", parts)}{order}.");
                 }
             }
             Raise();

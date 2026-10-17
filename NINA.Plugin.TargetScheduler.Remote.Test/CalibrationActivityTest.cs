@@ -42,6 +42,17 @@ namespace NINA.Plugin.TargetScheduler.Remote.Test {
         private static StatusCalibrationCamera Cam(double t, double sp) => new StatusCalibrationCamera { Connected = true, Temperature = t, Setpoint = sp, CoolerPower = 40 };
 
         [Test]
+        public void TheDarksStartLineSaysColdestFirstAndNamesTheFirstSet() {
+            var items = new List<StatusCalibrationQueueItem> { Dark("c", 300, -21, 20), Dark("w", 600, -10, 25) };
+            a.RunStarted(CalibrationActivity.KindDarks, "while_unsafe", items, 10, null, Ctx());
+            string line = a.Snapshot(null).Log.Last().Text;
+            line.Should().Be("Darks start: 2 dark sets, coldest first, starting with 300 s at -21 °C, gain 0.");
+            line.Should().NotContain("warmest");
+            a.RunStarted(CalibrationActivity.KindDarks, "end_of_night", new List<StatusCalibrationQueueItem> { Dark("c", 300, -21, 20) }, 10, null, Ctx());
+            a.Snapshot(null).Log.Last().Text.Should().Be("Darks start: 1 dark set.");
+        }
+
+        [Test]
         public void NothingIsReportedBeforeAnyCalibration() {
             a.Snapshot(Cam(20, 20)).Should().BeNull();
             a.Running.Should().BeFalse();

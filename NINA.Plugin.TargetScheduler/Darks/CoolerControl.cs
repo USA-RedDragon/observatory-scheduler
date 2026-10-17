@@ -36,6 +36,7 @@ namespace NINA.Plugin.TargetScheduler.Darks {
         public double Setpoint { get; set; }
         public double Sensor { get; set; }
         public double? Ambient { get; set; }
+        public bool Capacity { get; set; }
     }
 
     /// <summary>One camera reading with the state that decides whether its cooler power counts.</summary>
@@ -59,6 +60,8 @@ namespace NINA.Plugin.TargetScheduler.Darks {
         public const int MinSamples = 10;
         public const int MinSamplesForSlope = 30;
         public const double MinSpreadForSlopeC = 2;
+        public const double MeasuredPowerPercent = 60;
+        public const double CapacityMarginC = 1;
 
         public const string PriorBasis = "ZWO ASI2600MM Pro lights on 17 nights from 2026-09-17: power = -37.4 + 3.77 x (ambient - setpoint), R² 0.98, residual SD 1.2 points";
 
@@ -66,6 +69,7 @@ namespace NINA.Plugin.TargetScheduler.Darks {
         public double Slope { get; set; }
         public int Samples { get; set; }
         public string Basis { get; set; }
+        public double Margin { get; set; }
 
         public double Power(double ambient, double setpoint) {
             return Intercept + Slope * (ambient - setpoint);
@@ -79,7 +83,7 @@ namespace NINA.Plugin.TargetScheduler.Darks {
             if (!ambient.HasValue || double.IsNaN(ambient.Value) || fit == null || !(fit.Slope > 0)) {
                 return null;
             }
-            return ambient.Value - fit.DropFor(DarkPlanner.MaxDarkPowerPercent);
+            return ambient.Value - fit.DropFor(DarkPlanner.MaxDarkPowerPercent) + fit.Margin;
         }
 
         public static CoolerFit Prior() {
@@ -94,7 +98,17 @@ namespace NINA.Plugin.TargetScheduler.Darks {
             List<CoolerSample> s = (samples ?? Enumerable.Empty<CoolerSample>())
                 .Where(x => x != null && x.Ambient.HasValue && !double.IsNaN(x.Power) && !double.IsNaN(x.Setpoint))
                 .ToList();
+            List<CoolerSample> capacity = s.Where(x => x.Capacity).ToList();
+            if (capacity.Count > 0) {
+                CoolerFit c = Offset(capacity, string.Format(CultureInfo.InvariantCulture, "offset refit from {0} cooler {1} measured during darks tonight, plus a {2:0} °C margin", capacity.Count, capacity.Count == 1 ? "limit" : "limits", CapacityMarginC));
+                c.Margin = CapacityMarginC;
+                return c;
+            }
             if (s.Count < MinSamples) {
+                List<CoolerSample> high = s.Where(x => x.Power >= MeasuredPowerPercent).ToList();
+                if (high.Count > 0) {
+                    return Offset(high, string.Format(CultureInfo.InvariantCulture, "offset refit from {0} {1} at {2:0}% cooler power or more tonight", high.Count, high.Count == 1 ? "sample" : "samples", MeasuredPowerPercent));
+                }
                 CoolerFit prior = Prior();
                 if (s.Count > 0) {
                     prior.Basis += string.Format(CultureInfo.InvariantCulture, "; only {0} of the {1} samples needed for a refit tonight", s.Count, MinSamples);
@@ -127,6 +141,12 @@ namespace NINA.Plugin.TargetScheduler.Darks {
                 Samples = s.Count,
                 Basis = string.Format(CultureInfo.InvariantCulture, "offset refit from {0} samples tonight with the measured slope {1} points per °C", s.Count, PriorSlope)
             };
+        }
+
+        private static CoolerFit Offset(List<CoolerSample> s, string basis) {
+            double mx = s.Average(v => v.Ambient.Value - v.Setpoint);
+            double my = s.Average(v => v.Power);
+            return new CoolerFit { Intercept = my - PriorSlope * mx, Slope = PriorSlope, Samples = s.Count, Basis = basis };
         }
 
         public override string ToString() {
@@ -310,6 +330,13 @@ namespace NINA.Plugin.TargetScheduler.Darks {
 
         public CoolerFit Fit() {
             return CoolerFit.Refit(night);
+        }
+
+        public void AddCapacity(CoolerSample s) {
+            if (s != null) {
+                s.Capacity = true;
+                night.Add(s);
+            }
         }
 
         public void NewNight(string nightOf) {
@@ -497,6 +524,89 @@ namespace NINA.Plugin.TargetScheduler.Darks {
             List<double> v = values.OrderBy(x => x).ToList();
             int n = v.Count;
             return n % 2 == 1 ? v[n / 2] : (v[n / 2 - 1] + v[n / 2]) / 2;
+        }
+    }
+}
+
+namespace NINA.Plugin.TargetScheduler.Darks {
+
+    public class CoolerTrip {
+        public DateTime At { get; set; }
+        public double SetTemp { get; set; }
+        public double? Ambient { get; set; }
+        public double Sensor { get; set; }
+        public double Power { get; set; }
+        public bool Stalled { get; set; }
+
+        public double Floor => Math.Max(Sensor + CoolerFit.CapacityMarginC, SetTemp + 0.1);
+
+        public string Reason => ReasonFor(SetTemp);
+
+        public string ReasonFor(double setTemp) {
+            string air = Ambient.HasValue ? string.Format(CultureInfo.InvariantCulture, " at {0:0.#} °C air", Ambient.Value) : "";
+            return Stalled
+                ? string.Format(CultureInfo.InvariantCulture, "the cooler can't hold {0} °C{1} (the sensor stopped cooling at about {2:0.#} °C at {3:0}% power)", setTemp, air, Sensor, Power)
+                : string.Format(CultureInfo.InvariantCulture, "the cooler can't hold {0} °C{1} (at {2:0}% power it reached about {3:0.#} °C)", setTemp, air, DarkPlanner.MaxDarkPowerPercent, Sensor);
+        }
+
+        public CoolerSample Sample() {
+            if (!Ambient.HasValue || double.IsNaN(Power) || Power < CoolerFit.MeasuredPowerPercent) {
+                return null;
+            }
+            return new CoolerSample { At = At, Power = Power, Setpoint = Sensor, Sensor = Sensor, Ambient = Ambient, Capacity = true };
+        }
+    }
+
+    /// <summary>Stops a dark cool-down or hold that the cooler can't reach: 2 minutes at 80% power or more, or 3 minutes without cooling, with the sensor more than 0.5 °C warmer than the set.</summary>
+    public class CoolerGuard {
+        public static readonly TimeSpan HighFor = TimeSpan.FromMinutes(2);
+        public static readonly TimeSpan StallFor = TimeSpan.FromMinutes(3);
+        public const double GapC = 0.5;
+        public const double FallC = 0.1;
+
+        private readonly double setTemp;
+        private readonly double? ambient;
+        private DateTime? highSince;
+        private double highSensor;
+        private double highPower;
+        private double? best;
+        private DateTime lastFall;
+
+        public CoolerGuard(double setTemp, double? ambient) {
+            this.setTemp = setTemp;
+            this.ambient = ambient.HasValue && !double.IsNaN(ambient.Value) ? ambient : null;
+        }
+
+        public CoolerTrip Observe(DateTime at, double sensor, double power, double setpoint) {
+            if (double.IsNaN(sensor)) {
+                return null;
+            }
+            if (sensor <= setTemp + GapC) {
+                highSince = null;
+                best = sensor;
+                lastFall = at;
+                return null;
+            }
+            if (!best.HasValue || sensor < best.Value - FallC) {
+                best = sensor;
+                lastFall = at;
+            }
+            if (!double.IsNaN(power) && power >= DarkPlanner.MaxDarkPowerPercent) {
+                if (!highSince.HasValue) {
+                    highSince = at;
+                    highSensor = sensor;
+                    highPower = power;
+                }
+                if (at - highSince.Value >= HighFor) {
+                    return new CoolerTrip { At = at, SetTemp = setTemp, Ambient = ambient, Sensor = highSensor, Power = highPower };
+                }
+            } else {
+                highSince = null;
+            }
+            if (at - lastFall >= StallFor && (double.IsNaN(setpoint) || sensor > setpoint + GapC)) {
+                return new CoolerTrip { At = at, SetTemp = setTemp, Ambient = ambient, Sensor = sensor, Power = power, Stalled = true };
+            }
+            return null;
         }
     }
 }

@@ -44,6 +44,16 @@ namespace NINA.Plugin.TargetScheduler.Darks {
             }
         }
 
+        public static void AddCapacity(CoolerSample s) {
+            if (s == null) {
+                return;
+            }
+            lock (sync) {
+                controller.NewNight(DarkReadiness.NightOf(DateTime.Now));
+                controller.AddCapacity(s);
+            }
+        }
+
         public static void Start(ICameraMediator cameraMediator, IWeatherDataMediator weatherMediator, ISafetyMonitorMediator safetyMediator, IFlatDeviceMediator flatDeviceMediator) {
             lock (sync) {
                 if (sampler != null || cameraMediator == null) {
