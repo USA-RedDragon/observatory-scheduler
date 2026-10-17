@@ -1,7 +1,7 @@
-Observatory Scheduler 5.8.2.232: darks start at the coldest set temperature the cooler holds at 80% power and go warmer from there.
+Observatory Scheduler 5.8.2.233: darks stop chasing a set temperature the cooler can't reach and go on with warmer sets.
 
-- **Order**: coldest needed set temperature first, then warmer sets. The limit is the setpoint at 80% cooler power at the current ambient, from tonight's cooler power fit or the measured fit (about 31 °C below ambient).
-- **Skips**: sets colder than the limit are skipped with "the cooler can't hold X °C at Y °C air". If the cooler needs more than 80% after it reaches a set, that set is skipped and the run goes on with the next warmer set.
-- **Status**: the darks check and the calibration block show the same order and skip reasons.
+- **Cool-down guard**: 2 minutes at 80% cooler power or more, or 3 minutes without cooling, with the sensor more than 0.5 °C from the set, stops the move or the dark. That set and every set colder than the reached temperature plus 1 °C are skipped with "the cooler can't hold X °C at Y °C air (at 80% power it reached about Z °C)".
+- **Fit**: the measured point sets tonight's 80% limit. Tonight's samples replace the prior fit as soon as one is at 60% power or more.
+- **Status**: the darks start line says "coldest first" and names the first set.
 
-No database changes. The sun limit and the fit-time checks are unchanged. Requires NINA 3.1.2.9001 or later. Install like 5.8.2.231.
+No database changes. Requires NINA 3.1.2.9001 or later. Install like 5.8.2.232.

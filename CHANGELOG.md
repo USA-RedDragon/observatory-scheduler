@@ -1,5 +1,10 @@
 # Observatory Scheduler
 
+## 5.8.2.233 - 2026-10-16
+* Darks cool-down guard: while the camera cools to a dark set or holds it, the plugin watches the cooler. When the cooler runs at 80% power or more for 2 minutes, or the sensor stops cooling for 3 minutes, while the sensor is more than 0.5 °C warmer than the set, it stops the move or aborts the dark. It skips that set and every set colder than 1 °C above the temperature the sensor reached at 80% power, with the reason "the cooler can't hold X °C at Y °C air (at 80% power it reached about Z °C)", and goes on with the next warmer set.
+* The measured point updates tonight's cooler fit, so the 80% limit for later runs tonight comes from it (with a 1 °C margin). The fit also uses tonight's samples as soon as one is at 60% cooler power or more; the measured prior fit is only used before that.
+* The darks start line in the status log says "coldest first" and names the first set.
+
 ## 5.8.2.232 - 2026-10-16
 * Darks order: every darks run first cools to the coldest needed set temperature that the cooler holds at 80% power or less at the current ambient, then takes the sets in order from that temperature to warmer ones. The 80% setpoint comes from the cooler power fit of tonight's samples, or the measured fit (power = -37.4 + 3.77 x (ambient - setpoint)) without enough samples, so it is about 31 °C below ambient.
 * Sets colder than that limit are skipped with the reason "the cooler can't hold X °C at Y °C air" and the cause code cooler_power. When the cooler needs more than 80% after it reaches a set, that set and colder ones are skipped for the run, and the run continues with the next warmer set.
