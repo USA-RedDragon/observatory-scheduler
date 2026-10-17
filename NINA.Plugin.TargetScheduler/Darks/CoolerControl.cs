@@ -75,6 +75,13 @@ namespace NINA.Plugin.TargetScheduler.Darks {
             return (power - Intercept) / Slope;
         }
 
+        public static double? ColdestSetpoint(double? ambient, CoolerFit fit) {
+            if (!ambient.HasValue || double.IsNaN(ambient.Value) || fit == null || !(fit.Slope > 0)) {
+                return null;
+            }
+            return ambient.Value - fit.DropFor(DarkPlanner.MaxDarkPowerPercent);
+        }
+
         public static CoolerFit Prior() {
             return new CoolerFit { Intercept = PriorIntercept, Slope = PriorSlope, Samples = 0, Basis = "the measured fit (" + PriorBasis + ")" };
         }

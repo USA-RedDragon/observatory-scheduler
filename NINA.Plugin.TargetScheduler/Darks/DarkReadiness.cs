@@ -17,6 +17,7 @@ namespace NINA.Plugin.TargetScheduler.Darks {
         public TimeSpan? SaveTime { get; set; }
         public double? CoolingSecondsPerC { get; set; }
         public DateTime? LearningUsedAt { get; set; }
+        public CoolerFit Fit { get; set; }
     }
 
     public class DarkReadyResult {
@@ -124,9 +125,11 @@ namespace NINA.Plugin.TargetScheduler.Darks {
             var unknown = new List<DarkNeed>();
             string refused = null;
             CoolerCapacity capacity = DarkPlanner.Capacity(i.Holds, i.Limits);
-            foreach (DarkNeed n in DarkPlanner.WarmFirst(fitting)) {
+            double? coldest = CoolerFit.ColdestSetpoint(ambient, i.Fit ?? CoolerFit.Prior());
+            foreach (DarkNeed n in DarkPlanner.ColdestFirst(fitting, coldest)) {
                 string limit = DarkPlanner.AboveAmbientReason(n.SetTemp, ambient)
                     ?? DarkPlanner.CapacityReason(capacity, n.SetTemp, ambient)
+                    ?? DarkPlanner.PowerLimitReason(n.SetTemp, ambient, coldest)
                     ?? DarkPlanner.LimitReason(i.Limits, n.SetTemp, ambient, double.NaN, null);
                 if (limit != null) {
                     refused ??= string.Format(CultureInfo.InvariantCulture, "{0}: {1}", n, limit);

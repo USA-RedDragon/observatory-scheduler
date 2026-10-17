@@ -122,6 +122,8 @@ namespace NINA.Plugin.TargetScheduler.Darks {
 
         public const double CapacityPowerPercent = 99.0;
 
+        public const double MaxDarkPowerPercent = 80.0;
+
         public const string SunLimitBasis = "measured from the darks in s3:astro/DARK with the stacker's light-leak spread (leak limit about 0.6 ADU) and the sun's altitude over each exposure at the site in their headers. 2026-09-29 dawn, 600 s Blue at -5 °C: dark 0020 ended at -0.67° and is clean (0.33 ADU); dark 0021 ran from -0.67° to +1.45° and leaks (0.71 ADU), then 1.76, 3.11 and 4.14 ADU. 2026-09-30 dawn, 600 s Luminance at +5 °C: clean to -4.46° (0.37 ADU). 2025-02-05 dusk, 600 s S-II at 0 °C: dark 0113 from -3.61° to -5.66° leaks (5.51 ADU) and dark 0114 from -5.66° to -7.73° is at the limit (0.59 ADU). -8° is below every altitude at which any of these darks gained signal, and below the last clean dawn dark at -0.67°";
 
         public static readonly TimeSpan UnmeasuredMoveHorizon = TimeSpan.FromHours(1);
@@ -177,6 +179,36 @@ namespace NINA.Plugin.TargetScheduler.Darks {
                 .ThenBy(n => n.Priority)
                 .ThenBy(n => n.ComboKey, StringComparer.Ordinal)
                 .ToList();
+        }
+
+        public static bool BelowPowerLimit(double setTemp, double? coldest) {
+            return coldest.HasValue && setTemp < coldest.Value - 0.05;
+        }
+
+        public static List<DarkNeed> ColdestFirst(IEnumerable<DarkNeed> queue, double? coldest) {
+            return (queue ?? Enumerable.Empty<DarkNeed>())
+                .OrderBy(n => BelowPowerLimit(n.SetTemp, coldest) ? 1 : 0)
+                .ThenBy(n => n.SetTemp)
+                .ThenBy(n => n.Priority)
+                .ThenBy(n => n.ComboKey, StringComparer.Ordinal)
+                .ToList();
+        }
+
+        public static string PowerLimitReason(double setTemp, double? ambient, double? coldest) {
+            if (!ambient.HasValue || !BelowPowerLimit(setTemp, coldest)) {
+                return null;
+            }
+            return string.Format(CultureInfo.InvariantCulture,
+                "the cooler can't hold {0} °C at {1:0.#} °C air (at {2:0}% cooler power it holds about {3:0.#} °C)", setTemp, ambient.Value, MaxDarkPowerPercent, coldest.Value);
+        }
+
+        public static string PowerReadingReason(double setTemp, double? ambient, double power) {
+            if (double.IsNaN(power) || power <= MaxDarkPowerPercent) {
+                return null;
+            }
+            return ambient.HasValue
+                ? string.Format(CultureInfo.InvariantCulture, "the cooler can't hold {0} °C at {1:0.#} °C air (it needed {2:0}% cooler power, above {3:0}%)", setTemp, ambient.Value, power, MaxDarkPowerPercent)
+                : string.Format(CultureInfo.InvariantCulture, "the cooler can't hold {0} °C (it needed {1:0}% cooler power, above {2:0}%)", setTemp, power, MaxDarkPowerPercent);
         }
 
         public static bool AtTemperature(double sensor, double setpoint) {

@@ -407,9 +407,6 @@ namespace NINA.Plugin.TargetScheduler.Sequencer {
                     IList<DarkNeed> needs = DarkRuntime.Store.LoadNeeds();
                     taken = DarkRuntime.Store.LoadTaken(DateTime.UtcNow.AddDays(-7)).ToList();
                     queue = DarkPlanner.Queue(needs, taken, DateTime.UtcNow);
-                    if (Placement == DarkPlacement.WhileUnsafe) {
-                        queue = DarkPlanner.WarmFirst(queue);
-                    }
                     TSLogger.Info($"TS Darks: {needs.Count} combos in the stacker's backlog, {queue.Count} still need darks");
                 } catch (Exception ex) {
                     TSLogger.Error($"TS Darks: could not read the dark backlog: {ex.Message}");
@@ -432,11 +429,13 @@ namespace NINA.Plugin.TargetScheduler.Sequencer {
             short normalReadout = cam.ReadoutModeForNormalImages;
             double currentSetpoint = imagingSetpoint;
             int done = 0;
+            double? powerFloor = null;
+            string powerFloorReason = null;
             biasDone = 0;
             TSLogger.Info($"TS Darks: placement {Placement}, imaging setpoint {imagingSetpoint} °C, sensor {cam.Temperature} °C, cooler {cam.CoolerPower}%");
             if (queue.Count > 0) {
                 RecordImagingHold(cam, imagingPower);
-                queue = Order(queue, imagingSetpoint);
+                queue = Order(queue);
             }
 
             try {
@@ -483,11 +482,17 @@ namespace NINA.Plugin.TargetScheduler.Sequencer {
                         double? ambient = Ambient();
                         IList<CoolerLimit> limits = DarkRuntime.State.Limits(ambient.HasValue);
                         string skipCode = null;
+                        double? coldest = CoolerFit.ColdestSetpoint(ambient, CoolerRuntime.Fit());
                         string skip = DarkPlanner.AboveAmbientReason(need.SetTemp, ambient);
                         if (skip != null) {
                             skipCode = "above_ambient";
                         } else if ((skip = DarkPlanner.CapacityReason(DarkPlanner.Capacity(DarkRuntime.State.Holds(), limits), need.SetTemp, ambient)) != null) {
                             skipCode = "cooler_capacity";
+                        } else if ((skip = DarkPlanner.PowerLimitReason(need.SetTemp, ambient, coldest)) != null) {
+                            skipCode = "cooler_power";
+                        } else if (powerFloor.HasValue && need.SetTemp <= powerFloor.Value + 0.05) {
+                            skipCode = "cooler_power";
+                            skip = powerFloorReason;
                         } else if ((skip = DarkPlanner.LimitReason(limits, need.SetTemp, ambient, imagingSetpoint, imagingPower)) != null) {
                             skipCode = "cooler_limit";
                         }
@@ -516,6 +521,15 @@ namespace NINA.Plugin.TargetScheduler.Sequencer {
                             }
                             TSLogger.Info($"TS Darks: skipping {need}: {reach}");
                             CalibrationActivity.Current.SetFinished(need.ComboKey, CalibrationActivity.Skipped, yieldToken.IsCancellationRequested ? "stopped" : "not_reached", reach);
+                            break;
+                        }
+
+                        string overPower = DarkPlanner.PowerReadingReason(need.SetTemp, ambient, reached.CoolerPower);
+                        if (overPower != null) {
+                            powerFloor = need.SetTemp;
+                            powerFloorReason = overPower;
+                            TSLogger.Info($"TS Darks: skipping {need} and every set at or below {need.SetTemp} °C: {overPower}");
+                            CalibrationActivity.Current.SetFinished(need.ComboKey, CalibrationActivity.Skipped, "cooler_power", overPower);
                             break;
                         }
 
@@ -595,13 +609,14 @@ namespace NINA.Plugin.TargetScheduler.Sequencer {
             }
         }
 
-        private List<DarkNeed> Order(List<DarkNeed> queue, double imagingSetpoint) {
-            if (Placement == DarkPlacement.WhileUnsafe) {
-                return queue;
-            }
-            List<DarkNeed> ordered = DarkPlanner.TonightFirst(queue, imagingSetpoint);
-            int tonight = ordered.Count(n => DarkPlanner.Tonight(n, imagingSetpoint));
-            TSLogger.Info($"TS Darks: {tonight} combos at or above {imagingSetpoint - DarkPlanner.AtTargetToleranceC} °C ({DarkPlanner.AtTargetToleranceC} °C below the imaging setpoint, which the sequence sets from the ambient temperature) come first, then {ordered.Count - tonight} colder ones, each group in the stacker's priority order");
+        private List<DarkNeed> Order(List<DarkNeed> queue) {
+            double? ambient = Ambient();
+            CoolerFit fit = CoolerRuntime.Fit();
+            double? coldest = CoolerFit.ColdestSetpoint(ambient, fit);
+            List<DarkNeed> ordered = DarkPlanner.ColdestFirst(queue, coldest);
+            TSLogger.Info(coldest.HasValue
+                ? $"TS Darks: coldest first from {coldest.Value:0.#} °C, the setpoint at {DarkPlanner.MaxDarkPowerPercent:0}% cooler power at {ambient.Value:0.#} °C ambient ({fit}), then warmer; {ordered.Count(n => DarkPlanner.BelowPowerLimit(n.SetTemp, coldest))} colder sets are skipped"
+                : "TS Darks: coldest first, the ambient temperature is not known, so no cooler power limit is applied");
             return ordered;
         }
 

@@ -115,6 +115,19 @@ namespace NINA.Plugin.TargetScheduler.Planning.Test {
         }
 
         [Test]
+        public void ReadinessSkipsSetsBeyondEightyPercentPowerAndPicksTheColdestLeft() {
+            DarkReadyInput i = Input(Need("w", 0), Need("c", -14), Need("too-cold", -20));
+            i.Holds.Add(Hold(15, -16));
+            DarkReadyResult r = DarkReadiness.Check(i);
+            r.Ready.Should().BeTrue();
+            r.Need.ComboKey.Should().Be("c");
+            i.Queue = new List<DarkNeed> { Need("too-cold", -20) };
+            r = DarkReadiness.Check(i);
+            r.Ready.Should().BeFalse();
+            r.Reason.Should().Contain("the cooler can't hold -20 °C at 15 °C air");
+        }
+
+        [Test]
         public void ProvenNeedsWinOverUnknownOnesAndWarmestFirst() {
             DarkReadyInput i = Input(Need("cold", -20, priority: 1), Need("warm", 0, priority: 2));
             i.Holds.Add(Hold(15, -5));
@@ -159,6 +172,8 @@ namespace NINA.Plugin.TargetScheduler.Planning.Test {
             r.Ready.Should().BeFalse();
             r.Reason.Should().Contain("most the cooler has reached is 34.1 °C below ambient");
             i.Ambient = 17;
+            DarkReadiness.Check(i).Reason.Should().Contain("the cooler can't hold -17 °C at 17 °C air");
+            i.Ambient = 14;
             r = DarkReadiness.Check(i);
             r.Ready.Should().BeTrue();
             r.Learning.Should().BeFalse();

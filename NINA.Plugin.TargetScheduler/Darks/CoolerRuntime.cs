@@ -38,6 +38,12 @@ namespace NINA.Plugin.TargetScheduler.Darks {
 
         public static CoolerSettings Settings => settings.Value;
 
+        public static CoolerFit Fit() {
+            lock (sync) {
+                return controller.Fit();
+            }
+        }
+
         public static void Start(ICameraMediator cameraMediator, IWeatherDataMediator weatherMediator, ISafetyMonitorMediator safetyMediator, IFlatDeviceMediator flatDeviceMediator) {
             lock (sync) {
                 if (sampler != null || cameraMediator == null) {

@@ -425,6 +425,36 @@ namespace NINA.Plugin.TargetScheduler.Planning.Test {
         }
 
         [Test]
+        public void ColdestSetpointIsAtEightyPercentPowerOfTheMeasuredFit() {
+            CoolerFit.ColdestSetpoint(10, CoolerFit.Prior()).Value.Should().BeApproximately(10 - (80 + 37.4) / 3.77, 1e-9);
+            var fit = new CoolerFit { Intercept = -30, Slope = 4, Basis = "test" };
+            CoolerFit.ColdestSetpoint(10, fit).Value.Should().BeApproximately(-17.5, 1e-9);
+            fit.Power(10, CoolerFit.ColdestSetpoint(10, fit).Value).Should().BeApproximately(80, 1e-9);
+            CoolerFit.ColdestSetpoint(null, fit).Should().BeNull();
+        }
+
+        [Test]
+        public void ColdestFirstStartsAtTheColdestHoldableSetAndRampsWarmer() {
+            var q = DarkPlanner.ColdestFirst(new[] { Need("w", 1, 0), Need("too-cold", 1, -25), Need("m2", 3, -10), Need("m1", 2, -10), Need("c", 1, -20) }, -21.1);
+            q.ConvertAll(n => n.ComboKey).Should().Equal("c", "m1", "m2", "w", "too-cold");
+        }
+
+        [Test]
+        public void SetsColderThanTheEightyPercentLimitAreSkipped() {
+            double? coldest = CoolerFit.ColdestSetpoint(10, CoolerFit.Prior());
+            DarkPlanner.PowerLimitReason(-21, 10, coldest).Should().BeNull();
+            DarkPlanner.PowerLimitReason(-22, 10, coldest).Should().StartWith("the cooler can't hold -22 °C at 10 °C air");
+            DarkPlanner.PowerLimitReason(-30, null, null).Should().BeNull();
+        }
+
+        [Test]
+        public void PowerAboveEightyPercentAfterReachingASetSkipsIt() {
+            DarkPlanner.PowerReadingReason(-20, 10, 80).Should().BeNull();
+            DarkPlanner.PowerReadingReason(-20, 10, double.NaN).Should().BeNull();
+            DarkPlanner.PowerReadingReason(-20, 10, 85).Should().StartWith("the cooler can't hold -20 °C at 10 °C air");
+        }
+
+        [Test]
         public void WarmFirstOrdersBySetTemperatureThenPriority() {
             var q = DarkPlanner.WarmFirst(new[] { Need("c", 1, -20), Need("w2", 3, 0), Need("w1", 2, 0), Need("m", 1, -10) });
             q.ConvertAll(n => n.ComboKey).Should().Equal("w1", "w2", "m", "c");
