@@ -57,7 +57,7 @@ function Invoke-CameraWarmUp {
   $sensor = ConvertTo-WarmUpNumber $cam.Temperature
   $ambient = Get-WarmUpAmbient $Api
   $target = 20.0
-  if ($null -ne $ambient) { $target = [math]::Min(20.0, [math]::Floor($ambient)) }
+  if ($null -ne $ambient) { $target = [math]::Floor($ambient) }
   if ($null -ne $sensor -and $sensor -ge $target - $NearC) {
     Write-Host ("warm-up {0}: the sensor is at {1} C, within {2} C of {3} C (ambient {4}); no warm-up needed" -f (Get-Date -Format 'HH:mm:ss'), $sensor, $NearC, $target, $ambient)
     return 'warm'
@@ -66,7 +66,8 @@ function Invoke-CameraWarmUp {
   $req = Join-Path $PluginHome 'camera-warmup.request'
   $st = Join-Path $PluginHome 'camera-warmup.status.json'
   Remove-Item $st -Force -ErrorAction SilentlyContinue
-  Set-Content -Path $req -Value "requested $(Get-Date -Format o) by install-plugin.ps1"
+  $id = "requested $(Get-Date -Format o) by install-plugin.ps1"
+  Set-Content -Path $req -Value $id -NoNewline
   Write-Host ("warm-up {0}: asked the plugin to warm the camera from {1} C (cooler {2}%, setpoint {3} C) to {4} C (ambient {5})" -f (Get-Date -Format 'HH:mm:ss'), $sensor, $cam.CoolerPower, $cam.TemperatureSetPoint, $target, $ambient)
   $start = Get-Date
   $deadline = $start.AddMinutes($DeadlineMinutes)
@@ -77,6 +78,7 @@ function Invoke-CameraWarmUp {
       (Get-Item $req).LastWriteTime = Get-Date
       $s = $null
       if (Test-Path $st) { try { $s = Get-Content $st -Raw | ConvertFrom-Json } catch { $s = $null } }
+      if ($null -ne $s -and ([string]$s.Request).Trim() -ne $id) { $s = $null }
       $c = $null
       try { $c = Get-WarmUpApi "$Api/equipment/camera/info" } catch { $c = $null }
       $now = Get-Date

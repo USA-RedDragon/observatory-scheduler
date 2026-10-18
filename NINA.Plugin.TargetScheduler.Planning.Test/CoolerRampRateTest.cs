@@ -89,10 +89,10 @@ namespace NINA.Plugin.TargetScheduler.Planning.Test {
         }
 
         [Test]
-        public void TheWarmUpTargetIsTheAmbientRoundedDownAndAtMostTwenty() {
+        public void TheWarmUpTargetIsTheAmbientRoundedDown() {
             WarmupPlan.Target(9.82).Should().Be(9);
             WarmupPlan.Target(-3.4).Should().Be(-4);
-            WarmupPlan.Target(27).Should().Be(WarmupPlan.MaxTargetC);
+            WarmupPlan.Target(27.6).Should().Be(27, "a warm night is warmed to its ambient, not to 20 °C");
             WarmupPlan.Target(null).Should().Be(WarmupPlan.FallbackTargetC);
             WarmupPlan.Target(double.NaN).Should().Be(WarmupPlan.FallbackTargetC);
         }

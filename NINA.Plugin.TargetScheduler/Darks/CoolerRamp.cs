@@ -80,15 +80,41 @@ namespace NINA.Plugin.TargetScheduler.Darks {
                 return Task.FromResult(false);
             }
             var cts = new CancellationTokenSource();
-            Task<bool> task = Ramp(camera, target, log, progress, cts.Token, cPerMinute);
-            _ = task.ContinueWith(t => TSLogger.Warning($"{log}: the {owner} ramp to {target} °C ended: {t.Exception?.GetBaseException().Message ?? "canceled"}"),
-                CancellationToken.None, TaskContinuationOptions.NotOnRanToCompletion, TaskScheduler.Default);
+            CancellationTokenSource previous = null;
+            Task<bool> previousTask = null;
+            string previousOwner = null;
+            Task<bool> task;
             lock (sync) {
+                if (backgroundTask != null && !backgroundTask.IsCompleted) {
+                    if (backgroundOwner == WarmupRuntime.Owner && owner != WarmupRuntime.Owner) {
+                        TSLogger.Warning($"{log}: not moving the setpoint to {target} °C: {WarmupRuntime.Reason}");
+                        return Task.FromResult(false);
+                    }
+                    previous = backgroundCts;
+                    previousTask = backgroundTask;
+                    previousOwner = backgroundOwner;
+                }
+                task = Task.Run(async () => {
+                    if (previousTask != null) {
+                        try {
+                            await previousTask;
+                        } catch (Exception) {
+                        }
+                    }
+                    cts.Token.ThrowIfCancellationRequested();
+                    return await Ramp(camera, target, log, progress, cts.Token, cPerMinute);
+                });
                 backgroundCts = cts;
                 backgroundTask = task;
                 backgroundTarget = target;
                 backgroundOwner = owner;
             }
+            if (previous != null) {
+                TSLogger.Info($"{log}: stopping the {previousOwner} ramp that is still running");
+                previous.Cancel();
+            }
+            _ = task.ContinueWith(t => TSLogger.Warning($"{log}: the {owner} ramp to {target} °C ended: {t.Exception?.GetBaseException().Message ?? "canceled"}"),
+                CancellationToken.None, TaskContinuationOptions.NotOnRanToCompletion, TaskScheduler.Default);
             return task;
         }
 

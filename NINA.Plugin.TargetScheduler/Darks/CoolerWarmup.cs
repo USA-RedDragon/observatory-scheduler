@@ -17,8 +17,6 @@ namespace NINA.Plugin.TargetScheduler.Darks {
         public const double RateCPerMinute = 1.5;
         public const double NearAmbientC = 2.0;
         public const double IdlePowerPercent = 5.0;
-        public const double MaxTargetC = 20.0;
-
         /// <summary>The target without a weather reading: NINA's own warm-up target.</summary>
         public const double FallbackTargetC = 20.0;
 
@@ -26,7 +24,7 @@ namespace NINA.Plugin.TargetScheduler.Darks {
             if (!ambient.HasValue || double.IsNaN(ambient.Value)) {
                 return FallbackTargetC;
             }
-            return Math.Min(MaxTargetC, Math.Floor(ambient.Value));
+            return Math.Floor(ambient.Value);
         }
 
         /// <summary>True when the sensor is cold enough below the target that dropping the cooler now would warm it fast.</summary>
@@ -72,6 +70,7 @@ namespace NINA.Plugin.TargetScheduler.Darks {
     }
 
     public class WarmupStatus {
+        public string Request { get; set; }
         public string State { get; set; }
         public string Reason { get; set; }
         public DateTime StartedAt { get; set; }
@@ -105,6 +104,7 @@ namespace NINA.Plugin.TargetScheduler.Darks {
         private readonly Func<DateTime> clock;
         private WarmupStatus status;
         private Task<bool> ramp;
+        private string requestId;
 
         public WarmupSession(string home, IWarmupCamera camera, Func<double?> ambient, Func<DateTime> clock = null) {
             this.home = home;
@@ -160,7 +160,13 @@ namespace NINA.Plugin.TargetScheduler.Darks {
                 TryDelete(RequestPath);
                 requested = false;
             }
+            string id = requested ? ReadRequest() : null;
+            if (requested && Active && id != null && id != requestId) {
+                TSLogger.Info($"{Log}: a new request replaced the one being handled");
+                End();
+            }
             if (requested && !Active) {
+                requestId = id;
                 Begin();
             } else if (!requested && Active) {
                 End();
@@ -169,11 +175,19 @@ namespace NINA.Plugin.TargetScheduler.Darks {
             }
         }
 
+        private string ReadRequest() {
+            try {
+                return File.ReadAllText(RequestPath);
+            } catch (Exception) {
+                return null;
+            }
+        }
+
         private void Begin() {
             WarmupReading r = camera.Read() ?? new WarmupReading();
             double? air = ambient?.Invoke();
             double target = WarmupPlan.Target(air);
-            var s = new WarmupStatus { StartedAt = clock(), Target = target, Ambient = air, RateCPerMinute = WarmupPlan.RateCPerMinute };
+            var s = new WarmupStatus { Request = requestId, StartedAt = clock(), Target = target, Ambient = air, RateCPerMinute = WarmupPlan.RateCPerMinute };
             Fill(s, r);
             if (!r.Connected) {
                 s.State = "done";
@@ -181,6 +195,9 @@ namespace NINA.Plugin.TargetScheduler.Darks {
             } else if (!r.CanSetTemperature) {
                 s.State = "done";
                 s.Reason = "the camera cannot set its temperature";
+            } else if (double.IsNaN(r.Sensor)) {
+                s.State = "failed";
+                s.Reason = "the camera reports no sensor temperature, so it is not known whether it is cold";
             } else if (!WarmupPlan.Needed(r.Sensor, target)) {
                 s.State = "done";
                 s.Reason = string.Format(CultureInfo.InvariantCulture, "the sensor is at {0:0.0} °C, within {1} °C of {2:0.#} °C", r.Sensor, WarmupPlan.NearAmbientC, target);
@@ -192,7 +209,11 @@ namespace NINA.Plugin.TargetScheduler.Darks {
                 status = s;
             }
             active = true;
-            Began?.Invoke();
+            try {
+                Began?.Invoke();
+            } catch (Exception ex) {
+                TSLogger.Warning($"{Log}: stopping the moves in progress failed: {ex.Message}");
+            }
             TSLogger.Info($"{Log}: warm-up requested: {s.State}: {s.Reason}");
             if (s.State == "warming") {
                 ramp = camera.StartRamp(target, WarmupPlan.RateCPerMinute);

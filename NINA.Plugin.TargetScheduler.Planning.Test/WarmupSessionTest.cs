@@ -103,9 +103,9 @@ namespace NINA.Plugin.TargetScheduler.Planning.Test {
             return new WarmupSession(home, cam, () => ambient, () => now);
         }
 
-        private void Request() {
+        private void Request(string id = "test") {
             string p = Path.Combine(home, WarmupSession.RequestFile);
-            File.WriteAllText(p, "test");
+            File.WriteAllText(p, id);
             File.SetLastWriteTimeUtc(p, now);
         }
 
@@ -253,6 +253,31 @@ namespace NINA.Plugin.TargetScheduler.Planning.Test {
             cam.Ramps.Single().Target.Should().Be(WarmupPlan.FallbackTargetC);
             Run(s, cam, TimeSpan.FromMinutes(30));
             OnDisk().State.Should().Be("done");
+        }
+
+        [Test]
+        public void AnUnknownSensorTemperatureFailsInsteadOfReportingDone() {
+            var cam = new SimCamera(() => now, double.NaN);
+            WarmupSession s = Session(cam);
+            Request();
+            s.Tick();
+            OnDisk().State.Should().Be("failed");
+            cam.Ramps.Should().BeEmpty();
+        }
+
+        [Test]
+        public void ANewRequestReplacesTheOneBeingHandledAndTheStatusNamesIt() {
+            var cold = new SimCamera(() => now, -16);
+            WarmupSession s = Session(cold);
+            Request("first");
+            s.Tick();
+            OnDisk().Request.Should().Be("first");
+            Request("second");
+            Run(s, cold, TimeSpan.FromSeconds(5));
+            OnDisk().Request.Should().Be("second");
+            OnDisk().State.Should().Be("warming");
+            cold.Ramps.Should().HaveCount(2);
+            cold.Stops.Should().Be(1);
         }
 
         [Test]

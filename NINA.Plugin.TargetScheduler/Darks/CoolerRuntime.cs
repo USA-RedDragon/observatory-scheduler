@@ -264,7 +264,7 @@ namespace NINA.Plugin.TargetScheduler.Darks {
             using var steer = CancellationTokenSource.CreateLinkedTokenSource(token, WarmupRuntime.BeganToken);
             try {
                 return await Steer(progress, steer.Token);
-            } catch (OperationCanceledException) when (!token.IsCancellationRequested && WarmupRuntime.Active) {
+            } catch (OperationCanceledException) when (!token.IsCancellationRequested) {
                 TSLogger.Info($"{Log}: the cooler step stopped: {WarmupRuntime.Reason}");
                 await WarmupRuntime.WaitWhileActive("the next light", progress, token);
                 return "the camera warmed for a shutdown";
@@ -431,7 +431,7 @@ namespace NINA.Plugin.TargetScheduler.Darks {
             if (WarmupRuntime.Active) {
                 TSLogger.Info($"{Log}: {target} °C was not reached, not counted as a cooler limit: {WarmupRuntime.Reason}");
                 Record(d, night, "stopped: " + WarmupRuntime.Reason, s);
-                return null;
+                return WarmupRuntime.Reason;
             }
             TSLogger.Warning($"{Log}: {target} °C was not reached: {r.Reason}");
             Record(d, night, "failed: " + r.Reason, s);

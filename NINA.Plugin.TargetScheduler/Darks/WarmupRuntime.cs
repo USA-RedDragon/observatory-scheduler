@@ -43,9 +43,11 @@ namespace NINA.Plugin.TargetScheduler.Darks {
                 }
                 session = new WarmupSession(Common.PLUGIN_HOME, new Camera(cameraMediator), ambient);
                 session.Began += () => {
+                    CancellationTokenSource cts;
                     lock (sync) {
-                        began.Cancel();
+                        cts = began;
                     }
+                    cts.Cancel();
                 };
                 session.Ended += () => {
                     lock (sync) {

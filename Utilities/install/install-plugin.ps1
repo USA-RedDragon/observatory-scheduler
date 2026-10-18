@@ -29,11 +29,18 @@ $staged = (Get-Item "$new\NINA.Plugin.TargetScheduler.dll").VersionInfo.FileVers
 if ($staged -ne $Version) { throw "staged version is $staged" }
 $result = Wait-SafeStop -DeadlineSeconds $DeadlineSeconds
 "safe point: $result $(Get-Date -Format 'HH:mm:ss')"
-Get-CimInstance Win32_Process | Where-Object { $_.Name -eq 'powershell.exe' -and $_.CommandLine -match 'Startup\.ps1' } | ForEach-Object { Stop-Process -Id $_.ProcessId -Force; "killed watchdog $($_.ProcessId)" }
 if ($result -eq 'safe') {
   try {
     $warm = Invoke-CameraWarmUp -PluginHome $dbdir
     "camera: $warm $(Get-Date -Format 'HH:mm:ss')"
+  } catch {
+    Remove-CameraWarmUpRequest $dbdir
+    throw
+  }
+}
+Get-CimInstance Win32_Process | Where-Object { $_.Name -eq 'powershell.exe' -and $_.CommandLine -match 'Startup\.ps1' } | ForEach-Object { Stop-Process -Id $_.ProcessId -Force; "killed watchdog $($_.ProcessId)" }
+if ($result -eq 'safe') {
+  try {
     $result = Wait-SafeStop -DeadlineSeconds 120 -StableSeconds 0
   } catch {
     Remove-CameraWarmUpRequest $dbdir
