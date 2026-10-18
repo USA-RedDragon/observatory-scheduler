@@ -39,6 +39,9 @@ namespace NINA.Plugin.TargetScheduler.Darks {
         public static readonly TimeSpan PowerWindow = TimeSpan.FromMinutes(2);
         public static readonly TimeSpan MaxGap = TimeSpan.FromSeconds(30);
 
+        /// <summary>The longest the darks wait for a verdict at one set; a sensor that never holds the band by then counts as the cooler at its limit.</summary>
+        public static readonly TimeSpan MaxSettle = TimeSpan.FromMinutes(15);
+
         private readonly object sync = new object();
         private readonly List<(DateTime At, double Power)> run = new List<(DateTime, double)>();
         private double? setpoint;
