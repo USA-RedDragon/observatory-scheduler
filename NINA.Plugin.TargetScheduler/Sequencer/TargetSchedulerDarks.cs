@@ -426,13 +426,18 @@ namespace NINA.Plugin.TargetScheduler.Sequencer {
             if (pending.HasValue) {
                 TSLogger.Info($"TS Darks: a restore to {pending.Value} °C is still ramping, so that is the imaging setpoint");
             }
-            double? imagingPower = DarkPlanner.AtTemperature(cam.Temperature, imagingSetpoint) ? cam.CoolerPower : (double?)null;
+            CoolerSteadyVerdict imagingSteady = CameraConnections.Steady.Verdict(DateTime.UtcNow, imagingSetpoint, DarkPlanner.CapacityPowerPercent);
+            double? imagingPower = imagingSteady.State != CoolerSteadyState.Waiting ? imagingSteady.Power : null;
+            if (!imagingPower.HasValue) {
+                TSLogger.Info($"TS Darks: no steady cooler power at the imaging setpoint {imagingSetpoint} °C: {imagingSteady.Reason}");
+            }
             short normalReadout = cam.ReadoutModeForNormalImages;
             double currentSetpoint = imagingSetpoint;
             int done = 0;
             double? powerFloor = null;
             string powerFloorReason = null;
             CoolerTrip floorTrip = null;
+            double? judgedSet = null;
             biasDone = 0;
             TSLogger.Info($"TS Darks: placement {Placement}, imaging setpoint {imagingSetpoint} °C, sensor {cam.Temperature} °C, cooler {cam.CoolerPower}%");
             if (queue.Count > 0) {
@@ -530,13 +535,31 @@ namespace NINA.Plugin.TargetScheduler.Sequencer {
                             break;
                         }
 
-                        string overPower = DarkPlanner.PowerReadingReason(need.SetTemp, ambient, reached.CoolerPower);
-                        if (overPower != null) {
+                        bool judged = judgedSet.HasValue && DarkPlanner.SameSetpoint(judgedSet.Value, need.SetTemp);
+                        CoolerSteadyVerdict steady = judged
+                            ? Recheck(need.SetTemp)
+                            : await AwaitSteady(need.SetTemp, watch, deadline, token, yieldToken);
+                        if (steady.State == CoolerSteadyState.Within) {
+                            judgedSet = need.SetTemp;
+                        } else if (steady.State == CoolerSteadyState.Over) {
+                            judgedSet = null;
+                        }
+                        if (lastTrip != null) {
+                            ApplyTrip(need, lastTrip, imagingSetpoint, imagingPower, ref powerFloor, ref floorTrip);
+                            break;
+                        }
+                        if (steady.State == CoolerSteadyState.Over) {
+                            string overPower = DarkPlanner.PowerReadingReason(need.SetTemp, ambient, steady.Power.Value);
                             powerFloor = Math.Max(powerFloor ?? double.MinValue, need.SetTemp + 0.1);
                             powerFloorReason = overPower;
                             floorTrip = null;
-                            TSLogger.Info($"TS Darks: skipping {need} and every set at or below {need.SetTemp} °C: {overPower}");
+                            TSLogger.Info($"TS Darks: skipping {need} and every set at or below {need.SetTemp} °C: {overPower}; {steady.Reason}");
                             CalibrationActivity.Current.SetFinished(need.ComboKey, CalibrationActivity.Skipped, "cooler_power", overPower);
+                            break;
+                        }
+                        if (steady.State != CoolerSteadyState.Within) {
+                            TSLogger.Info($"TS Darks: skipping {need}: {steady.Reason}");
+                            CalibrationActivity.Current.SetFinished(need.ComboKey, CalibrationActivity.Skipped, yieldToken.IsCancellationRequested ? "stopped" : "not_settled", steady.Reason);
                             break;
                         }
 
@@ -612,6 +635,59 @@ namespace NINA.Plugin.TargetScheduler.Sequencer {
             DarkRuntime.State.AddLimit(Limit(need.SetTemp, imagingSetpoint, imagingPower, trip.Reason, trip.Sensor));
             TSLogger.Info($"TS Darks: skipping {need} and every set below {powerFloor.Value:0.#} °C: {trip.Reason}; the cooler fit is now {CoolerRuntime.Fit()}");
             CalibrationActivity.Current.SetFinished(need.ComboKey, CalibrationActivity.Skipped, "cooler_power", trip.Reason);
+        }
+
+        private static CoolerSteadyVerdict Recheck(double setTemp) {
+            CoolerSteadyVerdict v = CameraConnections.Steady.Verdict(DateTime.UtcNow, setTemp, DarkPlanner.MaxDarkPowerPercent);
+            return v.State == CoolerSteadyState.Over ? v : new CoolerSteadyVerdict { State = CoolerSteadyState.Within, Power = v.Power, Since = v.Since, Reason = $"{setTemp} °C was judged steady within the limit earlier in this run; now {v.Reason}" };
+        }
+
+        /// <summary>
+        /// Waits until <see cref="CoolerSteady"/> can judge the cooler power at the set temperature, with the
+        /// guard watching for a cooler that cannot get there. Returns Waiting with the reason when the deadline,
+        /// a yield, a cancel of the move or a disconnect ends the wait first.
+        /// </summary>
+        private async Task<CoolerSteadyVerdict> AwaitSteady(double setTemp, TemperatureWatch watch, DateTime? deadline, CancellationToken token, CancellationToken yieldToken) {
+            lastTrip = null;
+            CoolerSteadyVerdict v = CameraConnections.Steady.Verdict(DateTime.UtcNow, setTemp, DarkPlanner.MaxDarkPowerPercent);
+            if (v.State != CoolerSteadyState.Waiting) {
+                TSLogger.Info($"TS Darks: {v.Reason}");
+                return v;
+            }
+            if (deadline.HasValue && deadline.Value <= DateTime.UtcNow) {
+                return new CoolerSteadyVerdict { State = CoolerSteadyState.Waiting, Reason = $"no time left before {deadline.Value.ToLocalTime():HH:mm:ss}, the latest start for the dark, to let the cooler settle at {setTemp} °C" };
+            }
+
+            using var cts = CancellationTokenSource.CreateLinkedTokenSource(token, yieldToken);
+            if (deadline.HasValue) {
+                cts.CancelAfter(deadline.Value - DateTime.UtcNow);
+            }
+            DisplayText = $"Letting the cooler settle at {setTemp} °C";
+            TSLogger.Info($"TS Darks: waiting for the cooler to settle at {setTemp} °C before judging its power against {DarkPlanner.MaxDarkPowerPercent:0}%: {v.Reason}");
+            DateTime start = DateTime.UtcNow;
+            using var guardStop = new CancellationTokenSource();
+            Task watching = Guard(new CoolerGuard(setTemp, Ambient()), watch, cts, guardStop.Token);
+            try {
+                while (true) {
+                    CameraInfo info = await watch.Next(cts.Token);
+                    if (info == null || !info.Connected) {
+                        return new CoolerSteadyVerdict { State = CoolerSteadyState.Waiting, Reason = DarkPlanner.CameraDisconnected };
+                    }
+                    v = CameraConnections.Steady.Verdict(DateTime.UtcNow, setTemp, DarkPlanner.MaxDarkPowerPercent);
+                    if (v.State != CoolerSteadyState.Waiting) {
+                        TSLogger.Info($"TS Darks: settled after {(DateTime.UtcNow - start).TotalSeconds:0} s: {v.Reason}");
+                        return v;
+                    }
+                }
+            } catch (OperationCanceledException) when (!token.IsCancellationRequested) {
+                string why = lastTrip?.Reason
+                    ?? (yieldToken.IsCancellationRequested
+                        ? $"imaging can resume, so the wait for the cooler to settle at {setTemp} °C was stopped"
+                        : $"the cooler did not settle at {setTemp} °C by {deadline?.ToLocalTime():HH:mm:ss}, the latest start for the dark ({v.Reason})");
+                return new CoolerSteadyVerdict { State = CoolerSteadyState.Waiting, Reason = why };
+            } finally {
+                await EndGuard(guardStop, watching);
+            }
         }
 
         private async Task Guard(CoolerGuard guard, TemperatureWatch watch, CancellationTokenSource abort, CancellationToken stop) {

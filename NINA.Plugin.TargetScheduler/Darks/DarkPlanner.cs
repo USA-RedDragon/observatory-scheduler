@@ -202,13 +202,14 @@ namespace NINA.Plugin.TargetScheduler.Darks {
                 "the cooler can't hold {0} °C at {1:0.#} °C air (at {2:0}% cooler power it holds about {3:0.#} °C)", setTemp, ambient.Value, MaxDarkPowerPercent, coldest.Value);
         }
 
+        /// <summary>Why a set is skipped when the steady power at it, measured by <see cref="CoolerSteady"/>, is above the limit.</summary>
         public static string PowerReadingReason(double setTemp, double? ambient, double power) {
             if (double.IsNaN(power) || power <= MaxDarkPowerPercent) {
                 return null;
             }
             return ambient.HasValue
-                ? string.Format(CultureInfo.InvariantCulture, "the cooler can't hold {0} °C at {1:0.#} °C air (it needed {2:0}% cooler power, above {3:0}%)", setTemp, ambient.Value, power, MaxDarkPowerPercent)
-                : string.Format(CultureInfo.InvariantCulture, "the cooler can't hold {0} °C (it needed {1:0}% cooler power, above {2:0}%)", setTemp, power, MaxDarkPowerPercent);
+                ? string.Format(CultureInfo.InvariantCulture, "the cooler can't hold {0} °C at {1:0.#} °C air (it needed a steady {2:0}% cooler power, above {3:0}%)", setTemp, ambient.Value, power, MaxDarkPowerPercent)
+                : string.Format(CultureInfo.InvariantCulture, "the cooler can't hold {0} °C (it needed a steady {1:0}% cooler power, above {2:0}%)", setTemp, power, MaxDarkPowerPercent);
         }
 
         public static bool AtTemperature(double sensor, double setpoint) {

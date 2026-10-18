@@ -557,7 +557,11 @@ namespace NINA.Plugin.TargetScheduler.Darks {
         }
     }
 
-    /// <summary>Stops a dark cool-down or hold that the cooler can't reach: 2 minutes at 80% power or more, or 3 minutes without cooling, with the sensor more than 0.5 °C warmer than the set.</summary>
+    /// <summary>
+    /// Stops a dark cool-down or hold that the cooler can't reach, with the sensor more than 0.5 °C warmer than the set:
+    /// 2 minutes at 80% power or more in which the sensor did not fall 0.1 °C, or 3 minutes without that fall at any power.
+    /// High power while the sensor still falls is the pull-down, not a limit; <see cref="CoolerSteady"/> judges the power once it settles.
+    /// </summary>
     public class CoolerGuard {
         public static readonly TimeSpan HighFor = TimeSpan.FromMinutes(2);
         public static readonly TimeSpan StallFor = TimeSpan.FromMinutes(3);
@@ -597,8 +601,8 @@ namespace NINA.Plugin.TargetScheduler.Darks {
                     highSensor = sensor;
                     highPower = power;
                 }
-                if (at - highSince.Value >= HighFor) {
-                    return new CoolerTrip { At = at, SetTemp = setTemp, Ambient = ambient, Sensor = highSensor, Power = highPower };
+                if (at - highSince.Value >= HighFor && at - lastFall >= HighFor) {
+                    return new CoolerTrip { At = at, SetTemp = setTemp, Ambient = ambient, Sensor = Math.Min(highSensor, best.Value), Power = highPower };
                 }
             } else {
                 highSince = null;

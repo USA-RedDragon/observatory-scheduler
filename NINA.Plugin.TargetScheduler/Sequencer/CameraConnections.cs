@@ -19,6 +19,9 @@ namespace NINA.Plugin.TargetScheduler.Sequencer {
 
         public static SensorHold Hold { get; } = new SensorHold(SensorHold.DefaultMaxGap);
 
+        /// <summary>The steady-state cooler power at the camera's setpoint, for the darks' 80% limit.</summary>
+        public static CoolerSteady Steady { get; } = new CoolerSteady();
+
         public static void Watch(ICameraMediator cameraMediator) {
             if (cameraMediator == null) {
                 return;
@@ -63,7 +66,9 @@ namespace NINA.Plugin.TargetScheduler.Sequencer {
 
             public void UpdateDeviceInfo(CameraInfo info) {
                 if (info != null) {
-                    Hold.Observe(DateTime.UtcNow, Read(info));
+                    DateTime now = DateTime.UtcNow;
+                    Hold.Observe(now, Read(info));
+                    Steady.Observe(now, info.Connected, info.Temperature, info.TemperatureSetPoint, info.CoolerPower);
                 }
             }
 
