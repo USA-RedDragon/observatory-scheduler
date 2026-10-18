@@ -294,10 +294,10 @@ namespace NINA.Plugin.TargetScheduler.Planning.Test {
 
         [Test]
         public void HydrogenAlphaIsKnownByAnyOfItsNames() {
-            foreach (string name in new[] { "H-a", "Ha", "HA", "H-alpha", "Halpha", "Hydrogen Alpha" }) {
+            foreach (string name in new[] { "H-a", "Ha", "HA", "H-alpha", "Halpha", "Hydrogen Alpha", "Ha 7nm", "H-alpha 3nm", "Hα" }) {
                 FilterSteering.IsHydrogenAlpha(name).Should().BeTrue(name);
             }
-            foreach (string name in new[] { "O-III", "S-II", "Luminance", "Red", "Hb", null, "" }) {
+            foreach (string name in new[] { "O-III", "S-II", "Luminance", "Red", "Hb", "Hb 5nm", "Halo", null, "" }) {
                 FilterSteering.IsHydrogenAlpha(name).Should().BeFalse(name ?? "null");
             }
         }

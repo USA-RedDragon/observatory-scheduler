@@ -67,7 +67,10 @@ namespace NINA.Plugin.TargetScheduler.Goals {
         }
 
         public static bool IsHydrogenAlpha(string filter) {
-            return MoonKeep.FilterKey(filter) == "ha";
+            string k = MoonKeep.FilterKey(filter);
+            if (k == null) { return false; }
+            if (k == "ha" || k.StartsWith("halpha", StringComparison.Ordinal) || k.StartsWith("hydrogenalpha", StringComparison.Ordinal) || k.StartsWith("hα", StringComparison.Ordinal)) { return true; }
+            return k.Length > 2 && k.StartsWith("ha", StringComparison.Ordinal) && char.IsDigit(k[2]);
         }
 
         /// <summary>
