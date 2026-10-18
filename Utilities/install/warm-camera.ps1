@@ -77,7 +77,7 @@ function Invoke-CameraWarmUp {
     while ($true) {
       (Get-Item $req).LastWriteTime = Get-Date
       $s = $null
-      if (Test-Path $st) { try { $s = Get-Content $st -Raw | ConvertFrom-Json } catch { $s = $null } }
+      if (Test-Path $st) { try { $s = Get-Content $st -Raw -Encoding UTF8 | ConvertFrom-Json } catch { $s = $null } }
       if ($null -ne $s -and ([string]$s.Request).Trim() -ne $id) { $s = $null }
       $c = $null
       try { $c = Get-WarmUpApi "$Api/equipment/camera/info" } catch { $c = $null }
