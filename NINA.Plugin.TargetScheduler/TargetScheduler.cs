@@ -100,6 +100,7 @@ namespace NINA.Plugin.TargetScheduler {
             Remote.Plugin.RemoteHost.Start(profileService, focuserMediator, filterWheelMediator, cameraMediator);
             RemoteOptions = new Remote.Plugin.RemoteOptionsVM();
             Darks.CoolerRuntime.Start(cameraMediator, weatherDataMediator, safetyMonitorMediator, flatDeviceMediator);
+            Darks.WarmupRuntime.Start(cameraMediator, Darks.CoolerRuntime.AmbientNow);
             Sequencer.CameraConnections.Watch(cameraMediator);
             CoolerOptions = new Darks.CoolerOptionsVM();
 
@@ -245,6 +246,7 @@ namespace NINA.Plugin.TargetScheduler {
             ImageGradingController.Instance.Shutdown();
             Remote.Plugin.RemoteHost.Shutdown();
             Darks.CoolerRuntime.Stop();
+            Darks.WarmupRuntime.Stop();
 
             if (SyncManager.Instance.IsRunning) {
                 SyncManager.Instance.Shutdown();

@@ -4,5 +4,8 @@ namespace NINA.Plugin.TargetScheduler.Shared.Utility {
 
         public static void Warning(string message) {
         }
+
+        public static void Info(string message) {
+        }
     }
 }

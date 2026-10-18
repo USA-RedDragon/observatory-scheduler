@@ -115,6 +115,9 @@ namespace NINA.Plugin.TargetScheduler.Darks {
         }
 
         private static string PausedReason() {
+            if (WarmupRuntime.Active) {
+                return WarmupRuntime.Reason;
+            }
             string b;
             lock (sync) {
                 b = busyCount > 0 ? busy : null;
@@ -150,6 +153,11 @@ namespace NINA.Plugin.TargetScheduler.Darks {
             } catch (Exception) {
             }
             return null;
+        }
+
+        /// <summary>The weather device's air temperature, or null when it is not connected.</summary>
+        public static double? AmbientNow() {
+            return Ambient();
         }
 
         private static double? Ambient() {
@@ -241,8 +249,14 @@ namespace NINA.Plugin.TargetScheduler.Darks {
         /// the next light; null to take it. Errors other than a cancel are logged and the exposure goes ahead.
         /// </summary>
         public static async Task<string> BeforeExposure(IProgress<ApplicationStatus> progress, CancellationToken token) {
+            await WarmupRuntime.WaitWhileActive("the next light", progress, token);
+            using var steer = CancellationTokenSource.CreateLinkedTokenSource(token, WarmupRuntime.BeganToken);
             try {
-                return await Steer(progress, token);
+                return await Steer(progress, steer.Token);
+            } catch (OperationCanceledException) when (!token.IsCancellationRequested && WarmupRuntime.Active) {
+                TSLogger.Info($"{Log}: the cooler step stopped: {WarmupRuntime.Reason}");
+                await WarmupRuntime.WaitWhileActive("the next light", progress, token);
+                return "the camera warmed for a shutdown";
             } catch (Exception ex) when (!(ex is OperationCanceledException) && !token.IsCancellationRequested) {
                 TSLogger.Error($"{Log}: the cooler step failed, the exposure goes ahead: {ex.Message}");
                 return null;
@@ -403,6 +417,11 @@ namespace NINA.Plugin.TargetScheduler.Darks {
 
         private static async Task<string> Failed(CoolerDecision d, CoolerMoveResult r, Device device, string night, CoolerSettingsData s, IProgress<ApplicationStatus> progress, CancellationToken token) {
             double target = d.Target.Value;
+            if (WarmupRuntime.Active) {
+                TSLogger.Info($"{Log}: {target} °C was not reached, not counted as a cooler limit: {WarmupRuntime.Reason}");
+                Record(d, night, "stopped: " + WarmupRuntime.Reason, s);
+                return null;
+            }
             TSLogger.Warning($"{Log}: {target} °C was not reached: {r.Reason}");
             Record(d, night, "failed: " + r.Reason, s);
             if (d.Action == CoolerAction.Warmer || r.Reason == DarkPlanner.CameraDisconnected || r.Reason == DarkPlanner.SensorUnknown || !r.Sensor.HasValue || double.IsNaN(r.Sensor.Value) || r.Sensor.Value <= target) {

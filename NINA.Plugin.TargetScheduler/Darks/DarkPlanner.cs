@@ -137,10 +137,15 @@ namespace NINA.Plugin.TargetScheduler.Darks {
         private const double RampStepSeconds = 15;
 
         public static TimeSpan Ramp(double from, double to) {
-            if (double.IsNaN(from) || double.IsNaN(to)) {
+            return Ramp(from, to, RampCPerMinute);
+        }
+
+        /// <summary>The ramp time for a move at the given rate, in whole 15 s steps, from 1 to 60 minutes.</summary>
+        public static TimeSpan Ramp(double from, double to, double cPerMinute) {
+            if (double.IsNaN(from) || double.IsNaN(to) || !(cPerMinute > 0)) {
                 return MaxRamp;
             }
-            double seconds = Math.Abs(to - from) / RampCPerMinute * 60;
+            double seconds = Math.Abs(to - from) / cPerMinute * 60;
             seconds = Math.Ceiling(seconds / RampStepSeconds) * RampStepSeconds;
             seconds = Math.Min(MaxRamp.TotalSeconds, Math.Max(MinRamp.TotalSeconds, seconds));
             return TimeSpan.FromSeconds(seconds);

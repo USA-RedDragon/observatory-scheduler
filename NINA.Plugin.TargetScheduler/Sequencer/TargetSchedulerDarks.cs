@@ -271,8 +271,9 @@ namespace NINA.Plugin.TargetScheduler.Sequencer {
             endReason = null;
             runStarted = false;
             CalibrationWatch.Remember(this);
+            using var yieldAll = CancellationTokenSource.CreateLinkedTokenSource(yieldSource.Token, WarmupRuntime.BeganToken);
             try {
-                await Run(progress, token, yieldSource.Token);
+                await Run(progress, token, yieldAll.Token);
             } catch (Exception ex) when (Utils.IsCancelException(ex)) {
                 endCode = "canceled";
                 endReason = "the sequence stopped the instruction";
@@ -375,6 +376,9 @@ namespace NINA.Plugin.TargetScheduler.Sequencer {
                 TSLogger.Warning("TS Darks: camera not connected, skipping");
                 return;
             }
+            if (WarmupStopped("TS Darks: not taking darks or bias frames")) {
+                return;
+            }
 
             TSLogger.Info($"TS Darks: light-safe sun limit {DarkPlanner.SunLimitDegrees:0.0}°: {DarkPlanner.SunLimitBasis}");
             DarkWindow first = Window();
@@ -472,6 +476,9 @@ namespace NINA.Plugin.TargetScheduler.Sequencer {
                     while (true) {
                         token.ThrowIfCancellationRequested();
                         Remote.Plugin.RemoteHost.Instance?.AtPlanBoundary();
+                        if (WarmupStopped($"TS Darks: stopping after {done} darks")) {
+                            return;
+                        }
 
                         DarkWindow w = Window();
                         stop = DarkPlanner.StopReason(w);
@@ -616,7 +623,9 @@ namespace NINA.Plugin.TargetScheduler.Sequencer {
                     if (cameraMediator.GetInfo().ReadoutModeForNormalImages != normalReadout) {
                         cameraMediator.SetReadoutModeForNormalImages(normalReadout);
                     }
-                    if (queue.Count > 0 && Placement != DarkPlacement.EndOfSequence) {
+                    if (WarmupRuntime.Active) {
+                        TSLogger.Info($"TS Darks: not restoring the imaging setpoint {imagingSetpoint} °C: {WarmupRuntime.Reason}");
+                    } else if (queue.Count > 0 && Placement != DarkPlacement.EndOfSequence) {
                         await Restore(imagingSetpoint, watch, progress, token);
                         CalibrationActivity.Current.MoveEnded();
                     }
@@ -626,6 +635,16 @@ namespace NINA.Plugin.TargetScheduler.Sequencer {
                 DisplayText = coverStop != null ? $"Stopped: {coverStop}" : "";
                 ProgressText = "...";
             }
+        }
+
+        private bool WarmupStopped(string what) {
+            if (!WarmupRuntime.Active) {
+                return false;
+            }
+            endCode = "warmup";
+            endReason = WarmupRuntime.Reason;
+            TSLogger.Info($"{what}: {endReason}");
+            return true;
         }
 
         private void ApplyTrip(DarkNeed need, CoolerTrip trip, double imagingSetpoint, double? imagingPower, ref double? powerFloor, ref CoolerTrip floorTrip) {
@@ -682,7 +701,7 @@ namespace NINA.Plugin.TargetScheduler.Sequencer {
             } catch (OperationCanceledException) when (!token.IsCancellationRequested) {
                 string why = lastTrip?.Reason
                     ?? (yieldToken.IsCancellationRequested
-                        ? $"imaging can resume, so the wait for the cooler to settle at {setTemp} °C was stopped"
+                        ? (WarmupRuntime.Active ? $"the wait for the cooler to settle at {setTemp} °C was stopped: {WarmupRuntime.Reason}" : $"imaging can resume, so the wait for the cooler to settle at {setTemp} °C was stopped")
                         : $"the cooler did not settle at {setTemp} °C by {deadline?.ToLocalTime():HH:mm:ss}, the latest start for the dark ({v.Reason})");
                 return new CoolerSteadyVerdict { State = CoolerSteadyState.Waiting, Reason = why };
             } finally {
@@ -813,7 +832,7 @@ namespace NINA.Plugin.TargetScheduler.Sequencer {
                 failed = ok ? await WaitAtTemperature(target, watch, cts.Token) : $"NINA could not reach {target} °C: the cooler stopped making progress at full power";
             } catch (OperationCanceledException) when (!token.IsCancellationRequested) {
                 failed = yieldToken.IsCancellationRequested
-                    ? $"imaging can resume, so the move to {target} °C was stopped"
+                    ? (WarmupRuntime.Active ? $"the move to {target} °C was stopped: {WarmupRuntime.Reason}" : $"imaging can resume, so the move to {target} °C was stopped")
                     : $"{target} °C was not reached by {deadline?.ToLocalTime():HH:mm:ss}, the latest start for the dark";
             } finally {
                 await EndGuard(guardStop, watching);
@@ -983,6 +1002,9 @@ namespace NINA.Plugin.TargetScheduler.Sequencer {
                 while (true) {
                     token.ThrowIfCancellationRequested();
                     Remote.Plugin.RemoteHost.Instance?.AtPlanBoundary();
+                    if (WarmupStopped($"TS Bias: stopping after {biasDone} bias frames")) {
+                        return true;
+                    }
 
                     DarkWindow w = Window();
                     string stop = DarkPlanner.StopReason(w);
