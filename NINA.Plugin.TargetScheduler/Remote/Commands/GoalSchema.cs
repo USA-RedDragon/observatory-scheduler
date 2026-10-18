@@ -62,7 +62,9 @@ namespace NINA.Plugin.TargetScheduler.Remote.Commands {
             (GoalProgressTable, "reason", "TEXT"),
             (GoalProgressTable, "stack_subs", "INTEGER"),
             (GoalProgressTable, "min_subs", "INTEGER"),
-            (GoalProgressTable, "sub_limit", "INTEGER")
+            (GoalProgressTable, "sub_limit", "INTEGER"),
+            (GoalProgressTable, "score_cut", "REAL"),
+            (GoalProgressTable, "expected_score", "REAL")
         };
 
         public static ISet<string> Columns(DbConnection connection, string table) {

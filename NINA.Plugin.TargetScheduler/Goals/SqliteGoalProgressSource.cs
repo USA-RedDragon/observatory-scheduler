@@ -138,11 +138,19 @@ namespace NINA.Plugin.TargetScheduler.Goals {
                 Reason = row.Reason,
                 StackSubs = row.StackSubs,
                 MinSubs = row.MinSubs,
-                SubLimit = row.SubLimit
+                SubLimit = row.SubLimit,
+                ScoreCut = KnownScore(row.ScoreCut),
+                ExpectedScore = KnownScore(row.ExpectedScore),
+                ExpectedAtQuality = KnownScore(row.NightQuality)
             };
         }
 
         private static double? KnownHours(double? value) {
+            if (!value.HasValue || double.IsNaN(value.Value) || double.IsInfinity(value.Value) || value.Value < 0) { return null; }
+            return value.Value;
+        }
+
+        private static double? KnownScore(double? value) {
             if (!value.HasValue || double.IsNaN(value.Value) || double.IsInfinity(value.Value) || value.Value < 0) { return null; }
             return value.Value;
         }

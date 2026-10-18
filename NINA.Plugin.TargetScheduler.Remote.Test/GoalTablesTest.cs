@@ -129,7 +129,45 @@ VALUES ('T1', 'Ha', 0, NULL, 0, 'collecting', 'insufficient data', 6, 8, 32),
             using var conn = db.Connect();
             GoalSchema.Ensure(conn);
             GoalSchema.Ensure(conn);
-            GoalSchema.Columns(conn, "ts_goal_progress").Should().Contain(new[] { "state", "reason", "stack_subs", "min_subs", "sub_limit", "night_quality" });
+            GoalSchema.Columns(conn, "ts_goal_progress").Should().Contain(new[] { "state", "reason", "stack_subs", "min_subs", "sub_limit", "night_quality", "score_cut", "expected_score" });
+        }
+
+        [Test]
+        public void ReadsTheScoreCutAndExpectedScore() {
+            using (var conn = db.Connect()) { GoalSchema.Ensure(conn); }
+            db.Exec(@"INSERT INTO ts_goal (target_guid, filter) VALUES ('T1', 'Blue'), ('T1', 'Red'), ('T1', 'Green');
+INSERT INTO ts_goal_progress (target_guid, filter, kind, done, state, stack_subs, min_subs, sub_limit, score_cut, expected_score, night_quality, night_quality_at)
+VALUES ('T1', 'Blue', 0, 0, 'collecting', 2, 8, 32, 0.25, 0.11, 0.1, '2026-10-18T06:00:00Z'),
+       ('T1', 'Red', 0, 0, 'collecting', 2, 8, 32, NULL, 0.4, 0.1, '2026-10-18T06:00:00Z'),
+       ('T1', 'Green', 0, 0, 'collecting', 2, 8, 32, 'garbage', -1, NULL, NULL);");
+
+            using var c = db.Connect();
+            var source = new SqliteGoalProgressSource(new SqlGoalRowProvider(c));
+            GoalProgress blue = source.Get("T1", "Blue");
+            blue.ScoreCut.Should().Be(0.25);
+            blue.ExpectedScore.Should().Be(0.11);
+            blue.ExpectedAtQuality.Should().Be(0.1);
+            source.Get("T1", "Green").ExpectedAtQuality.Should().BeNull();
+            blue.State.Should().Be(GoalState.Collecting);
+            source.Get("T1", "Red").ScoreCut.Should().BeNull();
+            source.Get("T1", "Red").ExpectedScore.Should().Be(0.4);
+            source.Get("T1", "Green").ScoreCut.Should().BeNull();
+            source.Get("T1", "Green").ExpectedScore.Should().BeNull();
+        }
+
+        [Test]
+        public void ATableWithoutTheReadinessColumnsStillReadsTheScoreCut() {
+            db.Exec(@"CREATE TABLE ts_goal (target_guid TEXT NOT NULL, filter TEXT NOT NULL, kind INTEGER NOT NULL DEFAULT 0, snr_goal REAL NOT NULL DEFAULT 10, depth_goal REAL, plateau_stop INTEGER NOT NULL DEFAULT 1, region TEXT, updated_at TEXT, PRIMARY KEY (target_guid, filter));
+CREATE TABLE ts_goal_progress (target_guid TEXT NOT NULL, filter TEXT NOT NULL, kind INTEGER, goal_value REAL, achieved_value REAL, progress REAL, snr REAL, depth REAL, effective_hours REAL, hours_needed REAL, gain_per_hour_pct REAL, plateau INTEGER, low_confidence INTEGER, done INTEGER, measured_at TEXT, score_cut REAL, expected_score REAL, PRIMARY KEY (target_guid, filter));
+INSERT INTO ts_goal (target_guid, filter) VALUES ('T1', 'Blue');
+INSERT INTO ts_goal_progress (target_guid, filter, kind, progress, done, score_cut, expected_score) VALUES ('T1', 'Blue', 0, 0.2, 0, 0.25, 0.11);");
+
+            using var c = db.Connect();
+            GoalProgress blue = new SqliteGoalProgressSource(new SqlGoalRowProvider(c)).Get("T1", "Blue");
+            blue.Progress.Should().Be(0.2);
+            blue.State.Should().Be(GoalState.Measured);
+            blue.ScoreCut.Should().Be(0.25);
+            blue.ExpectedScore.Should().Be(0.11);
         }
 
         [Test]
