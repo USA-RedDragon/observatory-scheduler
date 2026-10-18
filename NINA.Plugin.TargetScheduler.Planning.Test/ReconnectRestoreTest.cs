@@ -50,5 +50,52 @@ namespace NINA.Plugin.TargetScheduler.Planning.Test {
             ReconnectRestore.Decide(true, -16, true, true, true, -15.4, -16).Target.Should().BeNull();
             ReconnectRestore.Decide(true, -16, true, true, true, -14.5, -16).Target.Should().Be(-16);
         }
+
+        private static readonly DateTime T0 = new DateTime(2026, 10, 17, 3, 0, 0, DateTimeKind.Utc);
+
+        private static SetpointMemory Holding(double setpoint, int seconds = 600) {
+            var m = new SetpointMemory();
+            for (int t = 0; t <= seconds; t += 2) {
+                m.Observe(T0.AddSeconds(t), true, true, true, setpoint);
+            }
+            return m;
+        }
+
+        [Test]
+        public void TheFirstUpdateOfAReconnectWithTheCoolerOffKeepsTheOldSetpoint() {
+            SetpointMemory m = Holding(-16);
+            m.Observe(T0.AddSeconds(602), false, false, false, double.NaN).Should().BeFalse();
+            DateTime back = T0.AddSeconds(660);
+            m.Observe(back, true, true, false, 0).Should().BeTrue("NINA sends this update before it raises Connected");
+            m.BeforeReconnect(back.AddMilliseconds(5)).Should().Be(-16);
+        }
+
+        [Test]
+        public void AReconnectWithoutADisconnectedUpdateIsFoundByTheGapAndKeepsTheOldSetpoint() {
+            SetpointMemory m = Holding(-20);
+            DateTime back = T0.AddSeconds(700);
+            m.Observe(back, true, true, true, -5).Should().BeTrue();
+            m.Last.Should().Be(-5);
+            m.BeforeReconnect(back).Should().Be(-20, "the cooler came back on at another setpoint, which must not replace the one to restore");
+        }
+
+        [Test]
+        public void ACoolerTurnedOffOnPurposeIsNotRestored() {
+            SetpointMemory m = Holding(-16);
+            for (int t = 602; t <= 700; t += 2) {
+                m.Observe(T0.AddSeconds(t), true, true, false, 20);
+            }
+            m.Last.Should().BeNull();
+            m.Observe(T0.AddSeconds(702), false, false, false, double.NaN);
+            m.Observe(T0.AddSeconds(760), true, true, false, 20).Should().BeTrue();
+            m.BeforeReconnect(T0.AddSeconds(760)).Should().BeNull();
+        }
+
+        [Test]
+        public void TheFirstConnectOfTheNightHasNothingToRestore() {
+            var m = new SetpointMemory();
+            m.Observe(T0, true, true, false, 0).Should().BeTrue();
+            m.BeforeReconnect(T0).Should().BeNull();
+        }
     }
 }

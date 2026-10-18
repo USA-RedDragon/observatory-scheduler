@@ -19,13 +19,12 @@ namespace NINA.Plugin.TargetScheduler.Sequencer {
         public const string Log = "TS Cooler";
         public const string RestoreOwner = "reconnect";
         public static readonly TimeSpan FirstUpdateWait = TimeSpan.FromSeconds(15);
-        public static readonly TimeSpan CoolerOffAfter = TimeSpan.FromSeconds(30);
 
         private static readonly object lockObj = new object();
         private static ICameraMediator watched;
         private static Consumer consumer;
         private static DateTime? connectedAt;
-        private static double? lastSetpoint;
+        private static readonly SetpointMemory setpoints = new SetpointMemory();
         private static TaskCompletionSource<bool> firstUpdate;
 
         public static SensorHold Hold { get; } = new SensorHold(SensorHold.DefaultMaxGap);
@@ -73,7 +72,7 @@ namespace NINA.Plugin.TargetScheduler.Sequencer {
             TaskCompletionSource<bool> first;
             lock (lockObj) {
                 connectedAt = DateTime.UtcNow;
-                before = lastSetpoint;
+                before = setpoints.BeforeReconnect(connectedAt.Value);
                 camera = watched;
                 first = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
                 firstUpdate = first;
@@ -106,20 +105,14 @@ namespace NINA.Plugin.TargetScheduler.Sequencer {
         }
 
         private static void Remember(CameraInfo info, DateTime now) {
-            TaskCompletionSource<bool> first = null;
+            setpoints.Observe(now, info.Connected, info.CanSetTemperature, info.CoolerOn, info.TemperatureSetPoint);
+            if (!info.Connected) {
+                return;
+            }
+            TaskCompletionSource<bool> first;
             lock (lockObj) {
-                if (!info.Connected) {
-                    return;
-                }
                 first = firstUpdate;
                 firstUpdate = null;
-                if (!info.CanSetTemperature) {
-                    lastSetpoint = null;
-                } else if (info.CoolerOn && !double.IsNaN(info.TemperatureSetPoint)) {
-                    lastSetpoint = info.TemperatureSetPoint;
-                } else if (!info.CoolerOn && connectedAt.HasValue && now - connectedAt.Value > CoolerOffAfter) {
-                    lastSetpoint = null;
-                }
             }
             first?.TrySetResult(true);
         }
