@@ -21,6 +21,7 @@ namespace NINA.Plugin.TargetScheduler.Goals {
     public static class FilterSteering {
         public const double FreshGainPct = 100;
         public const double KeepCurrentWithin = 0.02;
+        public const double ExpectedQualityTolerance = 0.025;
 
         public static bool Applies(IEnumerable<SteeringCandidate> candidates) {
             return candidates != null && candidates.Any(c => c != null && c.Goal != null && !c.Goal.Done);
@@ -74,12 +75,31 @@ namespace NINA.Plugin.TargetScheduler.Goals {
         }
 
         /// <summary>
+        /// True when the stacker expects a sub of this broadband filter taken now to fail its low-score cut: the
+        /// score it expects at the current night quality is under the target's score cut. Always false for a
+        /// narrowband filter, which the steering already favors on a poor sky. False while the night quality is
+        /// unknown or stale, when the stacker has not published both numbers, or when its expected score was
+        /// estimated for another night quality than the current one (a row it has not rewritten since).
+        /// </summary>
+        public static bool BelowCut(SteeringCandidate c, double? quality) {
+            if (!quality.HasValue || c?.Goal == null || c.Narrowband) { return false; }
+            double? cut = c.Goal.ScoreCut;
+            double? expected = c.Goal.ExpectedScore;
+            double? at = c.Goal.ExpectedAtQuality;
+            if (at.HasValue && !(Math.Abs(at.Value - quality.Value) <= ExpectedQualityTolerance)) { return false; }
+            return cut.HasValue && expected.HasValue && !double.IsNaN(cut.Value) && !double.IsNaN(expected.Value) && expected.Value < cut.Value;
+        }
+
+        /// <summary>
         /// While any non-H-alpha filter is bootstrapping, every open non-H-alpha filter takes its turn in plan order,
         /// starting at the current one, whatever the deficits, Moon, sky or kept rates favor. Returns -1 when no
-        /// filter is bootstrapping. Call after Evaluate: a filter whose conditions value it at 0 sits out.
+        /// filter is bootstrapping. Call after Evaluate: a filter whose conditions value it at 0 sits out, and so
+        /// does a filter whose subs the stacker expects to fail its score cut at this night quality. When every
+        /// bootstrapping filter sits out, it returns -1 and the usual steering picks; the rotation resumes when
+        /// the sky is good enough again.
         /// </summary>
-        public static int Bootstrap(IList<SteeringCandidate> candidates, int currentIndex) {
-            List<SteeringCandidate> open = candidates.Where(c => c != null && c.Value > 0 && !IsHydrogenAlpha(c.Filter)).OrderBy(c => c.Index).ToList();
+        public static int Bootstrap(IList<SteeringCandidate> candidates, int currentIndex, double? quality = null) {
+            List<SteeringCandidate> open = candidates.Where(c => c != null && c.Value > 0 && !IsHydrogenAlpha(c.Filter) && !BelowCut(c, quality)).OrderBy(c => c.Index).ToList();
             if (!open.Any(Bootstrapping)) { return -1; }
 
             return (open.FirstOrDefault(c => c.Index >= currentIndex) ?? open[0]).Index;
@@ -89,11 +109,14 @@ namespace NINA.Plugin.TargetScheduler.Goals {
             if (!Applies(candidates)) { return -1; }
 
             Evaluate(candidates, quality);
-            int bootstrap = Bootstrap(candidates, currentIndex);
+            int bootstrap = Bootstrap(candidates, currentIndex, quality);
             if (bootstrap >= 0) { return bootstrap; }
 
-            List<SteeringCandidate> pool = candidates.Where(c => c != null && c.Value > 0 && Favored(c, quality)).ToList();
-            if (pool.Count == 0) { pool = candidates.Where(c => c != null).ToList(); }
+            List<SteeringCandidate> passing = candidates.Where(c => c != null && !BelowCut(c, quality)).ToList();
+            if (!passing.Any(c => c.Value > 0)) { passing = candidates.Where(c => c != null).ToList(); }
+
+            List<SteeringCandidate> pool = passing.Where(c => c.Value > 0 && Favored(c, quality)).ToList();
+            if (pool.Count == 0) { pool = passing; }
 
             SteeringCandidate best = null;
             foreach (SteeringCandidate c in pool) {

@@ -34,16 +34,41 @@ namespace NINA.Plugin.TargetScheduler.Test.Planning.Exposures {
         }
 
         private static void PoorSky() {
+            Sky(0.10);
+        }
+
+        private static void Sky(double quality) {
             PlannerSignals.Current = new PlannerSignals(new[] {
-                new GoalProgressRow { TargetGuid = Guid, Filter = "Red", NightQuality = 0.10, NightQualityAt = DateTime.UtcNow }
+                new GoalProgressRow { TargetGuid = Guid, Filter = "Red", NightQuality = quality, NightQualityAt = DateTime.UtcNow }
             });
         }
 
-        private void Goal(string filter, GoalState state, double progress = 0) {
+        private void Goal(string filter, GoalState state, double progress = 0, double? cut = null, double? expected = null) {
             source.Setup(m => m.Get(Guid, filter)).Returns(new GoalProgress {
                 TargetGuid = Guid, Filter = filter, State = state, Progress = progress, StackSubs = state == GoalState.Measured ? 8 : 0, MinSubs = 8,
-                EffectiveHours = state == GoalState.Measured ? 1 : 0, GainPerHourPct = state == GoalState.Measured ? 10 : 0
+                EffectiveHours = state == GoalState.Measured ? 1 : 0, GainPerHourPct = state == GoalState.Measured ? 10 : 0,
+                ScoreCut = cut, ExpectedScore = expected
             });
+        }
+
+        [Test]
+        public void AFreshTargetUnderAPoorSkyTakesHydrogenAlphaWhenBroadbandWouldFailItsCut() {
+            var (pp, pt) = Sculptor("Red", "Green", "Blue", "H-a", "Luminance");
+            foreach (string f in new[] { "Red", "Green", "Blue", "Luminance" }) { Goal(f, GoalState.Collecting, cut: 0.27, expected: 0.11); }
+            Goal("H-a", GoalState.Collecting);
+            PoorSky();
+
+            Night(pp, pt, 4).Should().Equal("H-a", "H-a", "H-a", "H-a");
+        }
+
+        [Test]
+        public void AFreshTargetUnderAGoodSkyRotatesWhenBroadbandCanPassItsCut() {
+            var (pp, pt) = Sculptor("Red", "Green", "Blue", "H-a", "Luminance");
+            foreach (string f in new[] { "Red", "Green", "Blue", "Luminance" }) { Goal(f, GoalState.Collecting, cut: 0.27, expected: 0.70); }
+            Goal("H-a", GoalState.Collecting);
+            Sky(0.70);
+
+            Night(pp, pt, 8).Should().Equal("Red", "Green", "Blue", "Luminance", "Red", "Green", "Blue", "Luminance");
         }
 
         private static (Mock<IProject> pp, Mock<ITarget> pt) Sculptor(params string[] filters) {

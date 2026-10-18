@@ -69,6 +69,10 @@ namespace NINA.Plugin.TargetScheduler.Planning.Exposures {
 
             double? quality = SkyConditions.NightQuality(atTime);
             int chosen = FilterSteering.Choose(candidates, currentIndex, quality);
+            List<SteeringCandidate> belowCut = candidates.Where(c => FilterSteering.BelowCut(c, quality)).ToList();
+            if (belowCut.Count > 0) {
+                TSLogger.Debug($"filter steering for {target.Name}: at night quality {quality.Value:0.00} the stacker expects {string.Join(", ", belowCut.Select(c => $"{c.Filter} to score {c.Goal.ExpectedScore.Value:0.00}, under its cut {c.Goal.ScoreCut.Value:0.00}"))}; those filters sit out while another can pass");
+            }
             TSLogger.Debug($"filter steering conditions for {target.Name}: glare {glare:0.00}, quality {(quality.HasValue ? quality.Value.ToString("0.00") : "unknown")}, favors {(ConditionMatch.NarrowbandFavored(glare, quality, broadbandWorth) ? "narrowband" : "broadband")}{(moon.HasValue ? $", kept-rate worth {string.Join(", ", candidates.Select(c => $"{c.Filter} {(c.Worth.HasValue ? c.Worth.Value.ToString("0.00") : "none")}"))}" : "")}, sibling panel match {string.Join(", ", candidates.Select(c => $"{c.Filter} {c.PanelMatch:0.00}"))}");
             return chosen < 0 ? null : target.ExposurePlans[chosen];
         }

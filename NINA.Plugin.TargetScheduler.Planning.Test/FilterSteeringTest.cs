@@ -1,7 +1,9 @@
 using FluentAssertions;
 using NINA.Plugin.TargetScheduler.Goals;
 using NUnit.Framework;
+using System;
 using System.Collections.Generic;
+using System.Linq;
 
 namespace NINA.Plugin.TargetScheduler.Planning.Test {
 
@@ -300,6 +302,131 @@ namespace NINA.Plugin.TargetScheduler.Planning.Test {
             foreach (string name in new[] { "O-III", "S-II", "Luminance", "Red", "Hb", "Hb 5nm", "Halo", null, "" }) {
                 FilterSteering.IsHydrogenAlpha(name).Should().BeFalse(name ?? "null");
             }
+        }
+
+        private const double SculptorBroadbandCut = 0.27;
+
+        private static double BroadbandExpected(double quality) {
+            return quality <= 0.15 ? 0.11 : quality;
+        }
+
+        private static List<string> GradedNight(List<SteeringCandidate> candidates, IList<double?> qualities, Func<SteeringCandidate, double, (double? cut, double? expected)> stacker) {
+            var taken = new List<string>();
+            int cadence = 0;
+            foreach (double? quality in qualities) {
+                foreach (SteeringCandidate c in candidates) {
+                    (double? cut, double? expected) = quality.HasValue ? stacker(c, quality.Value) : (null, null);
+                    c.Goal.ScoreCut = cut;
+                    c.Goal.ExpectedScore = expected;
+                }
+                int chosen = FilterSteering.Choose(candidates, cadence, quality);
+                if (chosen < 0) { chosen = cadence; }
+                taken.Add(candidates[chosen].Filter);
+                cadence = (chosen + 1) % candidates.Count;
+            }
+            return taken;
+        }
+
+        private static (double? cut, double? expected) SculptorStacker(SteeringCandidate c, double quality) {
+            if (c.Narrowband) { return (null, null); }
+            return (SculptorBroadbandCut, BroadbandExpected(quality));
+        }
+
+        private static List<double?> Repeat(double? quality, int count) {
+            return Enumerable.Repeat(quality, count).ToList();
+        }
+
+        [Test]
+        public void APoorSkyTakesHydrogenAlphaWhileTheStackerExpectsBroadbandToFailItsCut() {
+            GradedNight(Sculptor(), Repeat(0.10, 6), SculptorStacker).Should().Equal(Enumerable.Repeat("H-a", 6));
+        }
+
+        [Test]
+        public void AGoodSkyRotatesTheBroadbandFiltersOfAFreshTarget() {
+            GradedNight(Sculptor(), Repeat(0.70, 8), SculptorStacker).Should().Equal("Red", "Green", "Blue", "Luminance", "Red", "Green", "Blue", "Luminance");
+        }
+
+        [Test]
+        public void TheRotationResumesWhenTheSkyRecovers() {
+            var qualities = Repeat(0.10, 3).Concat(Repeat(0.15, 2)).Concat(Repeat(0.60, 5)).ToList();
+            GradedNight(Sculptor(), qualities, SculptorStacker).Should().Equal("H-a", "H-a", "H-a", "H-a", "H-a", "Luminance", "Red", "Green", "Blue", "Luminance");
+        }
+
+        [Test]
+        public void HydrogenAlphaStillTakesAPoorSkyWhenItWouldFailItsCutToo() {
+            GradedNight(Sculptor(), Repeat(0.10, 4), (c, q) => c.Narrowband ? (0.18, 0.10) : SculptorStacker(c, q)).Should().Equal(Enumerable.Repeat("H-a", 4));
+        }
+
+        [Test]
+        public void OnlyTheFiltersUnderTheirCutSitOutTheRotation() {
+            GradedNight(Sculptor(), Repeat(0.30, 6), (c, q) => c.Filter == "Blue" ? (0.25, 0.20) : SculptorStacker(c, q)).Should().Equal("Red", "Green", "Luminance", "Red", "Green", "Luminance");
+        }
+
+        [Test]
+        public void AnUnknownNightQualityKeepsTheRotation() {
+            List<SteeringCandidate> candidates = Sculptor();
+            foreach (SteeringCandidate c in candidates.Where(c => !c.Narrowband)) {
+                c.Goal.ScoreCut = SculptorBroadbandCut;
+                c.Goal.ExpectedScore = 0.11;
+            }
+            Night(candidates, 4, null).Should().Equal("Red", "Green", "Blue", "Luminance");
+            FilterSteering.BelowCut(candidates[2], null).Should().BeFalse();
+            FilterSteering.BelowCut(candidates[2], 0.10).Should().BeTrue();
+        }
+
+        [Test]
+        public void ABroadbandFilterWithoutAnEstimateDoesNotTakeAPoorSkyFromHydrogenAlpha() {
+            var candidates = new List<SteeringCandidate> {
+                Goal(0, "Blue", 0.3), Goal(1, "H-a", 0.3, narrow: true)
+            };
+            candidates[1].Goal.ScoreCut = 0.27;
+            candidates[1].Goal.ExpectedScore = 0.12;
+            FilterSteering.BelowCut(candidates[1], 0.10).Should().BeFalse();
+            Night(candidates, 3, 0.10).Should().Equal("H-a", "H-a", "H-a");
+        }
+
+        [Test]
+        public void AnExpectedScoreForAnotherNightQualityIsNotUsed() {
+            SteeringCandidate blue = Fresh(2, "Blue");
+            blue.Goal.ScoreCut = 0.27;
+            blue.Goal.ExpectedScore = 0.11;
+            blue.Goal.ExpectedAtQuality = 0.10;
+            FilterSteering.BelowCut(blue, 0.10).Should().BeTrue();
+            FilterSteering.BelowCut(blue, 0.12).Should().BeTrue();
+            FilterSteering.BelowCut(blue, 0.15).Should().BeFalse();
+            FilterSteering.BelowCut(blue, 0.60).Should().BeFalse();
+        }
+
+        [Test]
+        public void WithoutTheStackersNumbersTheRotationIsUnchanged() {
+            GradedNight(Sculptor(), Repeat(0.10, 4), (c, q) => (null, null)).Should().Equal("Red", "Green", "Blue", "Luminance");
+            GradedNight(Sculptor(), Repeat(0.10, 4), (c, q) => (0.27, null)).Should().Equal("Red", "Green", "Blue", "Luminance");
+        }
+
+        private static List<SteeringCandidate> BarnardsE() {
+            return new List<SteeringCandidate> {
+                Goal(0, "Luminance", 0.4), Goal(1, "Red", 0.3), Goal(2, "Green", 0.35), Fresh(3, "Blue", stackSubs: 4)
+            };
+        }
+
+        [Test]
+        public void BlueUnderItsCutIsSkippedOnBarnardsE() {
+            List<string> taken = GradedNight(BarnardsE(), Repeat(0.15, 9), (c, q) => c.Filter == "Blue" ? (0.25, 0.11) : (0.25, 0.30));
+            taken.Should().NotContain("Blue");
+            taken.Should().HaveCount(9);
+        }
+
+        [Test]
+        public void BlueTakesItsTurnOnBarnardsEOnceItCanPass() {
+            GradedNight(BarnardsE(), Repeat(0.60, 4), (c, q) => (0.25, 0.60)).Should().Equal("Luminance", "Red", "Green", "Blue");
+        }
+
+        [Test]
+        public void WhenEveryFilterIsUnderItsCutTheUsualSteeringStillPicks() {
+            List<SteeringCandidate> candidates = BarnardsE();
+            List<string> taken = GradedNight(candidates, Repeat(0.10, 3), (c, q) => (0.25, 0.05));
+            taken.Should().HaveCount(3);
+            taken.Should().OnlyContain(f => f == "Blue");
         }
     }
 }
