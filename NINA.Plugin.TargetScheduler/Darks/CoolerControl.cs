@@ -572,7 +572,6 @@ namespace NINA.Plugin.TargetScheduler.Darks {
         private readonly double? ambient;
         private DateTime? highSince;
         private double highSensor;
-        private double highPower;
         private double? best;
         private DateTime lastFall;
 
@@ -599,10 +598,9 @@ namespace NINA.Plugin.TargetScheduler.Darks {
                 if (!highSince.HasValue) {
                     highSince = at;
                     highSensor = sensor;
-                    highPower = power;
                 }
                 if (at - highSince.Value >= HighFor && at - lastFall >= HighFor) {
-                    return new CoolerTrip { At = at, SetTemp = setTemp, Ambient = ambient, Sensor = Math.Min(highSensor, best.Value), Power = highPower };
+                    return new CoolerTrip { At = at, SetTemp = setTemp, Ambient = ambient, Sensor = Math.Min(highSensor, best.Value), Power = power };
                 }
             } else {
                 highSince = null;
