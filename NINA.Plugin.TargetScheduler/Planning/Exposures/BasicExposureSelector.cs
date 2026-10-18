@@ -40,6 +40,21 @@ namespace NINA.Plugin.TargetScheduler.Planning.Exposures {
             return null;
         }
 
+        /// <summary>
+        /// Move the cadence's selection to the first item, from the next one on, for the exposure that Filter Steering
+        /// chose instead of this selector's pick, so the cycle continues after the filter actually shot.
+        /// </summary>
+        public bool Follow(IExposure exposure) {
+            foreach (IFilterCadenceItem item in FilterCadence) {
+                if (item.Action == FilterCadenceAction.Exposure && ReferenceEquals(Target.AllExposurePlans[item.ReferenceIdx], exposure)) {
+                    FilterCadence.SetLastSelected(item);
+                    return true;
+                }
+            }
+
+            return false;
+        }
+
         public void ExposureTaken(IExposure exposure) {
             Action undoCadence = UndoCadence();
             UndoTaken = () => {

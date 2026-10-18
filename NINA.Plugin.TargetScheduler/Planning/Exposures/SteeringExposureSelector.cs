@@ -25,6 +25,7 @@ namespace NINA.Plugin.TargetScheduler.Planning.Exposures {
                 IExposure steered = Steer(atTime, project, target, fallback);
                 if (steered == null || ReferenceEquals(steered, fallback)) { return fallback; }
 
+                (inner as BasicExposureSelector)?.Follow(steered);
                 steered.PreDither = DitherManager.DitherRequired(steered);
                 TSLogger.Info($"filter steering for {project.Name}/{target.Name}: {steered.FilterName} instead of {fallback?.FilterName ?? "none"}");
                 return steered;
