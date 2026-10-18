@@ -197,5 +197,109 @@ namespace NINA.Plugin.TargetScheduler.Planning.Test {
                 }
             }
         }
+
+        private static SteeringCandidate Fresh(int index, string filter, double? worth = null, int stackSubs = 0, GoalState state = GoalState.Collecting) {
+            return new SteeringCandidate {
+                Index = index,
+                Filter = filter,
+                Goal = new GoalProgress { Filter = filter, State = state, StackSubs = stackSubs, MinSubs = 8 },
+                Narrowband = FilterKind.IsNarrowband(filter),
+                Worth = worth
+            };
+        }
+
+        private static List<string> Night(List<SteeringCandidate> candidates, int exposures, double? quality, double glare = 0) {
+            candidates.ForEach(c => c.MoonGlare = glare);
+            var taken = new List<string>();
+            int cadence = 0;
+            for (int i = 0; i < exposures; i++) {
+                int chosen = FilterSteering.Choose(candidates, cadence, quality);
+                if (chosen < 0) { chosen = cadence; }
+                taken.Add(candidates[chosen].Filter);
+                cadence = (chosen + 1) % candidates.Count;
+            }
+            return taken;
+        }
+
+        private static List<SteeringCandidate> Sculptor() {
+            return new List<SteeringCandidate> {
+                Fresh(0, "Red"), Fresh(1, "Green"), Fresh(2, "Blue"), Fresh(3, "H-a"), Fresh(4, "Luminance")
+            };
+        }
+
+        [Test]
+        public void APoorSkyNoLongerHoldsAFreshTargetOnHydrogenAlpha() {
+            Night(Sculptor(), 8, 0.10).Should().Equal("Red", "Green", "Blue", "Luminance", "Red", "Green", "Blue", "Luminance");
+        }
+
+        [Test]
+        public void TheMoonKeepWorthNoLongerHoldsAFreshTargetOnOneFilter() {
+            var candidates = new List<SteeringCandidate> {
+                Fresh(0, "Luminance", 0.63), Fresh(1, "Red", 0.67), Fresh(2, "Green", 0.66), Fresh(3, "Blue", 0.60)
+            };
+            Night(candidates, 8, null, glare: 0.4).Should().Equal("Luminance", "Red", "Green", "Blue", "Luminance", "Red", "Green", "Blue");
+        }
+
+        [Test]
+        public void OneBootstrappingFilterSharesTheTurnsWithTheOpenMeasuredOnes() {
+            var candidates = new List<SteeringCandidate> {
+                Goal(0, "Luminance", 0.015), Goal(1, "Red", 0.002), Goal(2, "Green", 0.003), Fresh(3, "Blue", stackSubs: 2), Goal(4, "H-a", 0.42, narrow: true)
+            };
+            Night(candidates, 8, 0.15).Should().Equal("Luminance", "Red", "Green", "Blue", "Luminance", "Red", "Green", "Blue");
+        }
+
+        [Test]
+        public void APendingGoalBootstrapsLikeACollectingOne() {
+            var candidates = new List<SteeringCandidate> {
+                Fresh(0, "Red", state: GoalState.Pending), Fresh(1, "H-a", state: GoalState.Pending), Fresh(2, "O-III", state: GoalState.Pending)
+            };
+            Night(candidates, 4, 0.10).Should().Equal("Red", "O-III", "Red", "O-III");
+        }
+
+        [Test]
+        public void OnlyHydrogenAlphaBootstrappingLeavesTheUsualSteering() {
+            var candidates = new List<SteeringCandidate> {
+                Goal(0, "Luminance", 0.2), Fresh(1, "H-a")
+            };
+            FilterSteering.Evaluate(candidates, 0.10);
+            FilterSteering.Bootstrap(candidates, 0).Should().Be(-1);
+            Night(candidates, 3, 0.10).Should().Equal("H-a", "H-a", "H-a");
+        }
+
+        [Test]
+        public void MeasuredGoalsKeepTheUsualSteering() {
+            var candidates = new List<SteeringCandidate> {
+                Goal(0, "Luminance", 0.2, glare: 0.9), Goal(1, "H-a", 0.6, narrow: true, glare: 0.9)
+            };
+            FilterSteering.Evaluate(candidates);
+            FilterSteering.Bootstrap(candidates, 0).Should().Be(-1);
+            FilterSteering.Choose(candidates, 0).Should().Be(1);
+        }
+
+        [Test]
+        public void AFilterTheConditionsRuleOutSitsOutItsTurn() {
+            var candidates = new List<SteeringCandidate> {
+                Fresh(0, "Red", 0.67), Fresh(1, "Green", 0), Fresh(2, "Blue", 0.60)
+            };
+            Night(candidates, 4, null, glare: 0.4).Should().Equal("Red", "Blue", "Red", "Blue");
+        }
+
+        [Test]
+        public void TheRotationStartsAtTheCadencePosition() {
+            var candidates = Sculptor();
+            FilterSteering.Choose(candidates, 2, 0.10).Should().Be(2);
+            FilterSteering.Choose(candidates, 3, 0.10).Should().Be(4);
+            FilterSteering.Choose(candidates, -1, 0.10).Should().Be(0);
+        }
+
+        [Test]
+        public void HydrogenAlphaIsKnownByAnyOfItsNames() {
+            foreach (string name in new[] { "H-a", "Ha", "HA", "H-alpha", "Halpha", "Hydrogen Alpha" }) {
+                FilterSteering.IsHydrogenAlpha(name).Should().BeTrue(name);
+            }
+            foreach (string name in new[] { "O-III", "S-II", "Luminance", "Red", "Hb", null, "" }) {
+                FilterSteering.IsHydrogenAlpha(name).Should().BeFalse(name ?? "null");
+            }
+        }
     }
 }

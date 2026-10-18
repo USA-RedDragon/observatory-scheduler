@@ -57,10 +57,38 @@ namespace NINA.Plugin.TargetScheduler.Goals {
             }
         }
 
+        /// <summary>
+        /// True for a non-H-alpha filter whose goal is not measurable yet: the stacker still collects the subs its
+        /// first goal and plateau measurement needs.
+        /// </summary>
+        public static bool Bootstrapping(SteeringCandidate c) {
+            return c?.Goal != null && !c.Goal.Done && (c.Goal.State == GoalState.Collecting || c.Goal.State == GoalState.Pending)
+                && !IsHydrogenAlpha(c.Filter);
+        }
+
+        public static bool IsHydrogenAlpha(string filter) {
+            return MoonKeep.FilterKey(filter) == "ha";
+        }
+
+        /// <summary>
+        /// While any non-H-alpha filter is bootstrapping, every open non-H-alpha filter takes its turn in plan order,
+        /// starting at the current one, whatever the deficits, Moon, sky or kept rates favor. Returns -1 when no
+        /// filter is bootstrapping. Call after Evaluate: a filter whose conditions value it at 0 sits out.
+        /// </summary>
+        public static int Bootstrap(IList<SteeringCandidate> candidates, int currentIndex) {
+            List<SteeringCandidate> open = candidates.Where(c => c != null && c.Value > 0 && !IsHydrogenAlpha(c.Filter)).OrderBy(c => c.Index).ToList();
+            if (!open.Any(Bootstrapping)) { return -1; }
+
+            return (open.FirstOrDefault(c => c.Index >= currentIndex) ?? open[0]).Index;
+        }
+
         public static int Choose(IList<SteeringCandidate> candidates, int currentIndex, double? quality = null) {
             if (!Applies(candidates)) { return -1; }
 
             Evaluate(candidates, quality);
+            int bootstrap = Bootstrap(candidates, currentIndex);
+            if (bootstrap >= 0) { return bootstrap; }
+
             List<SteeringCandidate> pool = candidates.Where(c => c != null && c.Value > 0 && Favored(c, quality)).ToList();
             if (pool.Count == 0) { pool = candidates.Where(c => c != null).ToList(); }
 
