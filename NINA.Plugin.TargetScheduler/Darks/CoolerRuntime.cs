@@ -89,6 +89,17 @@ namespace NINA.Plugin.TargetScheduler.Darks {
             return c;
         }
 
+        /// <summary>True while darks or flats own the setpoint, a plugin ramp runs, or the enabled controller has set the imaging setpoint tonight.</summary>
+        public static bool OwnsCooler() {
+            bool enabled = Settings.Snapshot().Enabled;
+            lock (sync) {
+                if (busyCount > 0 || (enabled && controller.Setpoint.HasValue)) {
+                    return true;
+                }
+            }
+            return CoolerRamp.PendingOwner() != null;
+        }
+
         /// <summary>Marks the setpoint as owned by darks or flats until disposed; no power samples count meanwhile.</summary>
         public static IDisposable Own(string what) {
             lock (sync) {
