@@ -1,6 +1,5 @@
-Observatory Scheduler 5.8.2.235: a new target's filters take turns until the stacker can measure each one.
+Observatory Scheduler 5.8.2.236: a new target's broadband filters wait for a sky their subs can pass in.
 
-- **Bootstrap rotation**: while any non-H-alpha filter of a target still collects the subs for its first goal measurement, Filter Steering takes one exposure of each open non-H-alpha filter in turn. A poor night or the Moon no longer holds such a target on one filter (on 2026-10-18 Sculptor Galaxy and M 15 were planned on H-a only). H-alpha joins again when no other filter is collecting.
-- **Filter cadence**: the cadence continues after the filter that Filter Steering shot.
+- **Bootstrap rotation on a poor sky**: the stacker now publishes, for each goal filter, the score a sub needs to pass its low-score cut and the score it expects a sub to get at tonight's night quality. While that expected score is under the cut, a broadband filter sits out the bootstrap rotation and the usual Filter Steering, so a poor night goes to H-alpha (on 2026-10-17/18 most bootstrap Blue subs of Barnard's E and M 15 were rejected). The rotation resumes when the sky recovers. Without the stacker's numbers, or with an unknown night quality, nothing changes.
 
-Includes everything in 5.8.2.234 (camera warm-up before NINA stops, reconnect ramp, steady-state darks limit). No database changes. Requires NINA 3.1.2.9001 or later. Install with install-plugin.ps1 and warm-camera.ps1 from this folder.
+Includes everything in 5.8.2.235 (bootstrap rotation, filter cadence after steering). Adds the columns score_cut and expected_score to ts_goal_progress on start-up. Needs the astro-stacker change that publishes them, and the same columns on the home schedulerdb. Requires NINA 3.1.2.9001 or later. Install with install-plugin.ps1 and warm-camera.ps1 from this folder.
