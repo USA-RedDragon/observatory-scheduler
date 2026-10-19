@@ -42,6 +42,37 @@ namespace NINA.Plugin.TargetScheduler.Darks {
         /// <summary>The longest the darks wait for a verdict at one set; a sensor that never holds the band by then counts as the cooler at its limit.</summary>
         public static readonly TimeSpan MaxSettle = TimeSpan.FromMinutes(15);
 
+        /// <summary>
+        /// The time to budget, after the sensor reaches a set, for this rule to judge the cooler power
+        /// there: none when the set was already judged steady, else the last measured wait, at least
+        /// <see cref="StableFor"/> and at most <see cref="MaxSettle"/>.
+        /// </summary>
+        public static TimeSpan Budget(bool judged, TimeSpan? measured) {
+            if (judged) {
+                return TimeSpan.Zero;
+            }
+            TimeSpan t = measured.HasValue && measured.Value > StableFor ? measured.Value : StableFor;
+            return t < MaxSettle ? t : MaxSettle;
+        }
+
+        /// <summary>
+        /// Why the wait for a steady verdict at <paramref name="setTemp"/> cannot end before <paramref name="deadline"/>, the latest
+        /// start for the dark: the sensor must still hold the band for the rest of <see cref="StableFor"/>. Null when it can.
+        /// </summary>
+        public static string SettleDeadlineReason(double setTemp, DateTime nowUtc, DateTime? inBandSince, DateTime? deadline) {
+            if (!deadline.HasValue) {
+                return null;
+            }
+            TimeSpan held = inBandSince.HasValue && inBandSince.Value <= nowUtc ? nowUtc - inBandSince.Value : TimeSpan.Zero;
+            TimeSpan needed = StableFor - held;
+            if (needed <= TimeSpan.Zero || nowUtc + needed <= deadline.Value) {
+                return null;
+            }
+            return string.Format(CultureInfo.InvariantCulture,
+                "the sensor must hold {0} °C for {1:0} s more before its cooler power can be judged, and the dark must start by {2:HH:mm:ss}",
+                setTemp, needed.TotalSeconds, deadline.Value.ToLocalTime());
+        }
+
         private readonly object sync = new object();
         private readonly List<(DateTime At, double Power)> run = new List<(DateTime, double)>();
         private double? setpoint;

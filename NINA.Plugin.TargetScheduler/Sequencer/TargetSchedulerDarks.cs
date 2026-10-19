@@ -507,8 +507,11 @@ namespace NINA.Plugin.TargetScheduler.Sequencer {
                         }
                         CameraInfo info = cameraMediator.GetInfo();
                         TimeSpan overhead = TimeSpan.FromSeconds(Math.Max(0, info.LastDownloadTime));
+                        bool judged = judgedSet.HasValue && DarkPlanner.SameSetpoint(judgedSet.Value, need.SetTemp);
                         if (skip == null) {
-                            (skipCode, skip) = DarkPlanner.Fit(w, need, currentSetpoint, imagingSetpoint, DarkRuntime.State.Rates(), overhead);
+                            bool steadyNow = CameraConnections.Steady.Verdict(DateTime.UtcNow, need.SetTemp, DarkPlanner.MaxDarkPowerPercent).State != CoolerSteadyState.Waiting;
+                            TimeSpan settle = CoolerSteady.Budget(judged || steadyNow, DarkRuntime.State.SteadyTime());
+                            (skipCode, skip) = DarkPlanner.Fit(w, need, currentSetpoint, imagingSetpoint, DarkRuntime.State.Rates(), overhead, settle);
                         }
                         if (skip != null) {
                             TSLogger.Info($"TS Darks: skipping {need}: {skip}");
@@ -534,7 +537,7 @@ namespace NINA.Plugin.TargetScheduler.Sequencer {
                             break;
                         }
                         if (reach != null) {
-                            if (reach != DarkPlanner.CameraDisconnected && reach != DarkPlanner.SensorUnknown && !token.IsCancellationRequested && !yieldToken.IsCancellationRequested && (deadline == null || DateTime.UtcNow < deadline.Value)) {
+                            if (!reachCutByDeadline && reach != DarkPlanner.CameraDisconnected && reach != DarkPlanner.SensorUnknown && !token.IsCancellationRequested && !yieldToken.IsCancellationRequested && (deadline == null || DateTime.UtcNow < deadline.Value)) {
                                 DarkRuntime.State.AddLimit(Limit(need.SetTemp, imagingSetpoint, imagingPower, reach, reached.Connected && !double.IsNaN(reached.Temperature) ? reached.Temperature : (double?)null));
                             }
                             TSLogger.Info($"TS Darks: skipping {need}: {reach}");
@@ -542,7 +545,6 @@ namespace NINA.Plugin.TargetScheduler.Sequencer {
                             break;
                         }
 
-                        bool judged = judgedSet.HasValue && DarkPlanner.SameSetpoint(judgedSet.Value, need.SetTemp);
                         CoolerSteadyVerdict steady = judged
                             ? Recheck(need.SetTemp)
                             : await AwaitSteady(need.SetTemp, watch, deadline, token, yieldToken);
@@ -683,6 +685,10 @@ namespace NINA.Plugin.TargetScheduler.Sequencer {
             if (deadline.HasValue && deadline.Value <= DateTime.UtcNow) {
                 return new CoolerSteadyVerdict { State = CoolerSteadyState.Waiting, Reason = $"no time left before {deadline.Value.ToLocalTime():HH:mm:ss}, the latest start for the dark, to let the cooler settle at {setTemp} °C" };
             }
+            string tooLate = CoolerSteady.SettleDeadlineReason(setTemp, DateTime.UtcNow, CameraConnections.Steady.Setpoint is double held && DarkPlanner.SameSetpoint(held, setTemp) ? CameraConnections.Steady.InSince : null, deadline);
+            if (tooLate != null) {
+                return new CoolerSteadyVerdict { State = CoolerSteadyState.Waiting, Reason = tooLate };
+            }
 
             using var cts = CancellationTokenSource.CreateLinkedTokenSource(token, yieldToken, WarmupRuntime.BeganToken);
             TimeSpan left = CoolerSteady.MaxSettle;
@@ -705,6 +711,7 @@ namespace NINA.Plugin.TargetScheduler.Sequencer {
                     v = CameraConnections.Steady.Verdict(DateTime.UtcNow, setTemp, DarkPlanner.MaxDarkPowerPercent);
                     if (v.State != CoolerSteadyState.Waiting) {
                         TSLogger.Info($"TS Darks: settled after {(DateTime.UtcNow - start).TotalSeconds:0} s: {v.Reason}");
+                        DarkRuntime.State.RecordSteady(DateTime.UtcNow - start, DateTime.UtcNow);
                         return v;
                     }
                 }
@@ -823,8 +830,11 @@ namespace NINA.Plugin.TargetScheduler.Sequencer {
             return deadline;
         }
 
+        private bool reachCutByDeadline;
+
         private async Task<string> Reach(double target, TemperatureWatch watch, DateTime? deadline, IProgress<ApplicationStatus> progress, CancellationToken token, CancellationToken yieldToken) {
             lastTrip = null;
+            reachCutByDeadline = false;
             await StopRestore();
             CameraInfo info = cameraMediator.GetInfo();
             if (double.IsNaN(info.Temperature)) {
@@ -838,6 +848,7 @@ namespace NINA.Plugin.TargetScheduler.Sequencer {
             if (deadline.HasValue) {
                 TimeSpan left = deadline.Value - DateTime.UtcNow;
                 if (left <= TimeSpan.Zero) {
+                    reachCutByDeadline = true;
                     return $"no time left before {deadline.Value.ToLocalTime():HH:mm:ss}, the latest start for the dark";
                 }
                 cts.CancelAfter(left);
@@ -860,6 +871,7 @@ namespace NINA.Plugin.TargetScheduler.Sequencer {
                 if (lastTrip == null && WarmupRuntime.Active) {
                     return Interrupted;
                 }
+                reachCutByDeadline = !yieldToken.IsCancellationRequested && lastTrip == null;
                 failed = yieldToken.IsCancellationRequested
                     ? $"imaging can resume, so the move to {target} °C was stopped"
                     : $"{target} °C was not reached by {deadline?.ToLocalTime():HH:mm:ss}, the latest start for the dark";

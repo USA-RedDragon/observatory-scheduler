@@ -16,6 +16,8 @@ namespace NINA.Plugin.TargetScheduler.Darks {
         public double? CoolingSettleSeconds { get; set; }
         public double? WarmingSettleSeconds { get; set; }
         public double? SaveSeconds { get; set; }
+        public double? SteadySeconds { get; set; }
+        public DateTime? SteadyMeasuredAt { get; set; }
         public DateTime? SaveMeasuredAt { get; set; }
         public List<CoolerHold> Holds { get; set; } = new List<CoolerHold>();
         public List<CoolerLimit> Limits { get; set; } = new List<CoolerLimit>();
@@ -73,6 +75,23 @@ namespace NINA.Plugin.TargetScheduler.Darks {
             lock (sync) {
                 return data.SaveSeconds.HasValue ? TimeSpan.FromSeconds(data.SaveSeconds.Value) : (TimeSpan?)null;
             }
+        }
+
+        /// <summary>How long the cooler last took, after the sensor reached a dark set, to give a steady power verdict there.</summary>
+        public TimeSpan? SteadyTime() {
+            lock (sync) {
+                return data.SteadySeconds.HasValue ? TimeSpan.FromSeconds(data.SteadySeconds.Value) : (TimeSpan?)null;
+            }
+        }
+
+        public void RecordSteady(TimeSpan took, DateTime nowUtc) {
+            if (took < TimeSpan.Zero) {
+                return;
+            }
+            Update(d => {
+                d.SteadySeconds = took.TotalSeconds;
+                d.SteadyMeasuredAt = nowUtc;
+            });
         }
 
         public void RecordAfterWait(TimeSpan took, DateTime nowUtc) {

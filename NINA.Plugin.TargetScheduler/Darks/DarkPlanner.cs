@@ -395,14 +395,18 @@ namespace NINA.Plugin.TargetScheduler.Darks {
             return sun.Value - TimeSpan.FromSeconds(Math.Max(0, exposure)) - (overhead > TimeSpan.Zero ? overhead : TimeSpan.Zero);
         }
 
-        public static string FitReason(DarkWindow w, DarkNeed need, double currentSetpoint, double imagingSetpoint, CoolerRates rates, TimeSpan overhead) {
-            return Fit(w, need, currentSetpoint, imagingSetpoint, rates, overhead).Reason;
+        public static string FitReason(DarkWindow w, DarkNeed need, double currentSetpoint, double imagingSetpoint, CoolerRates rates, TimeSpan overhead, TimeSpan settle = default) {
+            return Fit(w, need, currentSetpoint, imagingSetpoint, rates, overhead, settle).Reason;
         }
 
         /// <summary>
         /// Why the next dark of <paramref name="need"/> does not fit now, with a short code for it: unmeasured_move, sun or wait_end.
+        /// <paramref name="settle"/> is the time the cooler needs at the set before its power can be judged (CoolerSteady.Budget).
         /// </summary>
-        public static (string Code, string Reason) Fit(DarkWindow w, DarkNeed need, double currentSetpoint, double imagingSetpoint, CoolerRates rates, TimeSpan overhead) {
+        public static (string Code, string Reason) Fit(DarkWindow w, DarkNeed need, double currentSetpoint, double imagingSetpoint, CoolerRates rates, TimeSpan overhead, TimeSpan settle = default) {
+            if (settle < TimeSpan.Zero) {
+                settle = TimeSpan.Zero;
+            }
             TimeSpan? there = MoveTime(currentSetpoint, need.SetTemp, rates);
             if (!there.HasValue) {
                 string unmeasured = UnmeasuredMoveReason(w, need, currentSetpoint, overhead);
@@ -411,7 +415,7 @@ namespace NINA.Plugin.TargetScheduler.Darks {
                 }
             }
 
-            string sun = SunFitReason(w, there ?? TimeSpan.Zero, need.Exposure, overhead);
+            string sun = SunFitReason(w, (there ?? TimeSpan.Zero) + settle, need.Exposure, overhead);
             if (sun != null) {
                 return ("sun", sun);
             }
@@ -427,12 +431,13 @@ namespace NINA.Plugin.TargetScheduler.Darks {
                     need.SetTemp, imagingSetpoint));
             }
 
-            DateTime end = w.Now + there.Value + TimeSpan.FromSeconds(need.Exposure) + overhead + back.Value + (w.AfterWait ?? TimeSpan.Zero);
+            DateTime end = w.Now + there.Value + settle + TimeSpan.FromSeconds(need.Exposure) + overhead + back.Value + (w.AfterWait ?? TimeSpan.Zero);
             if (end > w.WaitUntil.Value) {
+                string settling = settle > TimeSpan.Zero ? string.Format(CultureInfo.InvariantCulture, ", {0:0} s for the cooler power to settle there", settle.TotalSeconds) : "";
                 return ("wait_end", string.Format(CultureInfo.InvariantCulture,
-                    "a {0} s dark with {1:0} s to reach {2} °C, {3:0} s to return and {4:0} s of AfterWait would end at {5:HH:mm:ss}, after the wait ends at {6:HH:mm:ss}",
+                    "a {0} s dark with {1:0} s to reach {2} °C{7}, {3:0} s to return and {4:0} s of AfterWait would end at {5:HH:mm:ss}, after the wait ends at {6:HH:mm:ss}",
                     need.Exposure, there.Value.TotalSeconds, need.SetTemp, back.Value.TotalSeconds, (w.AfterWait ?? TimeSpan.Zero).TotalSeconds,
-                    end.ToLocalTime(), w.WaitUntil.Value.ToLocalTime()));
+                    end.ToLocalTime(), w.WaitUntil.Value.ToLocalTime(), settling));
             }
 
             return (null, null);

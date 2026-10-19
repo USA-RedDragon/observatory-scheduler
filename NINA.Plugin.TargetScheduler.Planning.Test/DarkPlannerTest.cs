@@ -145,6 +145,50 @@ namespace NINA.Plugin.TargetScheduler.Planning.Test {
         }
 
         [Test]
+        public void BeforeWaitBudgetsTheSteadySettleBeforeTheDark() {
+            var w = new DarkWindow { Placement = DarkPlacement.BeforeWait, Now = Now, WaitUntil = Now.AddSeconds(600), AfterWait = TimeSpan.FromSeconds(40), SunAltitudeAt = Night };
+            var rates = new CoolerRates { CoolingSecondsPerC = 30, WarmingSecondsPerC = 10 };
+            TimeSpan download = TimeSpan.FromSeconds(2);
+            DarkNeed need = Need("same", 1, -13);
+
+            DarkPlanner.Fit(w, need, -13, -13, rates, download).Should().Be(((string)null, (string)null));
+            DarkPlanner.Fit(w, need, -13, -13, rates, download, CoolerSteady.Budget(false, null)).Should().Be(((string)null, (string)null));
+            var (code, reason) = DarkPlanner.Fit(w, need, -13, -13, rates, download, CoolerSteady.Budget(false, TimeSpan.FromMinutes(5)));
+            code.Should().Be("wait_end");
+            reason.Should().Contain("300 s for the cooler power to settle there");
+            DarkPlanner.Fit(w, need, -13, -13, rates, download, CoolerSteady.Budget(true, TimeSpan.FromMinutes(5))).Should().Be(((string)null, (string)null));
+        }
+
+        [Test]
+        public void TheSunCheckBudgetsTheSteadySettle() {
+            var w = new DarkWindow { Placement = DarkPlacement.EndOfSequence, Now = Now, SunAltitudeAt = Rising(DarkPlanner.SunLimitDegrees - 0.8, 0.2) };
+            var rates = new CoolerRates { CoolingSecondsPerC = 30, WarmingSecondsPerC = 10 };
+            DarkNeed need = Need("short", 1, -13, exposure: 30);
+
+            DarkPlanner.Fit(w, need, -13, -13, rates, TimeSpan.Zero, TimeSpan.FromSeconds(180)).Code.Should().BeNull();
+            DarkPlanner.Fit(w, need, -13, -13, rates, TimeSpan.Zero, TimeSpan.FromSeconds(240)).Code.Should().Be("sun");
+        }
+
+        [Test]
+        public void SteadyBudgetIsTheMeasuredWaitWithinTheSteadyRule() {
+            CoolerSteady.Budget(true, TimeSpan.FromMinutes(9)).Should().Be(TimeSpan.Zero);
+            CoolerSteady.Budget(false, null).Should().Be(CoolerSteady.StableFor);
+            CoolerSteady.Budget(false, TimeSpan.FromMinutes(1)).Should().Be(CoolerSteady.StableFor);
+            CoolerSteady.Budget(false, TimeSpan.FromMinutes(7)).Should().Be(TimeSpan.FromMinutes(7));
+            CoolerSteady.Budget(false, TimeSpan.FromMinutes(40)).Should().Be(CoolerSteady.MaxSettle);
+        }
+
+        [Test]
+        public void ASettleWaitThatCannotEndBeforeTheDeadlineIsNotStarted() {
+            CoolerSteady.SettleDeadlineReason(-13, Now, null, null).Should().BeNull();
+            CoolerSteady.SettleDeadlineReason(-13, Now, null, Now.AddMinutes(3)).Should().BeNull();
+            CoolerSteady.SettleDeadlineReason(-13, Now, null, Now.AddMinutes(2)).Should().Contain("180 s more");
+            CoolerSteady.SettleDeadlineReason(-13, Now, Now.AddMinutes(-2), Now.AddMinutes(1)).Should().BeNull();
+            CoolerSteady.SettleDeadlineReason(-13, Now, Now.AddMinutes(-2), Now.AddSeconds(30)).Should().Contain("60 s more");
+            CoolerSteady.SettleDeadlineReason(-13, Now, Now.AddMinutes(-5), Now.AddSeconds(1)).Should().BeNull();
+        }
+
+        [Test]
         public void AnUnmeasuredMoveIsSkippedWhenTheSunLimitIsNear() {
             var w = new DarkWindow { Placement = DarkPlacement.EndOfSequence, Now = Now, SunAltitudeAt = Rising(DarkPlanner.SunLimitDegrees - 0.8, 0.2) };
             string reason = DarkPlanner.FitReason(w, Need("cold", 1, -20, exposure: 120), -14, -14, new CoolerRates { WarmingSecondsPerC = 25.9 }, TimeSpan.FromSeconds(3));
@@ -418,6 +462,10 @@ namespace NINA.Plugin.TargetScheduler.Planning.Test {
                 s.RecordMove(-13, -18, TimeSpan.FromSeconds(340), Now);
                 new DarkState(path).Rates().CoolingSettleSeconds.Should().Be(40);
                 again.AfterWait().Should().Be(TimeSpan.FromSeconds(42));
+                again.SteadyTime().Should().BeNull();
+                s.RecordSteady(TimeSpan.FromSeconds(260), Now);
+                s.RecordSteady(TimeSpan.FromSeconds(-1), Now);
+                new DarkState(path).SteadyTime().Should().Be(TimeSpan.FromSeconds(260));
                 again.Limits().Should().BeEmpty();
             } finally {
                 File.Delete(path);
