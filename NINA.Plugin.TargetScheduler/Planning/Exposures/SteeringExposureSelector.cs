@@ -48,8 +48,15 @@ namespace NINA.Plugin.TargetScheduler.Planning.Exposures {
         /// <paramref name="commit"/> the poor-sky gate remembers its decisions; scoring and previews leave it false.
         /// </summary>
         public static IExposure Steer(DateTime atTime, IProject project, ITarget target, IExposure current, bool commit = false) {
+            return Plan(atTime, project, target, current, commit).Chosen;
+        }
+
+        /// <summary>
+        /// Filter Steering's pick, as <see cref="Steer"/>, and the plans the poor-sky gate holds out at <paramref name="atTime"/>.
+        /// </summary>
+        public static (IExposure Chosen, List<IExposure> SitOut) Plan(DateTime atTime, IProject project, ITarget target, IExposure current, bool commit = false) {
             ExposureCompletionHelper helper = project.ExposureCompletionHelper;
-            if (helper == null || target.ExposurePlans == null) { return null; }
+            if (helper == null || target.ExposurePlans == null) { return (null, new List<IExposure>()); }
 
             ObserverInfo observer = SkyConditions.CurrentObserver;
             Coordinates coordinates = target.CoordinatesAt(atTime);
@@ -91,7 +98,8 @@ namespace NINA.Plugin.TargetScheduler.Planning.Exposures {
                 TSLogger.Debug($"filter steering for {target.Name}: at night quality {(quality.HasValue ? quality.Value.ToString("0.00") : "unknown")} {string.Join(", ", belowCut.Select(c => $"{c.Filter} (expected {c.Goal?.ExpectedScore?.ToString("0.00") ?? "unknown"} x moon worth {(c.Worth.HasValue ? c.Worth.Value.ToString("0.00") : "1")} against its cut {c.Goal?.ScoreCut?.ToString("0.00") ?? "unknown"})"))} sit out while another can pass");
             }
             TSLogger.Debug($"filter steering conditions for {target.Name}: glare {glare:0.00}, quality {(quality.HasValue ? quality.Value.ToString("0.00") : "unknown")}, favors {(ConditionMatch.NarrowbandFavored(glare, quality, broadbandWorth) ? "narrowband" : "broadband")}{(moon.HasValue ? $", kept-rate worth {string.Join(", ", candidates.Select(c => $"{c.Filter} {(c.Worth.HasValue ? c.Worth.Value.ToString("0.00") : "none")}"))}" : "")}, sibling panel match {string.Join(", ", candidates.Select(c => $"{c.Filter} {c.PanelMatch:0.00}"))}");
-            return chosen < 0 ? null : target.ExposurePlans[chosen];
+            List<IExposure> sitOut = FilterSteering.Applies(candidates) ? belowCut.Select(c => target.ExposurePlans[c.Index]).ToList() : new List<IExposure>();
+            return (chosen < 0 ? null : target.ExposurePlans[chosen], sitOut);
         }
 
         public void ExposureTaken(IExposure exposure) {

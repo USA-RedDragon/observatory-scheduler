@@ -486,6 +486,50 @@ namespace NINA.Plugin.TargetScheduler.Planning.Test {
             taken.Should().NotContain("Blue");
         }
 
+        private static FilterCondition ConditionOf(SteeringCandidate c) {
+            return new FilterCondition { Filter = c.Filter, Narrowband = c.Narrowband, MoonGlare = c.MoonGlare, Worth = c.Worth, PanelMatch = c.PanelMatch };
+        }
+
+        private static double TargetScore(List<SteeringCandidate> candidates, int current, double quality) {
+            List<FilterCondition> conditions = candidates.Select(ConditionOf).ToList();
+            int chosen = FilterSteering.Choose(candidates, current, quality);
+            bool applies = FilterSteering.Applies(candidates);
+            var sitOut = candidates.Where(c => applies && FilterSteering.SitsOut(c, quality)).Select(c => conditions[candidates.IndexOf(c)]).ToList();
+            return ConditionMatch.SteeredScore(60, 60, conditions, chosen < 0 ? null : conditions[candidates.IndexOf(candidates.First(c => c.Index == chosen))], sitOut, quality);
+        }
+
+        [Test]
+        public void AFreshTargetOnAPoorNightScoresForTheBroadbandFilterItWillShoot() {
+            List<SteeringCandidate> sculptor = Sculptor();
+            double unsteered = ConditionMatch.Score(60, 60, sculptor.Select(ConditionOf), 0.15);
+            double steered = TargetScore(sculptor, 0, 0.15);
+            unsteered.Should().BeApproximately(ConditionMatch.SkyScore(true, 0.15), 1e-9);
+            steered.Should().BeApproximately(ConditionMatch.SkyScore(false, 0.15), 1e-9);
+            steered.Should().BeLessThan(unsteered);
+        }
+
+        [Test]
+        public void ATargetWhoseOnlyOpenFilterIsUnderItsCutScoresZero() {
+            var candidates = new List<SteeringCandidate> {
+                Goal(0, "Luminance", 1), Goal(1, "Red", 1), Goal(2, "Green", 1), Fresh(3, "Blue", stackSubs: 4)
+            };
+            candidates.Take(3).ToList().ForEach(c => c.Goal.Done = true);
+            candidates[3].Goal.ScoreCut = 0.25;
+            candidates[3].Goal.ExpectedScore = 0.11;
+            List<SteeringCandidate> open = candidates.Skip(3).ToList();
+            TargetScore(open, 3, 0.15).Should().Be(0);
+            open[0].Goal.ExpectedScore = null;
+            TargetScore(open, 3, 0.15).Should().BeApproximately(ConditionMatch.SkyScore(false, 0.15), 1e-9);
+        }
+
+        [Test]
+        public void ATargetWithAnOpenHydrogenAlphaPlanStillScoresThroughIt() {
+            var candidates = new List<SteeringCandidate> { Fresh(0, "Blue", stackSubs: 4), Goal(1, "H-a", 0.3, narrow: true) };
+            candidates[0].Goal.ScoreCut = 0.25;
+            candidates[0].Goal.ExpectedScore = 0.11;
+            TargetScore(candidates, 0, 0.15).Should().BeApproximately(ConditionMatch.SkyScore(true, 0.15), 1e-9);
+        }
+
         private static List<SteeringCandidate> BarnardsE() {
             return new List<SteeringCandidate> {
                 Goal(0, "Luminance", 0.4), Goal(1, "Red", 0.3), Goal(2, "Green", 0.35), Fresh(3, "Blue", stackSubs: 4)
@@ -505,11 +549,34 @@ namespace NINA.Plugin.TargetScheduler.Planning.Test {
         }
 
         [Test]
-        public void WhenEveryFilterIsUnderItsCutTheUsualSteeringStillPicks() {
+        public void WhenEveryOpenFilterIsUnderItsCutNoneIsSteeredTo() {
             List<SteeringCandidate> candidates = BarnardsE();
-            List<string> taken = GradedNight(candidates, Repeat(0.10, 3), (c, q) => (0.25, 0.05));
-            taken.Should().HaveCount(3);
-            taken.Should().OnlyContain(f => f == "Blue");
+            foreach (SteeringCandidate c in candidates) {
+                c.Goal.ScoreCut = 0.25;
+                c.Goal.ExpectedScore = 0.05;
+            }
+            FilterSteering.Choose(candidates, 3, 0.10).Should().Be(-1);
+        }
+
+        [Test]
+        public void BarnardsEWithOnlyBlueOpenUnderItsCutIsNotSteeredToBlue() {
+            var candidates = new List<SteeringCandidate> {
+                Goal(0, "Luminance", 1), Goal(1, "Red", 1), Goal(2, "Green", 1), Fresh(3, "Blue", stackSubs: 4)
+            };
+            candidates.Take(3).ToList().ForEach(c => c.Goal.Done = true);
+            candidates[3].Goal.ScoreCut = 0.25;
+            candidates[3].Goal.ExpectedScore = 0.11;
+            FilterSteering.Choose(candidates, 3, 0.15).Should().Be(-1);
+            candidates[3].Goal.ExpectedScore = null;
+            FilterSteering.Choose(candidates, 3, 0.15).Should().Be(3);
+        }
+
+        [Test]
+        public void AHydrogenAlphaPlanStillTakesTheNightWhenBlueIsUnderItsCut() {
+            var candidates = new List<SteeringCandidate> { Fresh(0, "Blue", stackSubs: 4), Goal(1, "H-a", 0.3, narrow: true) };
+            candidates[0].Goal.ScoreCut = 0.25;
+            candidates[0].Goal.ExpectedScore = 0.11;
+            FilterSteering.Choose(candidates, 0, 0.15).Should().Be(1);
         }
     }
 }

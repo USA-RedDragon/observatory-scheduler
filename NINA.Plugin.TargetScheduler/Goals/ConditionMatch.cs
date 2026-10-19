@@ -80,6 +80,16 @@ namespace NINA.Plugin.TargetScheduler.Goals {
             return filter != null && filter.Narrowband == NarrowbandFavored(filter.MoonGlare, quality, filter.BroadbandWorth);
         }
 
+        /// <summary>
+        /// The score for the filters Filter Steering would actually shoot: only <paramref name="steered"/> when it picks
+        /// one, else every filter except those the poor-sky gate holds out (0 when none is left).
+        /// </summary>
+        public static double SteeredScore(double altitude, double peakAltitude, IList<FilterCondition> filters, FilterCondition steered, ICollection<FilterCondition> sitOut, double? quality) {
+            if (steered != null) { return Score(altitude, peakAltitude, new[] { steered }, quality); }
+            List<FilterCondition> open = (filters ?? new List<FilterCondition>()).Where(f => f != null && (sitOut == null || !sitOut.Contains(f))).ToList();
+            return Score(altitude, peakAltitude, open, quality);
+        }
+
         public static double Score(double altitude, double peakAltitude, IEnumerable<FilterCondition> filters, double? quality) {
             List<FilterCondition> list = filters?.Where(f => f != null).ToList() ?? new List<FilterCondition>();
             if (list.Count == 0) { return 0; }

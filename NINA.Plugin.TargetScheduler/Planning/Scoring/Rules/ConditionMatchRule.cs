@@ -36,8 +36,19 @@ namespace NINA.Plugin.TargetScheduler.Planning.Scoring.Rules {
                 double altitude = AstrometryUtils.GetAltitude(observer, coordinates, at);
                 double peak = ConditionMatch.PeakAltitude(observer.Latitude, coordinates.Dec, potentialTarget.Project.MaximumAltitude);
                 double? quality = SkyConditions.NightQuality(at);
-                double score = ConditionMatch.Score(altitude, peak, plans.Select(p => PanelCondition(potentialTarget, p, glare, moon, observer, altitude)), quality);
-                TSLogger.Debug($"condition match {potentialTarget.Project.Name}/{potentialTarget.Name}: alt {altitude:0.0}/{peak:0.0}, glare {glare:0.00}, quality {(quality.HasValue ? quality.Value.ToString("0.00") : "unknown")}, score {score:0.000}");
+                Dictionary<IExposure, FilterCondition> conditions = plans.Distinct().ToDictionary(p => p, p => PanelCondition(potentialTarget, p, glare, moon, observer, altitude));
+                string steering = "";
+                double score;
+                if (FilterSteeringRule.IsOn(potentialTarget.Project)) {
+                    (IExposure chosen, List<IExposure> sitOut) = SteeringExposureSelector.Plan(at, potentialTarget.Project, potentialTarget, potentialTarget.SelectedExposure);
+                    FilterCondition steered = chosen != null && conditions.TryGetValue(chosen, out FilterCondition c) ? c : null;
+                    List<FilterCondition> held = sitOut.Where(conditions.ContainsKey).Select(p => conditions[p]).ToList();
+                    score = ConditionMatch.SteeredScore(altitude, peak, conditions.Values.ToList(), steered, held, quality);
+                    steering = $", steered to {chosen?.FilterName ?? "the default order"}{(sitOut.Count > 0 ? $", {string.Join(", ", sitOut.Select(p => p.FilterName))} under the score cut" : "")}";
+                } else {
+                    score = ConditionMatch.Score(altitude, peak, conditions.Values, quality);
+                }
+                TSLogger.Debug($"condition match {potentialTarget.Project.Name}/{potentialTarget.Name}: alt {altitude:0.0}/{peak:0.0}, glare {glare:0.00}, quality {(quality.HasValue ? quality.Value.ToString("0.00") : "unknown")}{steering}, score {score:0.000}");
                 return score;
             } catch (Exception ex) {
                 TSLogger.Warning($"condition match rule failed for {potentialTarget?.Name}, scoring 0: {ex.Message}");

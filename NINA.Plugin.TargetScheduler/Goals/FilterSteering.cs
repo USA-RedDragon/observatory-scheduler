@@ -182,6 +182,11 @@ namespace NINA.Plugin.TargetScheduler.Goals {
             return (open.FirstOrDefault(c => c.Index >= currentIndex) ?? open[0]).Index;
         }
 
+        /// <summary>
+        /// The candidate index Filter Steering takes, or -1 to leave the pick to the default order. A filter the poor-sky
+        /// gate holds out is never taken; when only such filters have any value, it returns -1 and the target's
+        /// Condition Match score is 0, so another target gets the time.
+        /// </summary>
         public static int Choose(IList<SteeringCandidate> candidates, int currentIndex, double? quality = null) {
             if (!Applies(candidates)) { return -1; }
 
@@ -190,7 +195,10 @@ namespace NINA.Plugin.TargetScheduler.Goals {
             if (bootstrap >= 0) { return bootstrap; }
 
             List<SteeringCandidate> passing = candidates.Where(c => c != null && !SitsOut(c, quality)).ToList();
-            if (!passing.Any(c => c.Value > 0)) { passing = candidates.Where(c => c != null).ToList(); }
+            if (!passing.Any(c => c.Value > 0)) {
+                if (candidates.Any(c => c != null && SitsOut(c, quality))) { return -1; }
+                passing = candidates.Where(c => c != null).ToList();
+            }
 
             List<SteeringCandidate> pool = passing.Where(c => c.Value > 0 && Favored(c, quality)).ToList();
             if (pool.Count == 0) { pool = passing; }
