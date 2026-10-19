@@ -364,6 +364,55 @@ namespace NINA.Plugin.TargetScheduler.Test.Planning {
             TargetEditGuard.Instance.IsEdited(42).Should().BeTrue();
         }
 
+        [TestCase(0)]
+        [TestCase(1)]
+        [TestCase(2)]
+        public void PlansLeftOutOfAnOverrideOrderAreRejectedThroughSteeringWrappers(int wrappers) {
+            Mock<IProject> pp = PlanMocks.GetMockPlanProject("pp1", ProjectState.Active);
+            Mock<ITarget> pt = PlanMocks.GetMockPlanTarget("M42", TestData.M42);
+            pt.SetupProperty(p => p.IsPreview, true);
+            Mock<IExposure> Lpf = PlanMocks.GetMockPlanExposure("L", 10, 0, 30, 1);
+            Mock<IExposure> Rpf = PlanMocks.GetMockPlanExposure("R", 10, 0, 30, 2);
+            Mock<IExposure> Gpf = PlanMocks.GetMockPlanExposure("G", 10, 0, 30, 3);
+            PlanMocks.AddMockPlanFilter(pt, Lpf);
+            PlanMocks.AddMockPlanFilter(pt, Rpf);
+            PlanMocks.AddMockPlanFilter(pt, Gpf);
+
+            Target dbTarget = new Target();
+            dbTarget.OverrideExposureOrders = new List<OverrideExposureOrderItem> {
+                new OverrideExposureOrderItem(101, 1, OverrideExposureOrderAction.Exposure, 0),
+                new OverrideExposureOrderItem(101, 2, OverrideExposureOrderAction.Exposure, 2)
+            };
+            IExposureSelector selector = new OverrideOrderExposureSelector(pp.Object, pt.Object, dbTarget);
+            for (int i = 0; i < wrappers; i++) {
+                selector = new SteeringExposureSelector(pp.Object, pt.Object, selector);
+            }
+            pt.SetupProperty(p => p.ExposureSelector, selector);
+
+            PreviousTargetExpert.RejectPlansOutsideOverrideOrder(pt.Object);
+
+            Lpf.Object.Rejected.Should().BeFalse();
+            Rpf.Object.Rejected.Should().BeTrue();
+            Rpf.Object.RejectedReason.Should().Be(Reasons.FilterComplete);
+            Gpf.Object.Rejected.Should().BeFalse();
+        }
+
+        [Test]
+        public void ASteeringWrappedSelectorWithoutAnOverrideOrderRejectsNothing() {
+            Mock<IProject> pp = PlanMocks.GetMockPlanProject("pp1", ProjectState.Active);
+            Mock<ITarget> pt = PlanMocks.GetMockPlanTarget("M42", TestData.M42);
+            pt.SetupProperty(p => p.IsPreview, true);
+            Mock<IExposure> Lpf = PlanMocks.GetMockPlanExposure("L", 10, 0, 30, 1);
+            PlanMocks.AddMockPlanFilter(pt, Lpf);
+            IExposureSelector inner = new BasicExposureSelector(pp.Object, pt.Object, new Target());
+            pt.SetupProperty(p => p.ExposureSelector, new SteeringExposureSelector(pp.Object, pt.Object, inner));
+
+            PreviousTargetExpert.RejectPlansOutsideOverrideOrder(pt.Object);
+
+            Lpf.Object.Rejected.Should().BeFalse();
+            SteeringExposureSelector.Unwrap(pt.Object.ExposureSelector).Should().BeSameAs(inner);
+        }
+
         private ProfilePreference GetPrefs(string profileId = "abcd-1234") {
             return new ProfilePreference(profileId);
         }

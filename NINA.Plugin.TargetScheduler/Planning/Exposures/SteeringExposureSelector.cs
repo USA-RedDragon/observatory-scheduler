@@ -14,6 +14,14 @@ namespace NINA.Plugin.TargetScheduler.Planning.Exposures {
 
         public IExposureSelector Inner => inner;
 
+        /// <summary>
+        /// Returns the selector under any number of Filter Steering wrappers.
+        /// </summary>
+        public static IExposureSelector Unwrap(IExposureSelector selector) {
+            while (selector is SteeringExposureSelector steering) { selector = steering.Inner; }
+            return selector;
+        }
+
         public SteeringExposureSelector(IProject project, ITarget target, IExposureSelector inner) : base(target) {
             this.inner = inner;
             DitherManager = GetDitherManager(project, target);

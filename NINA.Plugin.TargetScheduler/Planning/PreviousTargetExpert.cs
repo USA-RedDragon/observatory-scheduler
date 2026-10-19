@@ -189,12 +189,20 @@ namespace NINA.Plugin.TargetScheduler.Planning {
             // If this target is using an override exposure order, we need to ensure that it covers all exposure plans.
             // Otherwise, they have to be marked rejected since the target would never reach completion just using
             // the OEO list (this is in the context of whether the current target can continue).
-            OverrideOrderExposureSelector oeoExposureSelector = previousTarget.ExposureSelector as OverrideOrderExposureSelector;
-            if (oeoExposureSelector != null) {
-                for (int i = 0; i < previousTarget.AllExposurePlans.Count; i++) {
-                    if (!oeoExposureSelector.ContainsExposurePlanIdx(i)) {
-                        SetRejected(previousTarget.AllExposurePlans[i], Reasons.FilterComplete);
-                    }
+            RejectPlansOutsideOverrideOrder(previousTarget);
+        }
+
+        /// <summary>
+        /// Rejects the exposure plans that the target's override exposure order leaves out, looking through
+        /// any Filter Steering wrappers around the selector.
+        /// </summary>
+        public static void RejectPlansOutsideOverrideOrder(ITarget target) {
+            OverrideOrderExposureSelector oeoExposureSelector = SteeringExposureSelector.Unwrap(target.ExposureSelector) as OverrideOrderExposureSelector;
+            if (oeoExposureSelector == null) { return; }
+            for (int i = 0; i < target.AllExposurePlans.Count; i++) {
+                if (!oeoExposureSelector.ContainsExposurePlanIdx(i)) {
+                    target.AllExposurePlans[i].Rejected = true;
+                    target.AllExposurePlans[i].RejectedReason = Reasons.FilterComplete;
                 }
             }
         }
