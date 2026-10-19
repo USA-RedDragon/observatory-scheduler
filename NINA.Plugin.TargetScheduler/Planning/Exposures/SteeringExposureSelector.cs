@@ -30,7 +30,7 @@ namespace NINA.Plugin.TargetScheduler.Planning.Exposures {
         public IExposure Select(DateTime atTime, IProject project, ITarget target) {
             IExposure fallback = inner.Select(atTime, project, target);
             try {
-                IExposure steered = Steer(atTime, project, target, fallback);
+                IExposure steered = Steer(atTime, project, target, fallback, !target.IsPreview);
                 if (steered == null || ReferenceEquals(steered, fallback)) { return fallback; }
 
                 (inner as BasicExposureSelector)?.Follow(steered);
@@ -43,7 +43,11 @@ namespace NINA.Plugin.TargetScheduler.Planning.Exposures {
             }
         }
 
-        public static IExposure Steer(DateTime atTime, IProject project, ITarget target, IExposure current) {
+        /// <summary>
+        /// The plan Filter Steering picks at <paramref name="atTime"/>, or null to keep <paramref name="current"/>. With
+        /// <paramref name="commit"/> the poor-sky gate remembers its decisions; scoring and previews leave it false.
+        /// </summary>
+        public static IExposure Steer(DateTime atTime, IProject project, ITarget target, IExposure current, bool commit = false) {
             ExposureCompletionHelper helper = project.ExposureCompletionHelper;
             if (helper == null || target.ExposurePlans == null) { return null; }
 
@@ -71,15 +75,20 @@ namespace NINA.Plugin.TargetScheduler.Planning.Exposures {
                     Worth = moon.HasValue && SkyConditions.KeepApplies(target, plan) ? MoonKeep.Worth(keep.Lookup(plan.FilterName, moon.Value)) : null,
                     BroadbandWorth = SkyConditions.KeepApplies(target, plan) ? broadbandWorth : null,
                     AltWorth = SkyConditions.AltWorth(target, plan, altitude),
-                    PanelMatch = PanelBalance.ConditionFactor(target, plan.FilterName, glare, observer)
+                    PanelMatch = PanelBalance.ConditionFactor(target, plan.FilterName, glare, observer),
+                    Key = $"{target.DatabaseId}/{MoonKeep.FilterKey(plan.FilterName)}"
                 });
             }
 
             double? quality = SkyConditions.NightQuality(atTime);
+            DateTime atUtc = atTime.ToUniversalTime();
+            foreach (SteeringCandidate c in candidates) {
+                c.Held = ScoreGate.Current.Decide(c, quality, atUtc, commit);
+            }
             int chosen = FilterSteering.Choose(candidates, currentIndex, quality);
-            List<SteeringCandidate> belowCut = candidates.Where(c => FilterSteering.BelowCut(c, quality)).ToList();
+            List<SteeringCandidate> belowCut = candidates.Where(c => FilterSteering.SitsOut(c, quality)).ToList();
             if (belowCut.Count > 0) {
-                TSLogger.Debug($"filter steering for {target.Name}: at night quality {quality.Value:0.00} the stacker expects {string.Join(", ", belowCut.Select(c => $"{c.Filter} to score {c.Goal.ExpectedScore.Value:0.00}, under its cut {c.Goal.ScoreCut.Value:0.00}"))}; those filters sit out while another can pass");
+                TSLogger.Debug($"filter steering for {target.Name}: at night quality {(quality.HasValue ? quality.Value.ToString("0.00") : "unknown")} {string.Join(", ", belowCut.Select(c => $"{c.Filter} (expected {c.Goal?.ExpectedScore?.ToString("0.00") ?? "unknown"} x moon worth {(c.Worth.HasValue ? c.Worth.Value.ToString("0.00") : "1")} against its cut {c.Goal?.ScoreCut?.ToString("0.00") ?? "unknown"})"))} sit out while another can pass");
             }
             TSLogger.Debug($"filter steering conditions for {target.Name}: glare {glare:0.00}, quality {(quality.HasValue ? quality.Value.ToString("0.00") : "unknown")}, favors {(ConditionMatch.NarrowbandFavored(glare, quality, broadbandWorth) ? "narrowband" : "broadband")}{(moon.HasValue ? $", kept-rate worth {string.Join(", ", candidates.Select(c => $"{c.Filter} {(c.Worth.HasValue ? c.Worth.Value.ToString("0.00") : "none")}"))}" : "")}, sibling panel match {string.Join(", ", candidates.Select(c => $"{c.Filter} {c.PanelMatch:0.00}"))}");
             return chosen < 0 ? null : target.ExposurePlans[chosen];

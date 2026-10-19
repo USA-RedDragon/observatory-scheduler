@@ -16,6 +16,66 @@ namespace NINA.Plugin.TargetScheduler.Goals {
         public double? BroadbandWorth { get; set; }
         public double? AltWorth { get; set; }
         public double Value { get; set; }
+
+        /// <summary>Identifies the target and filter for <see cref="ScoreGate"/>; null leaves the candidate without a memory.</summary>
+        public string Key { get; set; }
+
+        /// <summary>The poor-sky gate's decision with hysteresis from <see cref="ScoreGate"/>; null uses <see cref="FilterSteering.BelowCut"/> as is.</summary>
+        public bool? Held { get; set; }
+    }
+
+    /// <summary>
+    /// Hysteresis for the poor-sky gate, per target and filter. A filter is held out when its moon-scaled expected
+    /// score is under the cut, and comes back only at <see cref="ReleaseMargin"/> or more over it. A decision stands
+    /// for at least <see cref="MinHold"/> unless the margin is past the other side by <see cref="ReleaseMargin"/>
+    /// (held out: twice the margin over the cut), and a held decision is kept for up to <see cref="MinHold"/> while
+    /// the stacker's numbers are briefly unknown, as after a new night quality before the stacker rewrites the row.
+    /// </summary>
+    public class ScoreGate {
+        public const double ReleaseMargin = 0.03;
+        public static readonly TimeSpan MinHold = TimeSpan.FromMinutes(20);
+
+        public static ScoreGate Current { get; } = new ScoreGate();
+
+        private readonly object sync = new object();
+        private readonly Dictionary<string, (bool Held, DateTime Since, DateTime Seen)> state = new Dictionary<string, (bool, DateTime, DateTime)>();
+
+        /// <summary>
+        /// Whether the candidate's filter sits out at <paramref name="atUtc"/>. With <paramref name="commit"/> false
+        /// (previews and target scoring) the decision is read without being remembered.
+        /// </summary>
+        public bool Decide(SteeringCandidate c, double? quality, DateTime atUtc, bool commit) {
+            double? margin = FilterSteering.CutMargin(c, quality);
+            lock (sync) {
+                bool known = c?.Key != null && state.ContainsKey(c.Key);
+                (bool Held, DateTime Since, DateTime Seen) last = known ? state[c.Key] : default;
+                if (!margin.HasValue) {
+                    return known && last.Held && Elapsed(last.Seen, atUtc) <= MinHold;
+                }
+                bool held;
+                if (!known) {
+                    held = margin.Value < 0;
+                } else if (last.Held) {
+                    held = !(margin.Value >= 2 * ReleaseMargin || (margin.Value >= ReleaseMargin && Elapsed(last.Since, atUtc) >= MinHold));
+                } else {
+                    held = margin.Value < -ReleaseMargin || (margin.Value < 0 && Elapsed(last.Since, atUtc) >= MinHold);
+                }
+                if (commit && c?.Key != null) {
+                    state[c.Key] = (held, !known || held != last.Held ? atUtc : last.Since, atUtc);
+                }
+                return held;
+            }
+        }
+
+        public void Clear() {
+            lock (sync) {
+                state.Clear();
+            }
+        }
+
+        private static TimeSpan Elapsed(DateTime from, DateTime to) {
+            return to > from ? to - from : TimeSpan.Zero;
+        }
     }
 
     public static class FilterSteering {
@@ -82,12 +142,29 @@ namespace NINA.Plugin.TargetScheduler.Goals {
         /// estimated for another night quality than the current one (a row it has not rewritten since).
         /// </summary>
         public static bool BelowCut(SteeringCandidate c, double? quality) {
-            if (!quality.HasValue || c?.Goal == null || c.Narrowband) { return false; }
+            double? margin = CutMargin(c, quality);
+            return margin.HasValue && margin.Value < 0;
+        }
+
+        /// <summary>
+        /// The stacker's expected score for a broadband sub taken now, scaled by the filter's moon keep worth under the
+        /// current Moon (the expected score pools subs of every Moon at about this night quality), minus its score cut.
+        /// Null in every case <see cref="BelowCut"/> treats as unknown.
+        /// </summary>
+        public static double? CutMargin(SteeringCandidate c, double? quality) {
+            if (!quality.HasValue || c?.Goal == null || c.Narrowband) { return null; }
             double? cut = c.Goal.ScoreCut;
             double? expected = c.Goal.ExpectedScore;
             double? at = c.Goal.ExpectedAtQuality;
-            if (at.HasValue && !(Math.Abs(at.Value - quality.Value) <= ExpectedQualityTolerance)) { return false; }
-            return cut.HasValue && expected.HasValue && !double.IsNaN(cut.Value) && !double.IsNaN(expected.Value) && expected.Value < cut.Value;
+            if (at.HasValue && !(Math.Abs(at.Value - quality.Value) <= ExpectedQualityTolerance)) { return null; }
+            if (!cut.HasValue || !expected.HasValue || double.IsNaN(cut.Value) || double.IsNaN(expected.Value)) { return null; }
+            double moon = c.Worth.HasValue && !double.IsNaN(c.Worth.Value) ? GoalCompletion.Clamp01(c.Worth.Value) : 1;
+            return expected.Value * moon - cut.Value;
+        }
+
+        /// <summary>True when the poor-sky gate holds the candidate out: its <see cref="SteeringCandidate.Held"/> decision, else <see cref="BelowCut"/>.</summary>
+        public static bool SitsOut(SteeringCandidate c, double? quality) {
+            return c?.Held ?? BelowCut(c, quality);
         }
 
         /// <summary>
@@ -99,7 +176,7 @@ namespace NINA.Plugin.TargetScheduler.Goals {
         /// the sky is good enough again.
         /// </summary>
         public static int Bootstrap(IList<SteeringCandidate> candidates, int currentIndex, double? quality = null) {
-            List<SteeringCandidate> open = candidates.Where(c => c != null && c.Value > 0 && !IsHydrogenAlpha(c.Filter) && !BelowCut(c, quality)).OrderBy(c => c.Index).ToList();
+            List<SteeringCandidate> open = candidates.Where(c => c != null && c.Value > 0 && !IsHydrogenAlpha(c.Filter) && !SitsOut(c, quality)).OrderBy(c => c.Index).ToList();
             if (!open.Any(Bootstrapping)) { return -1; }
 
             return (open.FirstOrDefault(c => c.Index >= currentIndex) ?? open[0]).Index;
@@ -112,7 +189,7 @@ namespace NINA.Plugin.TargetScheduler.Goals {
             int bootstrap = Bootstrap(candidates, currentIndex, quality);
             if (bootstrap >= 0) { return bootstrap; }
 
-            List<SteeringCandidate> passing = candidates.Where(c => c != null && !BelowCut(c, quality)).ToList();
+            List<SteeringCandidate> passing = candidates.Where(c => c != null && !SitsOut(c, quality)).ToList();
             if (!passing.Any(c => c.Value > 0)) { passing = candidates.Where(c => c != null).ToList(); }
 
             List<SteeringCandidate> pool = passing.Where(c => c.Value > 0 && Favored(c, quality)).ToList();

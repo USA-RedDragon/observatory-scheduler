@@ -403,6 +403,89 @@ namespace NINA.Plugin.TargetScheduler.Planning.Test {
             GradedNight(Sculptor(), Repeat(0.10, 4), (c, q) => (0.27, null)).Should().Equal("Red", "Green", "Blue", "Luminance");
         }
 
+        private static readonly DateTime GateStart = new DateTime(2026, 10, 18, 4, 0, 0, DateTimeKind.Utc);
+
+        private static SteeringCandidate GatedBlue(double cut, double? expected, double? worth = null) {
+            SteeringCandidate blue = Fresh(2, "Blue", worth);
+            blue.Key = "7/blue";
+            blue.Goal.ScoreCut = cut;
+            blue.Goal.ExpectedScore = expected;
+            return blue;
+        }
+
+        [Test]
+        public void AnExpectedScoreNearTheCutDoesNotFlapTheFilter() {
+            var gate = new ScoreGate();
+            var held = new List<bool>();
+            double[] expected = { 0.24, 0.26, 0.24, 0.26, 0.27, 0.24, 0.26 };
+            for (int i = 0; i < expected.Length; i++) {
+                held.Add(gate.Decide(GatedBlue(0.25, expected[i]), 0.15, GateStart.AddMinutes(2 * i), true));
+            }
+            held.Should().OnlyContain(h => h);
+        }
+
+        [Test]
+        public void AHeldFilterComesBackAtTheMarginAfterTheMinimumHold() {
+            var gate = new ScoreGate();
+            gate.Decide(GatedBlue(0.25, 0.20), 0.15, GateStart, true).Should().BeTrue();
+            gate.Decide(GatedBlue(0.25, 0.29), 0.15, GateStart.AddMinutes(10), true).Should().BeTrue();
+            gate.Decide(GatedBlue(0.25, 0.29), 0.15, GateStart + ScoreGate.MinHold, true).Should().BeFalse();
+            gate.Decide(GatedBlue(0.25, 0.24), 0.15, GateStart + ScoreGate.MinHold + TimeSpan.FromMinutes(5), true).Should().BeFalse();
+            gate.Decide(GatedBlue(0.25, 0.21), 0.15, GateStart + ScoreGate.MinHold + TimeSpan.FromMinutes(6), true).Should().BeTrue();
+        }
+
+        [Test]
+        public void AClearRecoveryReleasesTheFilterAtOnce() {
+            var gate = new ScoreGate();
+            gate.Decide(GatedBlue(0.25, 0.20), 0.15, GateStart, true).Should().BeTrue();
+            gate.Decide(GatedBlue(0.25, 0.31), 0.60, GateStart.AddMinutes(1), true).Should().BeFalse();
+        }
+
+        [Test]
+        public void AHoldOutlivesABriefGapInTheStackersNumbers() {
+            var gate = new ScoreGate();
+            gate.Decide(GatedBlue(0.25, 0.20), 0.15, GateStart, true).Should().BeTrue();
+            gate.Decide(GatedBlue(0.25, null), 0.15, GateStart.AddMinutes(5), true).Should().BeTrue();
+            gate.Decide(GatedBlue(0.25, null), 0.15, GateStart + ScoreGate.MinHold + TimeSpan.FromMinutes(1), true).Should().BeFalse();
+            new ScoreGate().Decide(GatedBlue(0.25, null), 0.15, GateStart, true).Should().BeFalse();
+        }
+
+        [Test]
+        public void APreviewDoesNotMoveTheGate() {
+            var gate = new ScoreGate();
+            gate.Decide(GatedBlue(0.25, 0.20), 0.15, GateStart, false).Should().BeTrue();
+            gate.Decide(GatedBlue(0.25, 0.26), 0.15, GateStart.AddMinutes(1), true).Should().BeFalse();
+        }
+
+        [Test]
+        public void TheMoonScalesTheExpectedScore() {
+            FilterSteering.BelowCut(GatedBlue(0.25, 0.30), 0.40).Should().BeFalse();
+            FilterSteering.BelowCut(GatedBlue(0.25, 0.30, worth: 1), 0.40).Should().BeFalse();
+            FilterSteering.BelowCut(GatedBlue(0.25, 0.30, worth: 0.7), 0.40).Should().BeTrue();
+            FilterSteering.CutMargin(GatedBlue(0.25, 0.30, worth: 0.7), 0.40).Value.Should().BeApproximately(-0.04, 1e-9);
+            FilterSteering.CutMargin(GatedBlue(0.25, 0.30, worth: 0.7), null).Should().BeNull();
+        }
+
+        [Test]
+        public void TheGatedRotationHoldsBlueOutWhileItsEstimateHoversAtTheCut() {
+            var gate = new ScoreGate();
+            var taken = new List<string>();
+            int current = -1;
+            for (int i = 0; i < 8; i++) {
+                List<SteeringCandidate> candidates = BarnardsE();
+                foreach (SteeringCandidate c in candidates) {
+                    c.Key = "7/" + c.Filter;
+                    c.Goal.ScoreCut = 0.25;
+                    c.Goal.ExpectedScore = c.Filter == "Blue" ? (i % 2 == 0 ? 0.24 : 0.26) : 0.40;
+                    c.Held = gate.Decide(c, 0.20, GateStart.AddMinutes(3 * i), true);
+                }
+                int pick = FilterSteering.Choose(candidates, current, 0.20);
+                taken.Add(candidates.First(c => c.Index == pick).Filter);
+                current = pick + 1;
+            }
+            taken.Should().NotContain("Blue");
+        }
+
         private static List<SteeringCandidate> BarnardsE() {
             return new List<SteeringCandidate> {
                 Goal(0, "Luminance", 0.4), Goal(1, "Red", 0.3), Goal(2, "Green", 0.35), Fresh(3, "Blue", stackSubs: 4)
