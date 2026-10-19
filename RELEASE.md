@@ -1,5 +1,9 @@
-Observatory Scheduler 5.8.2.236: a new target's broadband filters wait for a sky their subs can pass in.
+Observatory Scheduler 5.8.2.237: the poor-sky gate holds steady, sees the Moon, and makes a target yield instead of shooting a filter that will fail.
 
-- **Bootstrap rotation on a poor sky**: the stacker now publishes, for each goal filter, the score a sub needs to pass its low-score cut and the score it expects a sub to get at tonight's night quality. While that expected score is under the cut, a broadband filter sits out the bootstrap rotation and the usual Filter Steering, so a poor night goes to H-alpha (on 2026-10-17/18 most bootstrap Blue subs of Barnard's E and M 15 were rejected). The rotation resumes when the sky recovers. Without the stacker's numbers, or with an unknown night quality, nothing changes.
+- **Poor-sky gate**: a broadband filter that sits out for a poor sky needs its expected score 0.03 over the cut to come back, and a decision stands for 20 minutes unless the sky clearly changes, so a filter no longer flaps when the numbers sit near the cut. The expected score is scaled by the filter's moon keep worth under the current Moon.
+- **Yield instead of a failing filter**: when every open filter of a target is under its cut, steering does not pick one, and Condition Match scores the target 0, so another target gets the time (Barnard's E took 25 Blue subs under its cut on 2026-10-17).
+- **Condition Match**: a target is scored for the filter Filter Steering will actually shoot, not for H-alpha while the bootstrap rotation shoots broadband.
+- **Darks**: the time a set needs to reach a steady cooler power is in the darks time budget, and a set cut by the deadline never records a cooler limit.
+- **Override order**: plans left out of an override exposure order are rejected again with Filter Steering on.
 
-Includes everything in 5.8.2.235 (bootstrap rotation, filter cadence after steering). Adds the columns score_cut and expected_score to ts_goal_progress on start-up. Needs the astro-stacker change that publishes them, and the same columns on the home schedulerdb. Requires NINA 3.1.2.9001 or later. Install with install-plugin.ps1 and warm-camera.ps1 from this folder.
+Includes everything in 5.8.2.236. No database changes. While the stacker publishes no expected_score, the gate stays off and steering is as in 5.8.2.235, except that Condition Match follows the filter steering picks. Requires NINA 3.1.2.9001 or later. Install with install-plugin.ps1 and warm-camera.ps1 from this folder.
