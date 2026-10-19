@@ -1,5 +1,9 @@
 # Observatory Scheduler
 
+## 5.8.2.238 - 2026-10-19
+* High-priority event windows that overlap are taken by eclipse phase: among ready high-priority events, the one nearest the middle of its window, as a share of half the window (|t - middle| / half the window), wins. Events within 0.05 of the nearest go on to the score as before. In the preview for the night of 2026-10-19 the Cygnus Loop Panel 1 eclipse (6014) took the night from dusk on score while the Garlic Nebula eclipse (21142) was near its middle, and 21142 got time only from 07:37 UTC, after its eclipse ended; now 21142 runs from dusk and 6014 takes over at about 04:06 UTC.
+* A running high-priority event gives way to another one only when the other is at least 0.05 nearer the middle of its window, both at the usual re-plan and between re-plans within the minimum time. Below that margin the running event holds, so two events with about the same phase do not trade places. Normal events and targets without a window are planned as before.
+
 ## 5.8.2.237 - 2026-10-18
 * Poor-sky gate hysteresis: a broadband filter that sits out because the stacker expects it to fail its score cut comes back only when the expected score is at least 0.03 over the cut, and a decision stands for at least 20 minutes unless the expected score is clearly past the other side (0.03 under the cut to sit out again, 0.06 over it to come back at once). A filter that sits out keeps sitting out for up to 20 minutes while the stacker's numbers are briefly unknown, as after a new night quality before the stacker rewrites the row. Previews and target scoring read the gate without moving it.
 * The Moon in the poor-sky gate: the expected score pools subs of every Moon at about the night quality, so it is scaled by the filter's moon keep worth under the current Moon (the kept rate for that Moon relative to a dark sky) before it is compared with the cut.
