@@ -123,7 +123,7 @@ namespace NINA.Plugin.TargetScheduler.Planning {
                     if (readyTargets.Count > 0) {
                         SelectTargetExposures(readyTargets);
                         FilterForSequenceEnd(readyTargets);
-                        FilterForEventPriority(readyTargets);
+                        FilterForEventPriority(readyTargets, previousTarget);
                     }
 
                     if (readyTargets.Count > 0) {
@@ -478,11 +478,12 @@ namespace NINA.Plugin.TargetScheduler.Planning {
             return nextAvailableTarget;
         }
 
-        public void FilterForEventPriority(List<ITarget> readyTargets) {
+        public void FilterForEventPriority(List<ITarget> readyTargets, ITarget previousTarget = null) {
+            ITarget running = readyTargets == null ? null : RunningTarget(readyTargets, previousTarget);
             EventWindows.Prefer(readyTargets, t => t.Window(), (t, reason) => {
                 TSLogger.Info($"not selecting {t.Project.Name}/{t.Name}: {reason}");
                 SetRejected(t, reason);
-            });
+            }, t => running != null && ReferenceEquals(t, running), atTime);
         }
 
         public string PreemptedBy { get; private set; }

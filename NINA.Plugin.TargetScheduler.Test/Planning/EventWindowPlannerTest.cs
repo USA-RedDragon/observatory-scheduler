@@ -15,6 +15,7 @@ using NINA.Profile.Interfaces;
 using NUnit.Framework;
 using System;
 using System.Collections.Generic;
+using System.Linq;
 
 namespace NINA.Plugin.TargetScheduler.Test.Planning {
 
@@ -219,7 +220,7 @@ namespace NINA.Plugin.TargetScheduler.Test.Planning {
         }
 
         [Test]
-        public void AHighEventNeverInterruptsAnotherHighEvent() {
+        public void AHighEventDoesNotInterruptAHighEventAsNearItsMiddle() {
             var (aProject, a) = Target("a", "a", 1);
             var (bProject, b) = Target("b", "b", 2);
             List<IProject> projects = PlanMocks.ProjectsList(aProject.Object, bProject.Object);
@@ -237,6 +238,83 @@ namespace NINA.Plugin.TargetScheduler.Test.Planning {
             List<IProject> projects = PlanMocks.ProjectsList(dsoProject.Object, eventProject.Object);
             Windows(("ev", Night.AddHours(-1), Night.AddHours(2), "high", false));
             new Planner(Night, Profile(), Prefs(), Weather(), false, true, projects).HighEventPreempts(dso.Object).Should().BeFalse();
+        }
+
+        private static IProject Eclipse(int id, string name, ProjectPriority priority) {
+            Mock<IProject> pp = PlanMocks.GetMockPlanProject(name, ProjectState.Active);
+            pp.SetupProperty(p => p.DatabaseId, id);
+            pp.SetupProperty(p => p.Priority, priority);
+            Mock<ITarget> pt = PlanMocks.GetMockPlanTarget(name, TestData.M31);
+            pt.SetupProperty(t => t.Guid, id.ToString());
+            pt.SetupProperty(t => t.DatabaseId, id);
+            pt.SetupProperty(t => t.IsPreview, true);
+            PlanMocks.AddMockPlanFilter(pt, PlanMocks.GetMockPlanExposure("R", 100, 0, 300, id));
+            PlanMocks.AddMockPlanTarget(pp, pt);
+            pt.SetupProperty(t => t.ExposureSelector, new RepeatUntilDoneExposureSelector(pp.Object, pt.Object, new Target()));
+            return pp.Object;
+        }
+
+        private static List<IProject> Eclipses() {
+            return PlanMocks.ProjectsList(Eclipse(21142, "Garlic Nebula", ProjectPriority.Normal), Eclipse(6014, "Cygnis Loop Panel 1", ProjectPriority.High));
+        }
+
+        [Test]
+        public void OverlappingEclipsesAreTakenNearestTheirMiddles() {
+            DateTime dusk = new TwilightCircumstances(TestData.Pittsboro_NC, new DateTime(2023, 12, 17, 12, 0, 0)).NighttimeStart.Value;
+            DateTime garlicMiddle = dusk.AddMinutes(-22);
+            DateTime cygnusMiddle = dusk.AddHours(4.2);
+            Windows(("21142", dusk.AddHours(-12.85), dusk.AddHours(12.13), "high", false), ("6014", dusk.AddHours(-2.43), dusk.AddHours(10.85), "high", false));
+
+            List<(DateTime at, int id)> picks = new List<(DateTime, int)>();
+            ITarget previous = null;
+            for (DateTime at = dusk.AddMinutes(-30); at <= dusk.AddHours(5); at = at.AddMinutes(5)) {
+                SchedulerPlan plan = new Planner(at, Profile(), Prefs(), Weather(), false, false, Eclipses()).GetPlan(previous);
+                if (plan == null || plan.IsWait) {
+                    at.Should().BeBefore(dusk.AddMinutes(1));
+                    continue;
+                }
+                previous = plan.PlanTarget;
+                picks.Add((at, previous.DatabaseId));
+            }
+
+            picks.First().at.Should().BeCloseTo(dusk, TimeSpan.FromMinutes(5));
+            picks.First().id.Should().Be(21142);
+            List<int> runs = picks.Select(p => p.id).Where((id, i) => i == 0 || id != picks[i - 1].id).ToList();
+            runs.Should().Equal(21142, 6014);
+            DateTime switched = picks.First(p => p.id == 6014).at;
+            switched.Should().BeAfter(dusk.AddHours(2.5));
+            switched.Should().BeBefore(dusk.AddHours(3.25));
+            switched.Should().BeBefore(cygnusMiddle);
+            switched.Should().BeAfter(garlicMiddle);
+        }
+
+        [Test]
+        public void ARunningHighEventKeepsItsSlotUntilAnotherIsClearlyNearerItsMiddle() {
+            var (aProject, a) = Target("a", "a", 1);
+            var (bProject, b) = Target("b", "b", 2);
+            List<IProject> projects = PlanMocks.ProjectsList(aProject.Object, bProject.Object);
+            a.SetupProperty(t => t.MinimumTimeSpanEnd, Night.AddMinutes(30));
+
+            Windows(("a", Night.AddHours(-3.2), Night.AddHours(0.8), "high", false), ("b", Night.AddHours(-3.14), Night.AddHours(0.86), "high", false));
+            EventWindows.Phase(TargetWindowTable.Current.Get("b"), Night).Should().BeLessThan(EventWindows.Phase(TargetWindowTable.Current.Get("a"), Night));
+            Planner planner = new Planner(Night, Profile(), Prefs(), Weather(), false, true, projects);
+            planner.HighEventPreempts(a.Object).Should().BeFalse();
+            List<ITarget> ready = new List<ITarget> { b.Object, a.Object };
+            planner.FilterForEventPriority(ready, a.Object);
+            ready.Should().Equal(a.Object);
+            b.Object.RejectedReason.Should().Be(EventWindows.ReasonRunningHighEvent);
+
+            b.Object.Rejected = false;
+            b.Object.RejectedReason = null;
+            Windows(("a", Night.AddHours(-3.2), Night.AddHours(0.8), "high", false), ("b", Night.AddHours(-3), Night.AddHours(1), "high", false));
+            planner = new Planner(Night, Profile(), Prefs(), Weather(), false, true, projects);
+            planner.HighEventPreempts(a.Object).Should().BeTrue();
+            planner.PreemptedBy.Should().Be("b/b");
+            ready = new List<ITarget> { b.Object, a.Object };
+            planner.FilterForEventPriority(ready, a.Object);
+            ready.Should().Equal(b.Object);
+            a.Object.RejectedReason.Should().Be(EventWindows.ReasonNearerMiddle);
+            new Planner(Night, Profile(), Prefs(), Weather(), false, true, projects).HighEventPreempts(b.Object).Should().BeFalse();
         }
     }
 }

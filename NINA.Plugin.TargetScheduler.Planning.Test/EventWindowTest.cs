@@ -147,7 +147,7 @@ namespace NINA.Plugin.TargetScheduler.Planning.Test {
         }
 
         [Test]
-        public void HighEventsInterruptAtTheBoundaryButNeverEachOther() {
+        public void HighEventsInterruptAtTheBoundaryButNotAHighEventAsNearItsMiddle() {
             DateTime inside = Start.AddHours(1);
             EventWindows.Preempts(null, Row("high"), inside).Should().BeTrue();
             EventWindows.Preempts(Row("normal"), Row("high"), inside).Should().BeTrue();
@@ -156,6 +156,155 @@ namespace NINA.Plugin.TargetScheduler.Planning.Test {
             EventWindows.Preempts(null, null, inside).Should().BeFalse();
             EventWindows.Preempts(null, Row("high"), Start.AddSeconds(-1)).Should().BeFalse();
             EventWindows.Preempts(null, Row("high"), End).Should().BeFalse();
+        }
+
+        private static TargetWindowRow Around(DateTime middle, double halfHours, string priority = "high") {
+            return new TargetWindowRow { TargetGuid = "g", StartUtc = middle.AddHours(-halfHours), EndUtc = middle.AddHours(halfHours), Priority = priority };
+        }
+
+        [Test]
+        public void PhaseIsTheDistanceFromTheMiddleOverHalfTheWindow() {
+            TargetWindowRow w = Row("high");
+            DateTime middle = Start.AddHours(2.75);
+            EventWindows.Phase(w, middle).Should().BeApproximately(0, 1e-9);
+            EventWindows.Phase(w, Start).Should().BeApproximately(1, 1e-9);
+            EventWindows.Phase(w, End).Should().BeApproximately(1, 1e-9);
+            EventWindows.Phase(w, middle.AddHours(-1.375)).Should().BeApproximately(0.5, 1e-9);
+            EventWindows.Phase(w, middle.AddHours(1.375)).Should().BeApproximately(0.5, 1e-9);
+            EventWindows.Phase(w, middle.ToLocalTime()).Should().BeApproximately(0, 1e-9);
+            EventWindows.Phase(null, middle).Should().Be(double.PositiveInfinity);
+        }
+
+        [Test]
+        public void TheHighEventNearestItsMiddleIsPreferred() {
+            DateTime at = new DateTime(2026, 10, 20, 1, 16, 0, DateTimeKind.Utc);
+            var garlic = new Candidate { Name = "21142", Window = Around(new DateTime(2026, 10, 20, 0, 54, 30, DateTimeKind.Utc), 12.49) };
+            var cygnus = new Candidate { Name = "6014", Window = Around(new DateTime(2026, 10, 20, 5, 28, 30, DateTimeKind.Utc), 6.64) };
+            var dso = C("dso", null);
+            List<Candidate> ready = new List<Candidate> { cygnus, dso, garlic };
+            EventWindows.Prefer(ready, c => c.Window, (c, r) => c.Reason = r, null, at);
+            ready.Select(c => c.Name).Should().Equal("21142");
+            cygnus.Reason.Should().Be(EventWindows.ReasonNearerMiddle);
+            dso.Reason.Should().Be(EventWindows.ReasonHighEvent);
+            EventWindows.IsPriorityReason(EventWindows.ReasonNearerMiddle).Should().BeTrue();
+            EventWindows.IsPriorityReason(EventWindows.ReasonRunningHighEvent).Should().BeTrue();
+        }
+
+        [Test]
+        public void HighEventsWithinThePhaseBandGoOnToTheScore() {
+            DateTime at = Start.AddHours(2.75);
+            var a = new Candidate { Name = "a", Window = Around(at.AddHours(0.2), 4) };
+            var b = new Candidate { Name = "b", Window = Around(at.AddHours(-0.3), 4) };
+            var c = new Candidate { Name = "c", Window = Around(at.AddHours(1.2), 4) };
+            List<Candidate> ready = new List<Candidate> { a, b, c };
+            EventWindows.Prefer(ready, x => x.Window, (x, r) => x.Reason = r, null, at);
+            ready.Select(x => x.Name).Should().Equal("a", "b");
+            c.Reason.Should().Be(EventWindows.ReasonNearerMiddle);
+        }
+
+        [Test]
+        public void WithoutATimeHighEventsAreNotSplitByPhase() {
+            var a = new Candidate { Name = "a", Window = Around(Start, 4) };
+            var b = new Candidate { Name = "b", Window = Around(Start.AddHours(3), 4) };
+            List<Candidate> ready = new List<Candidate> { a, b };
+            EventWindows.Prefer(ready, x => x.Window, (x, r) => x.Reason = r);
+            ready.Select(x => x.Name).Should().Equal("a", "b");
+        }
+
+        [Test]
+        public void NormalEventsAreNotSplitByPhase() {
+            DateTime at = Start.AddHours(1);
+            var a = new Candidate { Name = "a", Window = Around(at, 4, "normal") };
+            var b = new Candidate { Name = "b", Window = Around(at.AddHours(3.5), 4, "normal") };
+            var dso = C("dso", null);
+            List<Candidate> ready = new List<Candidate> { a, b };
+            EventWindows.Prefer(ready, x => x.Window, (x, r) => x.Reason = r, x => ReferenceEquals(x, b), at);
+            ready.Select(x => x.Name).Should().Equal("a", "b");
+            ready = new List<Candidate> { a, dso, b };
+            EventWindows.Prefer(ready, x => x.Window, (x, r) => x.Reason = r, x => ReferenceEquals(x, b), at);
+            ready.Select(x => x.Name).Should().Equal("dso");
+        }
+
+        [Test]
+        public void ARunningHighEventHoldsUntilAnotherIsClearlyNearerItsMiddle() {
+            DateTime at = Start.AddHours(2.75);
+            var running = new Candidate { Name = "running", Window = Around(at.AddHours(1.6), 4) };
+            var near = new Candidate { Name = "near", Window = Around(at.AddHours(1.45), 4) };
+            List<Candidate> ready = new List<Candidate> { near, running };
+            EventWindows.Prefer(ready, x => x.Window, (x, r) => x.Reason = r, x => ReferenceEquals(x, running), at);
+            ready.Select(x => x.Name).Should().Equal("running");
+            near.Reason.Should().Be(EventWindows.ReasonRunningHighEvent);
+            EventWindows.Preempts(running.Window, near.Window, at).Should().BeFalse();
+
+            near.Reason = null;
+            var clear = new Candidate { Name = "clear", Window = Around(at.AddHours(1.3), 4) };
+            ready = new List<Candidate> { running, near, clear };
+            EventWindows.Prefer(ready, x => x.Window, (x, r) => x.Reason = r, x => ReferenceEquals(x, running), at);
+            ready.Select(x => x.Name).Should().Equal("near", "clear");
+            running.Reason.Should().Be(EventWindows.ReasonNearerMiddle);
+            EventWindows.Preempts(running.Window, clear.Window, at).Should().BeTrue();
+            EventWindows.Preempts(clear.Window, running.Window, at).Should().BeFalse();
+            EventWindows.Preempts(near.Window, running.Window, at).Should().BeFalse();
+        }
+
+        private class Eclipse {
+            public int Id;
+            public double Score;
+            public TargetWindowRow Window;
+        }
+
+        private static List<(DateTime At, int Id)> Night(DateTime dusk, DateTime end, params Eclipse[] eclipses) {
+            List<(DateTime, int)> picks = new List<(DateTime, int)>();
+            Eclipse running = null;
+            DateTime minimumEnd = DateTime.MinValue;
+            for (DateTime at = dusk.AddMinutes(-30); at < end; at = at.AddMinutes(5)) {
+                if (at < dusk) { continue; }
+                List<Eclipse> ready = eclipses.Where(e => e.Window.Contains(at)).ToList();
+                bool preempted = running != null && ready.Any(e => e != running && EventWindows.Preempts(running.Window, e.Window, at));
+                if (running == null || at >= minimumEnd || preempted || !ready.Contains(running)) {
+                    Eclipse previous = running;
+                    EventWindows.Prefer(ready, e => e.Window, null, e => ReferenceEquals(e, previous), at);
+                    Eclipse best = ready.OrderByDescending(e => e.Score).First();
+                    running = ready.Contains(previous) && best.Score <= previous.Score * 1.01 ? previous : best;
+                    if (!ReferenceEquals(running, previous)) { minimumEnd = at.AddMinutes(30); }
+                }
+                picks.Add((at, running.Id));
+            }
+            return picks;
+        }
+
+        private static TargetWindowRow Utc(string start, string end) {
+            return new TargetWindowRow { TargetGuid = "g", StartUtc = DateTime.Parse(start, null, System.Globalization.DateTimeStyles.AdjustToUniversal), EndUtc = DateTime.Parse(end, null, System.Globalization.DateTimeStyles.AdjustToUniversal), Priority = "high" };
+        }
+
+        [Test]
+        public void TonightsOverlappingEclipsesAreTakenNearestTheirMiddles() {
+            var garlic = new Eclipse { Id = 21142, Score = 1.52, Window = Utc("2026-10-19T12:25:00Z", "2026-10-20T13:24:00Z") };
+            var cygnus = new Eclipse { Id = 6014, Score = 1.64, Window = Utc("2026-10-19T22:50:00Z", "2026-10-20T12:07:00Z") };
+            DateTime dusk = new DateTime(2026, 10, 20, 1, 16, 0, DateTimeKind.Utc);
+            DateTime garlicEclipseEnd = new DateTime(2026, 10, 20, 4, 58, 0, DateTimeKind.Utc);
+            DateTime cygnusMiddle = new DateTime(2026, 10, 20, 5, 28, 0, DateTimeKind.Utc);
+
+            List<(DateTime At, int Id)> picks = Night(dusk, new DateTime(2026, 10, 20, 11, 0, 0, DateTimeKind.Utc), garlic, cygnus);
+
+            picks.First().Should().Be((dusk, 21142));
+            List<int> runs = picks.Select(p => p.Id).Where((id, i) => i == 0 || id != picks[i - 1].Id).ToList();
+            runs.Should().Equal(21142, 6014);
+            DateTime switched = picks.First(p => p.Id == 6014).At;
+            switched.Should().BeOnOrAfter(new DateTime(2026, 10, 20, 3, 30, 0, DateTimeKind.Utc));
+            switched.Should().BeOnOrBefore(new DateTime(2026, 10, 20, 4, 15, 0, DateTimeKind.Utc));
+            switched.Should().BeBefore(garlicEclipseEnd);
+            switched.Should().BeBefore(cygnusMiddle);
+        }
+
+        [Test]
+        public void TwoEclipsesWithTheSameMiddleNeverFlipFlop() {
+            DateTime dusk = new DateTime(2026, 10, 20, 1, 16, 0, DateTimeKind.Utc);
+            DateTime middle = dusk.AddHours(3);
+            var a = new Eclipse { Id = 1, Score = 1.0, Window = Around(middle, 6) };
+            var b = new Eclipse { Id = 2, Score = 1.5, Window = Around(middle.AddMinutes(10), 6.2) };
+            List<(DateTime At, int Id)> picks = Night(dusk, dusk.AddHours(8), a, b);
+            picks.Select(p => p.Id).Distinct().Should().HaveCount(1);
         }
 
         private class Running {
