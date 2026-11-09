@@ -3,8 +3,8 @@
   NINA turns the cooler off when it exits; on 2026-10-16 that took the sensor from -16 C to +4 C in about a minute.
 
   It asks the Observatory Scheduler plugin (5.8.2.234 or later) by creating camera-warmup.request in the plugin
-  folder and touching it every poll. The plugin holds imaging, ramps the setpoint from the sensor to the ambient at
-  1.5 C per minute and reports in camera-warmup.status.json. The request stays in place after 'done' so imaging stays
+  folder and touching it every poll. The plugin holds imaging, holds the sensor temperature, then steps the setpoint to
+  the ambient 1 C at most once a minute and reports in camera-warmup.status.json. The request stays in place after 'done' so imaging stays
   held until NINA exits; Remove-CameraWarmUpRequest removes it.
 
   Returns 'not-connected', 'no-cooler', 'warm' or 'warmed'. Throws when the plugin does not answer, reports
@@ -86,7 +86,7 @@ function Invoke-CameraWarmUp {
       if ($null -ne $c) { $t = ConvertTo-WarmUpNumber $c.Temperature }
       if ($null -ne $prev -and $null -ne $t) {
         $rate = ($t - $prev.T) / [math]::Max(1, ($now - $prev.At).TotalMinutes)
-        if ($rate -gt 3) { Write-Host ("warm-up {0}: WARNING the sensor rose {1:0.0} C per minute" -f ($now.ToString('HH:mm:ss')), $rate) }
+        if ($rate -gt 2) { Write-Host ("warm-up {0}: WARNING the sensor rose {1:0.0} C per minute" -f ($now.ToString('HH:mm:ss')), $rate) }
       }
       if ($null -ne $t) { $prev = @{ T = $t; At = $now } }
       $state = 'no answer yet'
