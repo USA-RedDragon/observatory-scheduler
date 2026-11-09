@@ -510,23 +510,24 @@ namespace NINA.Plugin.TargetScheduler.Planning.Test {
 
         [Test]
         public void EvidencePersistsAndTheNewestWins() {
+            DateTime now = DateTime.UtcNow.AddHours(-3);
             string path = Path.Combine(TestContext.CurrentContext.WorkDirectory, $"darks-{Guid.NewGuid():N}.json");
             try {
                 var s = new DarkState(path);
-                s.AddLimit(new CoolerLimit { At = Now, SetTemp = -15, Ambient = 12, Reason = "r" });
-                s.AddLimit(new CoolerLimit { At = Now, SetTemp = -20, Reason = "no ambient" });
-                s.RecordLearning("2026-10-10", Now, 12);
+                s.AddLimit(new CoolerLimit { At = now, SetTemp = -15, Ambient = 12, Reason = "r" });
+                s.AddLimit(new CoolerLimit { At = now, SetTemp = -20, Reason = "no ambient" });
+                s.RecordLearning("2026-10-10", now, 12);
 
                 var again = new DarkState(path);
                 again.Limits().Should().ContainSingle().Which.SetTemp.Should().Be(-15);
-                again.LearningUsed("2026-10-10").Should().Be(Now);
+                again.LearningUsed("2026-10-10").Should().Be(now);
                 again.LearningUsed("2026-10-11").Should().BeNull();
 
-                again.RecordHold(new CoolerHold { At = Now.AddHours(1), Ambient = 13, SetTemp = -16, PeakPower = 95 });
+                again.RecordHold(new CoolerHold { At = now.AddHours(1), Ambient = 13, SetTemp = -16, PeakPower = 95 });
                 again.Limits().Should().BeEmpty();
                 again.Holds().Should().ContainSingle();
 
-                again.AddLimit(new CoolerLimit { At = Now.AddHours(2), SetTemp = -14, Ambient = 12.5, Reason = "r2" });
+                again.AddLimit(new CoolerLimit { At = now.AddHours(2), SetTemp = -14, Ambient = 12.5, Reason = "r2" });
                 var third = new DarkState(path);
                 third.Holds().Should().BeEmpty();
                 third.Limits().Should().ContainSingle().Which.Reason.Should().Be("r2");
