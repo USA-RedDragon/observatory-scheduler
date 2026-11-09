@@ -419,6 +419,9 @@ namespace NINA.Plugin.TargetScheduler.Sequencer {
             if (queue.Count == 0 && biasQueue.Count == 0) {
                 endCode = "nothing_left";
                 endReason = cam.CanSetTemperature ? "no dark or bias set in the backlog still needs frames" : "the camera cannot set its temperature, so no darks are taken, and no bias set is needed";
+                if (!token.IsCancellationRequested) {
+                    WarmIfIdle("no dark or bias set still needs frames");
+                }
                 return;
             }
 
@@ -459,12 +462,14 @@ namespace NINA.Plugin.TargetScheduler.Sequencer {
             int biasCount = biasQueue.Count;
 
             using var watch = new TemperatureWatch(cameraMediator);
+            bool exhausted = false;
             try {
                 if (biasQueue.Count > 0 && await TakeBiasQueue(biasQueue, biasTaken, progress, token)) {
                     return;
                 }
 
                 if (queue.Count == 0) {
+                    exhausted = true;
                     return;
                 }
 
@@ -626,6 +631,7 @@ namespace NINA.Plugin.TargetScheduler.Sequencer {
                 }
 
                 TSLogger.Info($"TS Darks: done, {done} darks taken");
+                exhausted = true;
             } catch (Exception ex) when (Utils.IsCancelException(ex)) {
                 TSLogger.Warning($"TS Darks: canceled after {biasDone} bias frames and {done} darks");
                 throw;
@@ -637,6 +643,8 @@ namespace NINA.Plugin.TargetScheduler.Sequencer {
                     }
                     if (WarmupRuntime.Active) {
                         TSLogger.Info($"TS Darks: not restoring the imaging setpoint {imagingSetpoint} °C: {WarmupRuntime.Reason}");
+                    } else if (exhausted && !token.IsCancellationRequested && WarmIfIdle($"every set was taken or skipped ({done} darks, {biasDone} bias frames)")) {
+                        TSLogger.Info($"TS Darks: not restoring the imaging setpoint {imagingSetpoint} °C: the camera warms instead");
                     } else if (queue.Count > 0 && Placement != DarkPlacement.EndOfSequence) {
                         await Restore(imagingSetpoint, watch, progress, token);
                         CalibrationActivity.Current.MoveEnded();
@@ -647,6 +655,62 @@ namespace NINA.Plugin.TargetScheduler.Sequencer {
                 DisplayText = coverStop != null ? $"Stopped: {coverStop}" : "";
                 ProgressText = "...";
             }
+        }
+
+        /// <summary>Why imaging does not follow these darks, or null when it may: still unsafe for While Unsafe, always for End Of Sequence.</summary>
+        private string NoImagingReason() {
+            switch (Placement) {
+                case DarkPlacement.EndOfSequence:
+                    return "the darks are at the end of the sequence";
+
+                case DarkPlacement.WhileUnsafe:
+                    var s = safetyMonitorMediator.GetInfo();
+                    return s != null && s.Connected && !s.IsSafe ? "the safety monitor still reports unsafe, so the roof stays closed" : null;
+
+                default:
+                    return null;
+            }
+        }
+
+        /// <summary>
+        /// Starts warming the camera when nothing is left for it: no dark or bias set is left to take or every one left was
+        /// skipped, and imaging does not follow. The setpoint first holds the sensor temperature, then rises 1 °C per minute to
+        /// the air temperature, and the cooler goes off. It stops when it is safe again or any other setpoint move starts.
+        /// True when the warm-up started.
+        /// </summary>
+        private bool WarmIfIdle(string why) {
+            string idle = NoImagingReason();
+            if (idle == null) {
+                return false;
+            }
+            CameraInfo info = cameraMediator.GetInfo();
+            if (info == null || !info.Connected || !info.CanSetTemperature || !info.CoolerOn || double.IsNaN(info.Temperature)) {
+                return false;
+            }
+            DarkAir air = CoolerRuntime.DarkAirNow();
+            double target = WarmupPlan.Target(air.Value);
+            if (!WarmupPlan.Needed(info.Temperature, target)) {
+                TSLogger.Info($"TS Darks: {why} and {idle}, but the sensor at {info.Temperature} °C is already within {WarmupPlan.NearAmbientC} °C of {target} °C; the camera is left as it is");
+                return false;
+            }
+            DarkPlacement placement = Placement;
+            TSLogger.Info($"TS Darks: {why} and {idle}; warming the camera from {info.Temperature} °C to {target} °C (air {air.Note}) at 1 °C per minute, then turning the cooler off");
+            _ = CoolerRamp.StartWarmOff(cameraMediator, target, CoolerRamp.IdleWarmOwner, "TS Idle warm-up", () => IdleWarmStop(placement));
+            return true;
+        }
+
+        private string IdleWarmStop(DarkPlacement placement) {
+            if (WarmupRuntime.Active) {
+                return WarmupRuntime.Reason;
+            }
+            if (placement != DarkPlacement.WhileUnsafe) {
+                return null;
+            }
+            var s = safetyMonitorMediator.GetInfo();
+            if (s == null || !s.Connected) {
+                return "the safety monitor disconnected, so it is not known whether imaging resumes";
+            }
+            return s.IsSafe ? "it is safe again, so imaging can resume and the cooler start step cools the camera before the first light" : null;
         }
 
         /// <summary>A move, wait or dark cut short because the camera began to warm for a shutdown; nothing is recorded for it and the set is tried again after the warm-up.</summary>

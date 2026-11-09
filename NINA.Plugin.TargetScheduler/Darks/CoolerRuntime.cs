@@ -278,6 +278,10 @@ namespace NINA.Plugin.TargetScheduler.Darks {
             if (camera == null) {
                 return null;
             }
+            if (CoolerRamp.PendingOwner() == CoolerRamp.IdleWarmOwner) {
+                TSLogger.Info($"{Log}: a light is next, so the idle warm-up stops and the cooler start step cools the camera");
+                await CoolerRamp.Stop(Log);
+            }
             CoolerSettingsData s = Settings.Snapshot();
             if (!s.Enabled) {
                 return null;
@@ -292,9 +296,23 @@ namespace NINA.Plugin.TargetScheduler.Darks {
             }
 
             CameraInfo info = camera.GetInfo();
-            if (info == null || !info.Connected || !info.CanSetTemperature || !info.CoolerOn) {
-                TSLogger.Info($"{Log}: not steering the cooler: {(info == null || !info.Connected ? "the camera is not connected" : !info.CanSetTemperature ? "the camera cannot set its temperature" : "the cooler is off")}");
+            if (info == null || !info.Connected || !info.CanSetTemperature) {
+                TSLogger.Info($"{Log}: not steering the cooler: {(info == null || !info.Connected ? "the camera is not connected" : "the camera cannot set its temperature")}");
                 return null;
+            }
+            if (!info.CoolerOn) {
+                if (double.IsNaN(info.Temperature)) {
+                    TSLogger.Warning($"{Log}: the cooler is off and {DarkPlanner.SensorUnknown}");
+                    return null;
+                }
+                double hold = SetpointStepper.Hold(info.Temperature, info.Temperature);
+                TSLogger.Info($"{Log}: the cooler is off with the sensor at {info.Temperature} °C; turning it on to hold {hold} °C, then cooling by the start step");
+                await CoolerRamp.Stop(Log);
+                if (!await camera.CoolCamera(hold, TimeSpan.Zero, progress ?? new Progress<ApplicationStatus>(), token)) {
+                    TSLogger.Warning($"{Log}: the camera did not turn the cooler on at {hold} °C");
+                    return null;
+                }
+                info = camera.GetInfo();
             }
 
             DateTime now = DateTime.UtcNow;
