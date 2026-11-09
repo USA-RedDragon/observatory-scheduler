@@ -18,6 +18,9 @@ namespace NINA.Plugin.TargetScheduler.Darks {
         public double? CoolingSecondsPerC { get; set; }
         public DateTime? LearningUsedAt { get; set; }
         public CoolerFit Fit { get; set; }
+
+        /// <summary>Which air <see cref="Ambient"/> is: "inside", "outside", or null for plain "air".</summary>
+        public string AirLabel { get; set; }
     }
 
     public class DarkReadyResult {
@@ -129,7 +132,7 @@ namespace NINA.Plugin.TargetScheduler.Darks {
             foreach (DarkNeed n in DarkPlanner.ColdestFirst(fitting, coldest)) {
                 string limit = DarkPlanner.AboveAmbientReason(n.SetTemp, ambient)
                     ?? DarkPlanner.CapacityReason(capacity, n.SetTemp, ambient)
-                    ?? DarkPlanner.PowerLimitReason(n.SetTemp, ambient, coldest)
+                    ?? DarkPlanner.PowerLimitReason(n.SetTemp, ambient, coldest, i.AirLabel)
                     ?? DarkPlanner.LimitReason(i.Limits, n.SetTemp, ambient, double.NaN, null);
                 if (limit != null) {
                     refused ??= string.Format(CultureInfo.InvariantCulture, "{0}: {1}", n, limit);

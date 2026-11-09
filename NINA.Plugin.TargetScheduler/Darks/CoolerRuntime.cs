@@ -1,10 +1,12 @@
 using NINA.Core.Model;
 using NINA.Equipment.Equipment.MyCamera;
 using NINA.Equipment.Equipment.MyFlatDevice;
+using NINA.Equipment.Equipment.MyFocuser;
 using NINA.Equipment.Interfaces.Mediator;
 using NINA.Plugin.TargetScheduler.Shared.Utility;
 using System;
 using System.Data.Common;
+using System.Collections.Generic;
 using System.Data.SQLite;
 using System.Globalization;
 using System.IO;
@@ -30,6 +32,10 @@ namespace NINA.Plugin.TargetScheduler.Darks {
         private static IWeatherDataMediator weather;
         private static ISafetyMonitorMediator safety;
         private static IFlatDeviceMediator flatDevice;
+        private static IFocuserMediator focuser;
+        private static readonly List<CoolerSample> darkInside = new List<CoolerSample>();
+        private static readonly List<CoolerSample> darkOutside = new List<CoolerSample>();
+        private static string darkNight;
         private static Sampler sampler;
         private static string busy;
         private static int busyCount;
@@ -54,12 +60,67 @@ namespace NINA.Plugin.TargetScheduler.Darks {
             }
         }
 
-        public static void Start(ICameraMediator cameraMediator, IWeatherDataMediator weatherMediator, ISafetyMonitorMediator safetyMediator, IFlatDeviceMediator flatDeviceMediator) {
+        /// <summary>Adds a cooler reading measured during darks (a steady power or a trip) to tonight's roof-closed fit against the same air.</summary>
+        public static void AddDarkSample(CoolerSample s, bool inside) {
+            if (s == null) {
+                return;
+            }
+            lock (sync) {
+                NewDarkNight();
+                (inside ? darkInside : darkOutside).Add(s);
+            }
+        }
+
+        /// <summary>The roof-closed fit for darks against the given air, refit from tonight's dark readings against that air.</summary>
+        public static CoolerFit DarkFit(DarkAir air) {
+            bool inside = air?.Inside == true;
+            lock (sync) {
+                NewDarkNight();
+                return CoolerFit.RefitClosed(inside ? darkInside : darkOutside, inside);
+            }
+        }
+
+        private static void NewDarkNight() {
+            string night = DarkReadiness.NightOf(DateTime.Now);
+            if (night != darkNight) {
+                darkNight = night;
+                darkInside.Clear();
+                darkOutside.Clear();
+            }
+        }
+
+        /// <summary>The air for darks: the focuser's inside temperature when it is sane, else the weather station's.</summary>
+        public static DarkAir DarkAirNow() {
+            bool fc = false;
+            double ft = double.NaN;
+            try {
+                FocuserInfo f = focuser?.GetInfo();
+                if (f != null) {
+                    fc = f.Connected;
+                    ft = f.Temperature;
+                }
+            } catch (Exception) {
+            }
+            bool wc = false;
+            double wt = double.NaN;
+            try {
+                var w = weather?.GetInfo();
+                if (w != null) {
+                    wc = w.Connected;
+                    wt = w.Temperature;
+                }
+            } catch (Exception) {
+            }
+            return DarkAir.Choose(fc, ft, wc, wt);
+        }
+
+        public static void Start(ICameraMediator cameraMediator, IWeatherDataMediator weatherMediator, ISafetyMonitorMediator safetyMediator, IFlatDeviceMediator flatDeviceMediator, IFocuserMediator focuserMediator = null) {
             lock (sync) {
                 if (sampler != null || cameraMediator == null) {
                     return;
                 }
                 camera = cameraMediator;
+                focuser = focuserMediator;
                 weather = weatherMediator;
                 safety = safetyMediator;
                 flatDevice = flatDeviceMediator;

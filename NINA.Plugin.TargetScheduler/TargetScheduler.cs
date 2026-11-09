@@ -99,8 +99,8 @@ namespace NINA.Plugin.TargetScheduler {
 
             Remote.Plugin.RemoteHost.Start(profileService, focuserMediator, filterWheelMediator, cameraMediator);
             RemoteOptions = new Remote.Plugin.RemoteOptionsVM();
-            Darks.CoolerRuntime.Start(cameraMediator, weatherDataMediator, safetyMonitorMediator, flatDeviceMediator);
-            Darks.WarmupRuntime.Start(cameraMediator, Darks.CoolerRuntime.AmbientNow);
+            Darks.CoolerRuntime.Start(cameraMediator, weatherDataMediator, safetyMonitorMediator, flatDeviceMediator, focuserMediator);
+            Darks.WarmupRuntime.Start(cameraMediator, () => Darks.CoolerRuntime.DarkAirNow().Value);
             Sequencer.CameraConnections.Watch(cameraMediator);
             CoolerOptions = new Darks.CoolerOptionsVM();
 

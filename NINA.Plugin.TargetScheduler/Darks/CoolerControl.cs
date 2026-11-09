@@ -65,6 +65,13 @@ namespace NINA.Plugin.TargetScheduler.Darks {
 
         public const string PriorBasis = "ZWO ASI2600MM Pro lights on 17 nights from 2026-09-17: power = -37.4 + 3.77 x (ambient - setpoint), R² 0.98, residual SD 1.2 points";
 
+        public const double ClosedInsideIntercept = -36.7;
+        public const double ClosedInsideSlope = 3.82;
+        public const string ClosedInsideBasis = "held minutes with the roof closed on 3 nights from 2026-11-04 against the focuser temperature inside: power = -36.7 + 3.82 x (inside - setpoint), R² 0.986, residual SD 2.1 points, 1127 min";
+        public const double ClosedOutsideIntercept = -9.7;
+        public const double ClosedOutsideSlope = 3.19;
+        public const string ClosedOutsideBasis = "held minutes with the roof closed on 3 nights from 2026-11-04 against the weather station outside: power = -9.7 + 3.19 x (outside - setpoint), R² 0.934, residual SD 4.7 points, 1127 min";
+
         public double Intercept { get; set; }
         public double Slope { get; set; }
         public int Samples { get; set; }
@@ -88,6 +95,31 @@ namespace NINA.Plugin.TargetScheduler.Darks {
 
         public static CoolerFit Prior() {
             return new CoolerFit { Intercept = PriorIntercept, Slope = PriorSlope, Samples = 0, Basis = "the measured fit (" + PriorBasis + ")" };
+        }
+
+        /// <summary>The roof-closed fit for darks, against the inside air when <paramref name="inside"/>, else the outside air.</summary>
+        public static CoolerFit ClosedPrior(bool inside) {
+            return inside
+                ? new CoolerFit { Intercept = ClosedInsideIntercept, Slope = ClosedInsideSlope, Basis = "the roof-closed fit (" + ClosedInsideBasis + ")" }
+                : new CoolerFit { Intercept = ClosedOutsideIntercept, Slope = ClosedOutsideSlope, Basis = "the roof-closed fit (" + ClosedOutsideBasis + ")" };
+        }
+
+        /// <summary>
+        /// The roof-closed fit refit from the darks' own measurements tonight (steady powers and cooler trips at 60% or
+        /// more, against the same air): the offset moves, the measured slope stays, and a 1 °C margin is added.
+        /// </summary>
+        public static CoolerFit RefitClosed(IEnumerable<CoolerSample> samples, bool inside) {
+            CoolerFit prior = ClosedPrior(inside);
+            List<CoolerSample> s = (samples ?? Enumerable.Empty<CoolerSample>())
+                .Where(x => x != null && x.Ambient.HasValue && !double.IsNaN(x.Power) && !double.IsNaN(x.Setpoint) && x.Power >= MeasuredPowerPercent)
+                .ToList();
+            if (s.Count == 0) {
+                return prior;
+            }
+            CoolerFit c = Offset(s, string.Format(CultureInfo.InvariantCulture, "offset refit from {0} cooler {1} measured during darks tonight with the roof-closed slope {2} points per °C, plus a {3:0} °C margin",
+                s.Count, s.Count == 1 ? "reading" : "readings", prior.Slope, CapacityMarginC), prior.Slope);
+            c.Margin = CapacityMarginC;
+            return c;
         }
 
         /// <summary>
@@ -143,10 +175,10 @@ namespace NINA.Plugin.TargetScheduler.Darks {
             };
         }
 
-        private static CoolerFit Offset(List<CoolerSample> s, string basis) {
+        private static CoolerFit Offset(List<CoolerSample> s, string basis, double slope = PriorSlope) {
             double mx = s.Average(v => v.Ambient.Value - v.Setpoint);
             double my = s.Average(v => v.Power);
-            return new CoolerFit { Intercept = my - PriorSlope * mx, Slope = PriorSlope, Samples = s.Count, Basis = basis };
+            return new CoolerFit { Intercept = my - slope * mx, Slope = slope, Samples = s.Count, Basis = basis };
         }
 
         public override string ToString() {
@@ -546,7 +578,7 @@ namespace NINA.Plugin.TargetScheduler.Darks {
             string air = Ambient.HasValue ? string.Format(CultureInfo.InvariantCulture, " at {0:0.#} °C air", Ambient.Value) : "";
             return Stalled
                 ? string.Format(CultureInfo.InvariantCulture, "the cooler can't hold {0} °C{1} (the sensor stopped cooling at about {2:0.#} °C at {3:0}% power)", setTemp, air, Sensor, Power)
-                : string.Format(CultureInfo.InvariantCulture, "the cooler can't hold {0} °C{1} (at {2:0}% power it reached about {3:0.#} °C)", setTemp, air, DarkPlanner.MaxDarkPowerPercent, Sensor);
+                : string.Format(CultureInfo.InvariantCulture, "the cooler can't hold {0} °C{1} (at {2:0}% power the sensor stayed at about {3:0.#} °C)", setTemp, air, Power, Sensor);
         }
 
         public CoolerSample Sample() {
@@ -571,7 +603,6 @@ namespace NINA.Plugin.TargetScheduler.Darks {
         private readonly double setTemp;
         private readonly double? ambient;
         private DateTime? highSince;
-        private double highSensor;
         private double? best;
         private DateTime lastFall;
 
@@ -595,12 +626,9 @@ namespace NINA.Plugin.TargetScheduler.Darks {
                 lastFall = at;
             }
             if (!double.IsNaN(power) && power >= DarkPlanner.MaxDarkPowerPercent) {
-                if (!highSince.HasValue) {
-                    highSince = at;
-                    highSensor = sensor;
-                }
+                highSince ??= at;
                 if (at - highSince.Value >= HighFor && at - lastFall >= HighFor) {
-                    return new CoolerTrip { At = at, SetTemp = setTemp, Ambient = ambient, Sensor = Math.Min(highSensor, best.Value), Power = power };
+                    return new CoolerTrip { At = at, SetTemp = setTemp, Ambient = ambient, Sensor = sensor, Power = power };
                 }
             } else {
                 highSince = null;

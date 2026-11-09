@@ -80,17 +80,19 @@ namespace NINA.Plugin.TargetScheduler.Sequencer {
             }
 
             var weather = weatherDataMediator.GetInfo();
+            DarkAir air = CoolerRuntime.DarkAirNow();
             DarkStateData state = DarkRuntime.State.Snapshot();
             var input = new DarkReadyInput {
                 Now = now,
                 SunAltitudeAt = SunAltitude(),
                 Queue = queue,
                 BiasQueue = biasQueue,
-                WeatherConnected = weather.Connected,
-                Ambient = weather.Connected && !double.IsNaN(weather.Temperature) ? weather.Temperature : null,
+                WeatherConnected = weather.Connected || air.Inside,
+                Ambient = air.Value,
+                AirLabel = air.Label,
                 Holds = DarkRuntime.State.Holds(),
                 Limits = DarkRuntime.State.Limits(),
-                Fit = CoolerRuntime.Fit(),
+                Fit = CoolerRuntime.DarkFit(air),
                 SaveTime = DarkRuntime.State.SaveTime(),
                 CoolingSecondsPerC = state.CoolingSecondsPerC,
                 LearningUsedAt = DarkRuntime.State.LearningUsed(night)
@@ -134,7 +136,7 @@ namespace NINA.Plugin.TargetScheduler.Sequencer {
                     } else if ((why = DarkPlanner.CapacityReason(capacity, n.SetTemp, input.Ambient)) != null) {
                         i.Status = CalibrationActivity.Skipped;
                         i.ReasonCode = "cooler_capacity";
-                    } else if ((why = DarkPlanner.PowerLimitReason(n.SetTemp, input.Ambient, coldest)) != null) {
+                    } else if ((why = DarkPlanner.PowerLimitReason(n.SetTemp, input.Ambient, coldest, input.AirLabel)) != null) {
                         i.Status = CalibrationActivity.Skipped;
                         i.ReasonCode = "cooler_power";
                     } else if ((why = DarkPlanner.LimitReason(input.Limits, n.SetTemp, input.Ambient, double.NaN, null)) != null) {

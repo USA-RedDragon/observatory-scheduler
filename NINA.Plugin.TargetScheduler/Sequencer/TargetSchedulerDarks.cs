@@ -242,9 +242,15 @@ namespace NINA.Plugin.TargetScheduler.Sequencer {
             return t => AstroUtil.GetSunAltitude(DateTime.SpecifyKind(t, DateTimeKind.Utc), observer);
         }
 
-        private double? Ambient() {
-            var w = weatherDataMediator.GetInfo();
-            return w.Connected && !double.IsNaN(w.Temperature) ? w.Temperature : (double?)null;
+        private static double? Ambient() {
+            return CoolerRuntime.DarkAirNow().Value;
+        }
+
+        /// <summary>What the cooler holds at 80% power against the air now, and the "can't hold" reason for a set below it.</summary>
+        private static (double? Coldest, string Reason) HoldLimit(double setTemp) {
+            DarkAir air = CoolerRuntime.DarkAirNow();
+            double? coldest = CoolerFit.ColdestSetpoint(air.Value, CoolerRuntime.DarkFit(air));
+            return (coldest, DarkPlanner.PowerLimitReason(setTemp, air.Value, coldest, air.Label));
         }
 
         private void OnSafeChanged(object sender, IsSafeEventArgs e) {
@@ -496,13 +502,13 @@ namespace NINA.Plugin.TargetScheduler.Sequencer {
                         double? ambient = Ambient();
                         IList<CoolerLimit> limits = DarkRuntime.State.Limits(ambient.HasValue);
                         string skipCode = null;
-                        double? coldest = CoolerFit.ColdestSetpoint(ambient, CoolerRuntime.Fit());
+                        string holdSkip = HoldLimit(need.SetTemp).Reason;
                         string skip = DarkPlanner.AboveAmbientReason(need.SetTemp, ambient);
                         if (skip != null) {
                             skipCode = "above_ambient";
                         } else if ((skip = DarkPlanner.CapacityReason(DarkPlanner.Capacity(DarkRuntime.State.Holds(), limits), need.SetTemp, ambient)) != null) {
                             skipCode = "cooler_capacity";
-                        } else if ((skip = DarkPlanner.PowerLimitReason(need.SetTemp, ambient, coldest)) != null) {
+                        } else if ((skip = holdSkip) != null) {
                             skipCode = "cooler_power";
                         } else if (powerFloor.HasValue && need.SetTemp < powerFloor.Value - 0.05) {
                             skipCode = "cooler_power";
@@ -558,6 +564,7 @@ namespace NINA.Plugin.TargetScheduler.Sequencer {
                             judgedSet = null;
                             continue;
                         }
+                        RecordSteady(need.SetTemp, steady);
                         if (steady.State == CoolerSteadyState.Within) {
                             judgedSet = need.SetTemp;
                         } else if (steady.State == CoolerSteadyState.Over) {
@@ -568,7 +575,7 @@ namespace NINA.Plugin.TargetScheduler.Sequencer {
                             break;
                         }
                         if (steady.State == CoolerSteadyState.Over) {
-                            string overPower = DarkPlanner.PowerReadingReason(need.SetTemp, ambient, steady.Power ?? double.NaN) ?? steady.Reason;
+                            string overPower = HoldLimit(need.SetTemp).Reason ?? DarkPlanner.PowerReadingReason(need.SetTemp, ambient, steady.Power ?? double.NaN) ?? steady.Reason;
                             powerFloor = Math.Max(powerFloor ?? double.MinValue, need.SetTemp + 0.1);
                             powerFloorReason = overPower;
                             floorTrip = null;
@@ -723,10 +730,25 @@ namespace NINA.Plugin.TargetScheduler.Sequencer {
         private void ApplyTrip(DarkNeed need, CoolerTrip trip, double imagingSetpoint, double? imagingPower, ref double? powerFloor, ref CoolerTrip floorTrip) {
             powerFloor = Math.Max(powerFloor ?? double.MinValue, trip.Floor);
             floorTrip = trip;
-            CoolerRuntime.AddCapacity(trip.Sample());
-            DarkRuntime.State.AddLimit(Limit(need.SetTemp, imagingSetpoint, imagingPower, trip.Reason, trip.Sensor));
-            TSLogger.Info($"TS Darks: skipping {need} and every set below {powerFloor.Value:0.#} °C: {trip.Reason}; the cooler fit is now {CoolerRuntime.Fit()}");
-            CalibrationActivity.Current.SetFinished(need.ComboKey, CalibrationActivity.Skipped, "cooler_power", trip.Reason);
+            DarkAir air = CoolerRuntime.DarkAirNow();
+            CoolerRuntime.AddDarkSample(trip.Sample(), air.Inside);
+            string reason = HoldLimit(need.SetTemp).Reason ?? trip.Reason;
+            DarkRuntime.State.AddLimit(Limit(need.SetTemp, imagingSetpoint, imagingPower, reason, trip.Sensor));
+            TSLogger.Info($"TS Darks: skipping {need} and every set below {powerFloor.Value:0.#} °C: {reason}; measured: {trip.Reason}; air {air.Note}; the roof-closed fit is now {CoolerRuntime.DarkFit(air)}");
+            CalibrationActivity.Current.SetFinished(need.ComboKey, CalibrationActivity.Skipped, "cooler_power", reason);
+        }
+
+        /// <summary>Adds a judged steady power at a set to tonight's roof-closed fit, when it is high enough to place the line.</summary>
+        private static void RecordSteady(double setTemp, CoolerSteadyVerdict steady) {
+            if (steady.State == CoolerSteadyState.Waiting || !steady.Power.HasValue || double.IsNaN(steady.Power.Value)) {
+                return;
+            }
+            DarkAir air = CoolerRuntime.DarkAirNow();
+            if (!air.Value.HasValue || steady.Power.Value < CoolerFit.MeasuredPowerPercent) {
+                return;
+            }
+            CoolerRuntime.AddDarkSample(new CoolerSample { At = DateTime.UtcNow, Power = steady.Power.Value, Setpoint = setTemp, Sensor = setTemp, Ambient = air.Value }, air.Inside);
+            TSLogger.Info($"TS Darks: steady {steady.Power.Value:0}% cooler power at {setTemp} °C, air {air.Note}; the roof-closed fit is now {CoolerRuntime.DarkFit(air)}");
         }
 
         private static CoolerSteadyVerdict Recheck(double setTemp) {
@@ -851,13 +873,13 @@ namespace NINA.Plugin.TargetScheduler.Sequencer {
         }
 
         private List<DarkNeed> Order(List<DarkNeed> queue) {
-            double? ambient = Ambient();
-            CoolerFit fit = CoolerRuntime.Fit();
-            double? coldest = CoolerFit.ColdestSetpoint(ambient, fit);
+            DarkAir air = CoolerRuntime.DarkAirNow();
+            CoolerFit fit = CoolerRuntime.DarkFit(air);
+            double? coldest = CoolerFit.ColdestSetpoint(air.Value, fit);
             List<DarkNeed> ordered = DarkPlanner.ColdestFirst(queue, coldest);
             TSLogger.Info(coldest.HasValue
-                ? $"TS Darks: coldest first from {coldest.Value:0.#} °C, the setpoint at {DarkPlanner.MaxDarkPowerPercent:0}% cooler power at {ambient.Value:0.#} °C ambient ({fit}), then warmer; {ordered.Count(n => DarkPlanner.BelowPowerLimit(n.SetTemp, coldest))} colder sets are skipped"
-                : "TS Darks: coldest first, the ambient temperature is not known, so no cooler power limit is applied");
+                ? $"TS Darks: coldest first from {coldest.Value:0.#} °C, the setpoint the cooler holds at {DarkPlanner.MaxDarkPowerPercent:0}% power with air {air.Note} ({fit}), then warmer; {ordered.Count(n => DarkPlanner.BelowPowerLimit(n.SetTemp, coldest))} colder sets are skipped"
+                : $"TS Darks: coldest first, the air temperature is {air.Note}, so no cooler power limit is applied");
             return ordered;
         }
 

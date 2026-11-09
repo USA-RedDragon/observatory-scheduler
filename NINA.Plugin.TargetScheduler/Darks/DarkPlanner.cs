@@ -70,7 +70,7 @@ namespace NINA.Plugin.TargetScheduler.Darks {
             return Held
                 ? string.Format(CultureInfo.InvariantCulture, "held {0} °C at {1:0.#} °C ambient{2}{3}", Temperature, Ambient, when,
                     PeakPower.HasValue ? string.Format(CultureInfo.InvariantCulture, " at up to {0:0}% cooler power", PeakPower.Value) : "")
-                : string.Format(CultureInfo.InvariantCulture, "reached {0:0.#} °C at {1:0.#} °C ambient{2} before it stopped making progress", Temperature, Ambient, when);
+                : string.Format(CultureInfo.InvariantCulture, "stayed at about {0:0.#} °C at {1:0.#} °C ambient{2} without holding the set", Temperature, Ambient, when);
         }
     }
 
@@ -111,6 +111,46 @@ namespace NINA.Plugin.TargetScheduler.Darks {
         public bool? Safe { get; set; }
         public DateTime? StopBy { get; set; }
         public Func<DateTime, double?> SunAltitudeAt { get; set; }
+    }
+
+    /// <summary>
+    /// The air the cooler works against during darks, which run with the roof closed: the focuser's temperature inside the
+    /// building when it is connected and sane, else the weather station outside. With the roof closed the inside air was a
+    /// median 2.5 °C warmer than outside (2026-09-17 to 2026-11-09), and fitting against it explains the cooler power far
+    /// better (R² 0.986 against 0.934).
+    /// </summary>
+    public class DarkAir {
+        public const double MinSaneC = -30;
+        public const double MaxSaneC = 50;
+        public const double MaxBelowOutsideC = 5;
+        public const double MaxAboveOutsideC = 15;
+
+        public double? Value { get; set; }
+        public bool Inside { get; set; }
+        public string Note { get; set; }
+
+        public string Label => Value.HasValue ? (Inside ? "inside" : "outside") : null;
+
+        public static DarkAir Choose(bool focuserConnected, double focuser, bool weatherConnected, double weather) {
+            double? outside = weatherConnected && !double.IsNaN(weather) ? weather : (double?)null;
+            string why;
+            if (!focuserConnected) {
+                why = "the focuser is not connected";
+            } else if (double.IsNaN(focuser) || focuser < MinSaneC || focuser > MaxSaneC) {
+                why = string.Format(CultureInfo.InvariantCulture, "the focuser reads {0} °C, outside {1} to {2} °C", focuser, MinSaneC, MaxSaneC);
+            } else if (outside.HasValue && (focuser < outside.Value - MaxBelowOutsideC || focuser > outside.Value + MaxAboveOutsideC)) {
+                why = string.Format(CultureInfo.InvariantCulture, "the focuser reads {0:0.#} °C against {1:0.#} °C outside, beyond {2} °C below or {3} °C above it", focuser, outside.Value, MaxBelowOutsideC, MaxAboveOutsideC);
+            } else {
+                return new DarkAir { Value = focuser, Inside = true, Note = string.Format(CultureInfo.InvariantCulture, "{0:0.#} °C inside, from the focuser", focuser) };
+            }
+            return new DarkAir {
+                Value = outside,
+                Inside = false,
+                Note = outside.HasValue
+                    ? string.Format(CultureInfo.InvariantCulture, "{0:0.#} °C outside, from the weather station, because {1}", outside.Value, why)
+                    : "not known: " + why + " and no weather station is connected"
+            };
+        }
     }
 
     public static class DarkPlanner {
@@ -199,12 +239,17 @@ namespace NINA.Plugin.TargetScheduler.Darks {
                 .ToList();
         }
 
-        public static string PowerLimitReason(double setTemp, double? ambient, double? coldest) {
+        /// <summary>
+        /// Why a set is below what the cooler holds at 80% power: the one wording for every "can't hold" skip, naming the
+        /// held temperature the fit predicts, and the air it is measured against (inside or outside, or just "air").
+        /// </summary>
+        public static string PowerLimitReason(double setTemp, double? ambient, double? coldest, string air = null) {
             if (!ambient.HasValue || !BelowPowerLimit(setTemp, coldest)) {
                 return null;
             }
             return string.Format(CultureInfo.InvariantCulture,
-                "the cooler can't hold {0} °C at {1:0.#} °C air (at {2:0}% cooler power it holds about {3:0.#} °C)", setTemp, ambient.Value, MaxDarkPowerPercent, coldest.Value);
+                "the cooler can't hold {0} °C at {1:0.#} °C {4} (at {2:0}% cooler power it holds about {3:0.#} °C)", setTemp, ambient.Value, MaxDarkPowerPercent, coldest.Value,
+                string.IsNullOrEmpty(air) ? "air" : air + " air");
         }
 
         /// <summary>Why a set is skipped when the steady power at it, measured by <see cref="CoolerSteady"/>, is above the limit.</summary>

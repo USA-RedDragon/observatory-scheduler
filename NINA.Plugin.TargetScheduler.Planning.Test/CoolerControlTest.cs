@@ -156,8 +156,8 @@ namespace NINA.Plugin.TargetScheduler.Planning.Test {
             trip.Sensor.Should().Be(-16.2);
             trip.Power.Should().Be(100, "the power is taken with the sensor at the trip, not at the start of the pull-down");
             trip.Floor.Should().BeApproximately(-15.2, 1e-9);
-            trip.Reason.Should().Be("the cooler can't hold -21 °C at 10 °C air (at 80% power it reached about -16.2 °C)");
-            trip.ReasonFor(-18).Should().Be("the cooler can't hold -18 °C at 10 °C air (at 80% power it reached about -16.2 °C)");
+            trip.Reason.Should().Be("the cooler can't hold -21 °C at 10 °C air (at 100% power the sensor stayed at about -16.2 °C)");
+            trip.ReasonFor(-18).Should().Be("the cooler can't hold -18 °C at 10 °C air (at 100% power the sensor stayed at about -16.2 °C)");
             CoolerSample s = trip.Sample();
             s.Capacity.Should().BeTrue();
             s.Setpoint.Should().Be(-16.2);
@@ -195,7 +195,7 @@ namespace NINA.Plugin.TargetScheduler.Planning.Test {
         public void ATripWithoutAmbientOrBelowSixtyPercentKeepsTheFitUnchanged() {
             var trip = new CoolerTrip { At = T0, SetTemp = -21, Ambient = null, Sensor = -16, Power = 85 };
             trip.Sample().Should().BeNull();
-            trip.Reason.Should().Be("the cooler can't hold -21 °C (at 80% power it reached about -16 °C)");
+            trip.Reason.Should().Be("the cooler can't hold -21 °C (at 85% power the sensor stayed at about -16 °C)");
             new CoolerTrip { At = T0, SetTemp = -21, Ambient = 10, Sensor = -16, Power = 40, Stalled = true }.Sample().Should().BeNull();
         }
 
