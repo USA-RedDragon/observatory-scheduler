@@ -14,7 +14,7 @@ namespace NINA.Plugin.TargetScheduler.Darks {
     /// left to do (power at most <see cref="IdlePowerPercent"/>, the sensor is at the air temperature).
     /// </summary>
     public static class WarmupPlan {
-        public const double RateCPerMinute = 1.5;
+        public const double RateCPerMinute = SetpointStepper.MaxRateCPerMinute;
         public const double NearAmbientC = 2.0;
         public const double IdlePowerPercent = 5.0;
         /// <summary>The target without a weather reading: NINA's own warm-up target.</summary>

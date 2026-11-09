@@ -17,7 +17,7 @@ namespace NINA.Plugin.TargetScheduler.Darks {
 
         CoolerReading Read();
 
-        /// <summary>Ramps the setpoint at 1 °C per minute. A cancel stops the wait, not the ramp.</summary>
+        /// <summary>Steps the setpoint at 1 °C per minute from the sensor temperature. A cancel stops the wait, not the ramp.</summary>
         Task<bool> Ramp(double target, CancellationToken token);
 
         /// <summary>The next camera reading, or the current one when none arrives in time.</summary>
@@ -48,7 +48,7 @@ namespace NINA.Plugin.TargetScheduler.Darks {
                 return new CoolerMoveResult { Reason = DarkPlanner.SensorUnknown };
             }
 
-            TimeSpan ramp = DarkPlanner.Ramp(start.Sensor, target);
+            TimeSpan ramp = SetpointStepper.Duration(start.Sensor, target, DarkPlanner.RampCPerMinute);
             bool ok = await device.Ramp(target, token);
             if (!ok) {
                 CoolerReading r = device.Read();

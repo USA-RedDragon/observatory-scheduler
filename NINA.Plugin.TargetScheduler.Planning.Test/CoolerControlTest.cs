@@ -490,7 +490,7 @@ namespace NINA.Plugin.TargetScheduler.Planning.Test {
             CoolerMoveResult r = await CoolerMove.To(dev, -14, CancellationToken.None);
             r.Reached.Should().BeTrue();
             dev.Ramps.Should().Equal(-14);
-            r.Ramp.Should().Be(TimeSpan.FromMinutes(2));
+            r.Ramp.Should().Be(TimeSpan.FromMinutes(3), "a minute holding the sensor, then two 1 °C steps a minute apart");
             Math.Abs(dev.Sensor - -14).Should().BeLessOrEqualTo(CoolerController.ReadyToleranceC);
             r.Took.Should().BeGreaterThan(r.Ramp);
         }

@@ -63,12 +63,12 @@ namespace NINA.Plugin.TargetScheduler.Planning.Test {
         [TestCase(-25.0, 25.0)]
         [TestCase(-5.0, 12.0)]
         [TestCase(-16.0, null)]
-        public void TheWarmUpRampsBetweenOneAndTwoDegreesPerMinute(double sensor, double? ambient) {
+        public void TheWarmUpRampsAtMostOneDegreePerMinute(double sensor, double? ambient) {
             double target = WarmupPlan.Target(ambient);
             WarmupPlan.Needed(sensor, target).Should().BeTrue();
             TimeSpan d = WarmupPlan.Duration(sensor, target);
             double rate = (target - sensor) / d.TotalMinutes;
-            rate.Should().BeInRange(1.0, 2.0);
+            rate.Should().BeInRange(0.9, 1.0);
 
             var steps = NinaSetpoints(sensor, target, d);
             steps.First().Setpoint.Should().BeLessOrEqualTo(sensor + 1, "the first step starts at the sensor, not at the target");
@@ -117,7 +117,7 @@ namespace NINA.Plugin.TargetScheduler.Planning.Test {
         public void TheDarksRampStaysAtOneDegreePerMinute() {
             DarkPlanner.Ramp(-20, -13).Should().Be(TimeSpan.FromMinutes(7));
             DarkPlanner.Ramp(-20, -13, DarkPlanner.RampCPerMinute).Should().Be(TimeSpan.FromMinutes(7));
-            DarkPlanner.Ramp(-16, 9, WarmupPlan.RateCPerMinute).Should().Be(TimeSpan.FromSeconds(1005));
+            DarkPlanner.Ramp(-16, 9, WarmupPlan.RateCPerMinute).Should().Be(TimeSpan.FromSeconds(1500));
             DarkPlanner.Ramp(-16, 9, 0).Should().Be(DarkPlanner.MaxRamp);
         }
     }

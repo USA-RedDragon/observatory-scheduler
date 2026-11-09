@@ -160,14 +160,14 @@ namespace NINA.Plugin.TargetScheduler.Planning.Test {
             OnDisk().Reason.Should().Contain("from -16.0 °C to 9 °C");
 
             Run(s, cam, TimeSpan.FromMinutes(15));
-            OnDisk().State.Should().Be("warming", "25 °C at 1.5 °C per minute takes 16.75 min");
-            Run(s, cam, TimeSpan.FromMinutes(5));
+            OnDisk().State.Should().Be("warming", "25 °C at 1 °C per minute takes 25 min");
+            Run(s, cam, TimeSpan.FromMinutes(15));
 
             WarmupStatus done = OnDisk();
             done.State.Should().Be("done");
             done.Sensor.Should().BeGreaterThan(9 - WarmupPlan.NearAmbientC);
             s.Active.Should().BeTrue("imaging stays held until the installer removes the request");
-            MaxRisePerMinute(cam.History).Should().BeLessOrEqualTo(2.0);
+            MaxRisePerMinute(cam.History).Should().BeLessOrEqualTo(1.5);
         }
 
         [Test]
@@ -239,7 +239,7 @@ namespace NINA.Plugin.TargetScheduler.Planning.Test {
             s = Session(refused);
             Request();
             s.Tick();
-            Run(s, refused, TimeSpan.FromMinutes(20));
+            Run(s, refused, TimeSpan.FromMinutes(30));
             OnDisk().State.Should().Be("failed");
             OnDisk().Reason.Should().Be("NINA could not ramp the setpoint");
         }
@@ -251,7 +251,7 @@ namespace NINA.Plugin.TargetScheduler.Planning.Test {
             Request();
             s.Tick();
             cam.Ramps.Single().Target.Should().Be(WarmupPlan.FallbackTargetC);
-            Run(s, cam, TimeSpan.FromMinutes(30));
+            Run(s, cam, TimeSpan.FromMinutes(40));
             OnDisk().State.Should().Be("done");
         }
 

@@ -41,6 +41,7 @@
     <Compile Include="..\NINA.Plugin.TargetScheduler\Darks\DarkReadiness.cs" Link="Linked\Darks\DarkReadiness.cs" />
     <Compile Include="..\NINA.Plugin.TargetScheduler\Darks\CoolerControl.cs" Link="Linked\Darks\CoolerControl.cs" />
     <Compile Include="..\NINA.Plugin.TargetScheduler\Darks\CoolerMove.cs" Link="Linked\Darks\CoolerMove.cs" />
+    <Compile Include="..\NINA.Plugin.TargetScheduler\Darks\SetpointStepper.cs" Link="Linked\Darks\SetpointStepper.cs" />
     <Compile Include="..\NINA.Plugin.TargetScheduler\Darks\CoolerSteady.cs" Link="Linked\Darks\CoolerSteady.cs" />
     <Compile Include="..\NINA.Plugin.TargetScheduler\Darks\CoolerWarmup.cs" Link="Linked\Darks\CoolerWarmup.cs" />
     <Compile Include="..\NINA.Plugin.TargetScheduler\Darks\CoolerReconnect.cs" Link="Linked\Darks\CoolerReconnect.cs" />
