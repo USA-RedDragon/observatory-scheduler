@@ -1,5 +1,8 @@
 # Observatory Scheduler
 
+## 5.8.2.241 - 2026-11-21
+* A grading sweep runs once, about 45 seconds after the plugin starts. For every goal-driven exposure plan it groups the acquired subs the way the grader matches them (profile, exposure, gain, offset, binning, ROI), and each group with 20 or more subs and any pending sub is queued for grading, which grades all of that group's pending subs. Backlogs no longer wait for the filter to take another sub. Plans without a goal, projects with the grader off, and Delay Grading off are not swept. The log gets one line with the plans checked, groups queued and pending subs covered.
+
 ## 5.8.2.240 - 2026-11-21
 * Delayed grading of a goal-driven exposure plan starts once the plan has 20 subs, instead of at the Delay Grading percent of the goal, which long goals never reached (Triangulum Galaxy H-a sat at 11.5% with 80 subs pending). The first sub after that grades every pending sub of the plan against the whole plan, and each later sub grades as it arrives, so the stacker's reject verdicts can apply to them. Plans without a goal still wait for the Delay Grading percent of their desired subs. The grading log lines and the Remote population rule name the rule that applied.
 
