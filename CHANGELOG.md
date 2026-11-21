@@ -1,5 +1,8 @@
 # Observatory Scheduler
 
+## 5.8.2.240 - 2026-11-21
+* Delayed grading of a goal-driven exposure plan starts once the plan has 20 subs, instead of at the Delay Grading percent of the goal, which long goals never reached (Triangulum Galaxy H-a sat at 11.5% with 80 subs pending). The first sub after that grades every pending sub of the plan against the whole plan, and each later sub grades as it arrives, so the stacker's reject verdicts can apply to them. Plans without a goal still wait for the Delay Grading percent of their desired subs. The grading log lines and the Remote population rule name the rule that applied.
+
 ## 5.8.2.239 - 2026-11-09
 * Every setpoint move (darks, the restore after darks, the cooler controller, the reconnect ramp and the installer warm-up) is stepped by the plugin: it first sets the setpoint to the sensor temperature, then moves it 1 °C at a time at most once a minute, and steps again only while the sensor is within 1 °C of the setpoint. NINA's CoolCamera with a duration and WarmCamera are no longer used; on the ASI2600MM Pro both jumped the setpoint, and the sensor warmed 12 to 19 °C per minute on 2026-10-18 and 2026-11-09. The installer warm-up is 1 °C per minute, down from 1.5.
 * Idle warm-up: when a Target Scheduler Darks run ends with nothing left to take, or every set left skipped, and imaging does not follow (While Unsafe and still unsafe, or End Of Sequence), the camera warms from the sensor temperature to the air temperature at 1 °C per minute and the cooler goes off. It stops at the step it reached when it is safe again, before the next light, or when any other setpoint move starts. On 2026-11-08 the cooler instead held -15 °C at 100% power for 6 hours with the roof closed.
