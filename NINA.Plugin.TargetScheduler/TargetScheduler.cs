@@ -108,6 +108,7 @@ namespace NINA.Plugin.TargetScheduler {
             //new ImportProfile(profileService.ActiveProfile, "C:\\Users\\Tom\\AppData\\Local\\NINA\\SchedulerPlugin\\exported-all.zip", true).Import();
 
             SeasonWorker.Start(profileService);
+            GradingSweepRunner.Start(profileService);
             TSLogger.Info("plugin initialized");
             return Task.CompletedTask;
         }
@@ -243,6 +244,7 @@ namespace NINA.Plugin.TargetScheduler {
         }
 
         public override Task Teardown() {
+            GradingSweepRunner.Stop();
             ImageGradingController.Instance.Shutdown();
             Remote.Plugin.RemoteHost.Shutdown();
             Darks.CoolerRuntime.Stop();
