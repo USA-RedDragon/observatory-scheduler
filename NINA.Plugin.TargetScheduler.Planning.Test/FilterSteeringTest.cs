@@ -353,8 +353,38 @@ namespace NINA.Plugin.TargetScheduler.Planning.Test {
         }
 
         [Test]
-        public void HydrogenAlphaStillTakesAPoorSkyWhenItWouldFailItsCutToo() {
-            GradedNight(Sculptor(), Repeat(0.10, 4), (c, q) => c.Narrowband ? (0.18, 0.10) : SculptorStacker(c, q)).Should().Equal(Enumerable.Repeat("H-a", 4));
+        public void HydrogenAlphaSitsOutAPoorSkyWhenItWouldFailItsCutToo() {
+            List<SteeringCandidate> candidates = Sculptor();
+            foreach (SteeringCandidate c in candidates) {
+                (c.Goal.ScoreCut, c.Goal.ExpectedScore) = c.Narrowband ? (0.18, 0.10) : SculptorStacker(c, 0.10);
+            }
+            FilterSteering.BelowCut(candidates[3], 0.10).Should().BeTrue();
+            FilterSteering.Choose(candidates, 0, 0.10).Should().Be(-1);
+            FilterSteering.HoldsAll(candidates, 0.10).Should().BeTrue();
+        }
+
+        [Test]
+        public void NarrowbandIsGatedLikeBroadband() {
+            foreach (string filter in new[] { "H-a", "O-III", "S-II" }) {
+                SteeringCandidate c = Fresh(0, filter);
+                c.Narrowband.Should().BeTrue(filter);
+                c.Goal.ScoreCut = 0.25;
+                c.Goal.ExpectedScore = 0.05;
+                FilterSteering.CutMargin(c, 0.10).Value.Should().BeApproximately(-0.20, 1e-9, filter);
+                FilterSteering.BelowCut(c, 0.10).Should().BeTrue(filter);
+                c.Goal.ExpectedScore = 0.40;
+                FilterSteering.BelowCut(c, 0.10).Should().BeFalse(filter);
+            }
+        }
+
+        [Test]
+        public void TheOIIIRotationSkipsOIIIUnderItsCut() {
+            var candidates = new List<SteeringCandidate> {
+                Fresh(0, "Red", state: GoalState.Pending), Fresh(1, "H-a", state: GoalState.Pending), Fresh(2, "O-III", state: GoalState.Pending)
+            };
+            candidates[2].Goal.ScoreCut = 0.25;
+            candidates[2].Goal.ExpectedScore = 0.05;
+            Night(candidates, 4, 0.10).Should().Equal("Red", "Red", "Red", "Red");
         }
 
         [Test]
@@ -365,24 +395,28 @@ namespace NINA.Plugin.TargetScheduler.Planning.Test {
         [Test]
         public void AnUnknownNightQualityKeepsTheRotation() {
             List<SteeringCandidate> candidates = Sculptor();
-            foreach (SteeringCandidate c in candidates.Where(c => !c.Narrowband)) {
+            foreach (SteeringCandidate c in candidates) {
                 c.Goal.ScoreCut = SculptorBroadbandCut;
                 c.Goal.ExpectedScore = 0.11;
             }
             Night(candidates, 4, null).Should().Equal("Red", "Green", "Blue", "Luminance");
             FilterSteering.BelowCut(candidates[2], null).Should().BeFalse();
+            FilterSteering.BelowCut(candidates[3], null).Should().BeFalse();
             FilterSteering.BelowCut(candidates[2], 0.10).Should().BeTrue();
+            FilterSteering.BelowCut(candidates[3], 0.10).Should().BeTrue();
+            FilterSteering.HoldsAll(candidates, null).Should().BeFalse();
         }
 
         [Test]
-        public void ABroadbandFilterWithoutAnEstimateDoesNotTakeAPoorSkyFromHydrogenAlpha() {
+        public void AHeldHydrogenAlphaLeavesAPoorSkyToABroadbandFilterWithoutAnEstimate() {
             var candidates = new List<SteeringCandidate> {
                 Goal(0, "Blue", 0.3), Goal(1, "H-a", 0.3, narrow: true)
             };
             candidates[1].Goal.ScoreCut = 0.27;
             candidates[1].Goal.ExpectedScore = 0.12;
-            FilterSteering.BelowCut(candidates[1], 0.10).Should().BeFalse();
-            Night(candidates, 3, 0.10).Should().Equal("H-a", "H-a", "H-a");
+            FilterSteering.BelowCut(candidates[1], 0.10).Should().BeTrue();
+            FilterSteering.HoldsAll(candidates, 0.10).Should().BeFalse();
+            Night(candidates, 3, 0.10).Should().Equal("Blue", "Blue", "Blue");
         }
 
         [Test]
@@ -458,12 +492,12 @@ namespace NINA.Plugin.TargetScheduler.Planning.Test {
         }
 
         [Test]
-        public void TheMoonScalesTheExpectedScore() {
+        public void TheMoonIsNotCountedTwice() {
             FilterSteering.BelowCut(GatedBlue(0.25, 0.30), 0.40).Should().BeFalse();
-            FilterSteering.BelowCut(GatedBlue(0.25, 0.30, worth: 1), 0.40).Should().BeFalse();
-            FilterSteering.BelowCut(GatedBlue(0.25, 0.30, worth: 0.7), 0.40).Should().BeTrue();
-            FilterSteering.CutMargin(GatedBlue(0.25, 0.30, worth: 0.7), 0.40).Value.Should().BeApproximately(-0.04, 1e-9);
-            FilterSteering.CutMargin(GatedBlue(0.25, 0.30, worth: 0.7), null).Should().BeNull();
+            FilterSteering.BelowCut(GatedBlue(0.25, 0.30, worth: 0.7), 0.40).Should().BeFalse();
+            FilterSteering.CutMargin(GatedBlue(0.25, 0.30, worth: 0.7), 0.40).Value.Should().BeApproximately(0.05, 1e-9);
+            FilterSteering.CutMargin(GatedBlue(0.25, 0.30, worth: 0.1), 0.10).Value.Should().BeApproximately(0.05, 1e-9);
+            FilterSteering.CutMargin(GatedBlue(0.25, 0.30, worth: 0.1), null).Should().BeNull();
         }
 
         [Test]
@@ -556,6 +590,48 @@ namespace NINA.Plugin.TargetScheduler.Planning.Test {
                 c.Goal.ExpectedScore = 0.05;
             }
             FilterSteering.Choose(candidates, 3, 0.10).Should().Be(-1);
+            FilterSteering.HoldsAll(candidates, 0.10).Should().BeTrue();
+            TargetScore(candidates, 3, 0.10).Should().Be(0);
+        }
+
+        [Test]
+        public void AllHeldCountsOnlyOpenGoals() {
+            List<SteeringCandidate> candidates = BarnardsE();
+            foreach (SteeringCandidate c in candidates.Take(3)) {
+                c.Goal.ScoreCut = 0.25;
+                c.Goal.ExpectedScore = 0.05;
+            }
+            FilterSteering.HoldsAll(candidates, 0.10).Should().BeFalse();
+            candidates[3].Goal.Done = true;
+            FilterSteering.HoldsAll(candidates, 0.10).Should().BeTrue();
+            candidates.Add(new SteeringCandidate { Index = 4, Filter = "L", PercentComplete = 10 });
+            FilterSteering.HoldsAll(candidates, 0.10).Should().BeFalse();
+            FilterSteering.HoldsAll(new List<SteeringCandidate> { new SteeringCandidate { Index = 0, Filter = "L" } }, 0.10).Should().BeFalse();
+            FilterSteering.HoldsAll(new List<SteeringCandidate>(), 0.10).Should().BeFalse();
+        }
+
+        [Test]
+        public void AFullMoonEveningHoldsEveryFilterAndReleasesThemAfterMoonset() {
+            var gate = new ScoreGate();
+            List<SteeringCandidate> Triangulum(double expected) {
+                var list = new List<SteeringCandidate> { Goal(0, "H-a", 0.2, narrow: true), Goal(1, "Luminance", 0.5) };
+                foreach (SteeringCandidate c in list) {
+                    c.Key = "9/" + c.Filter;
+                    c.Goal.ScoreCut = 0.30;
+                    c.Goal.ExpectedScore = expected;
+                }
+                return list;
+            }
+            var held = new List<bool>();
+            double[] evening = { 0.09, 0.09, 0.10, 0.12, 0.20, 0.50, 0.70 };
+            for (int i = 0; i < evening.Length; i++) {
+                List<SteeringCandidate> candidates = Triangulum(evening[i]);
+                foreach (SteeringCandidate c in candidates) {
+                    c.Held = gate.Decide(c, 0.10, GateStart.AddMinutes(10 * i), true);
+                }
+                held.Add(FilterSteering.HoldsAll(candidates, 0.10));
+            }
+            held.Should().Equal(true, true, true, true, true, false, false);
         }
 
         [Test]

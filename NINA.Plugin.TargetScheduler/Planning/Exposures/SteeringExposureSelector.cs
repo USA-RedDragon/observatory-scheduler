@@ -2,6 +2,7 @@ using NINA.Astrometry;
 using NINA.Plugin.TargetScheduler.Astrometry;
 using NINA.Plugin.TargetScheduler.Goals;
 using NINA.Plugin.TargetScheduler.Planning.Interfaces;
+using NINA.Plugin.TargetScheduler.Planning.Scoring.Rules;
 using NINA.Plugin.TargetScheduler.Shared.Utility;
 using System;
 using System.Collections.Generic;
@@ -55,8 +56,36 @@ namespace NINA.Plugin.TargetScheduler.Planning.Exposures {
         /// Filter Steering's pick, as <see cref="Steer"/>, and the plans the poor-sky gate holds out at <paramref name="atTime"/>.
         /// </summary>
         public static (IExposure Chosen, List<IExposure> SitOut) Plan(DateTime atTime, IProject project, ITarget target, IExposure current, bool commit = false) {
+            (List<SteeringCandidate> candidates, int currentIndex, double? quality) = Candidates(atTime, project, target, current, commit);
+            if (candidates == null) { return (null, new List<IExposure>()); }
+
+            int chosen = FilterSteering.Choose(candidates, currentIndex, quality);
+            List<SteeringCandidate> belowCut = candidates.Where(c => FilterSteering.SitsOut(c, quality)).ToList();
+            if (belowCut.Count > 0) {
+                TSLogger.Debug($"filter steering for {target.Name}: at night quality {(quality.HasValue ? quality.Value.ToString("0.00") : "unknown")} {string.Join(", ", belowCut.Select(c => $"{c.Filter} (expected {c.Goal?.ExpectedScore?.ToString("0.00") ?? "unknown"} against its cut {c.Goal?.ScoreCut?.ToString("0.00") ?? "unknown"})"))} sit out while another can pass");
+            }
+            List<IExposure> sitOut = FilterSteering.Applies(candidates) ? belowCut.Select(c => target.ExposurePlans[c.Index]).ToList() : new List<IExposure>();
+            return (chosen < 0 ? null : target.ExposurePlans[chosen], sitOut);
+        }
+
+        /// <summary>
+        /// True when Filter Steering is on for <paramref name="project"/> and the poor-sky gate holds out every open plan of
+        /// <paramref name="target"/> at <paramref name="atTime"/> (<see cref="FilterSteering.HoldsAll"/>). The gate's memory is read, not moved; an error counts as not held out.
+        /// </summary>
+        public static bool HeldOut(DateTime atTime, IProject project, ITarget target) {
+            try {
+                if (target == null || !FilterSteeringRule.IsOn(project)) { return false; }
+                (List<SteeringCandidate> candidates, _, double? quality) = Candidates(atTime, project, target, target.SelectedExposure, false);
+                return candidates != null && FilterSteering.HoldsAll(candidates, quality);
+            } catch (Exception ex) {
+                TSLogger.Warning($"poor-sky gate check failed for {target?.Name}, not holding it out: {ex.Message}");
+                return false;
+            }
+        }
+
+        private static (List<SteeringCandidate> Candidates, int CurrentIndex, double? Quality) Candidates(DateTime atTime, IProject project, ITarget target, IExposure current, bool commit) {
             ExposureCompletionHelper helper = project.ExposureCompletionHelper;
-            if (helper == null || target.ExposurePlans == null) { return (null, new List<IExposure>()); }
+            if (helper == null || target.ExposurePlans == null) { return (null, -1, null); }
 
             ObserverInfo observer = SkyConditions.CurrentObserver;
             Coordinates coordinates = target.CoordinatesAt(atTime);
@@ -92,14 +121,8 @@ namespace NINA.Plugin.TargetScheduler.Planning.Exposures {
             foreach (SteeringCandidate c in candidates) {
                 c.Held = ScoreGate.Current.Decide(c, quality, atUtc, commit);
             }
-            int chosen = FilterSteering.Choose(candidates, currentIndex, quality);
-            List<SteeringCandidate> belowCut = candidates.Where(c => FilterSteering.SitsOut(c, quality)).ToList();
-            if (belowCut.Count > 0) {
-                TSLogger.Debug($"filter steering for {target.Name}: at night quality {(quality.HasValue ? quality.Value.ToString("0.00") : "unknown")} {string.Join(", ", belowCut.Select(c => $"{c.Filter} (expected {c.Goal?.ExpectedScore?.ToString("0.00") ?? "unknown"} x moon worth {(c.Worth.HasValue ? c.Worth.Value.ToString("0.00") : "1")} against its cut {c.Goal?.ScoreCut?.ToString("0.00") ?? "unknown"})"))} sit out while another can pass");
-            }
             TSLogger.Debug($"filter steering conditions for {target.Name}: glare {glare:0.00}, quality {(quality.HasValue ? quality.Value.ToString("0.00") : "unknown")}, favors {(ConditionMatch.NarrowbandFavored(glare, quality, broadbandWorth) ? "narrowband" : "broadband")}{(moon.HasValue ? $", kept-rate worth {string.Join(", ", candidates.Select(c => $"{c.Filter} {(c.Worth.HasValue ? c.Worth.Value.ToString("0.00") : "none")}"))}" : "")}, sibling panel match {string.Join(", ", candidates.Select(c => $"{c.Filter} {c.PanelMatch:0.00}"))}");
-            List<IExposure> sitOut = FilterSteering.Applies(candidates) ? belowCut.Select(c => target.ExposurePlans[c.Index]).ToList() : new List<IExposure>();
-            return (chosen < 0 ? null : target.ExposurePlans[chosen], sitOut);
+            return (candidates, currentIndex, quality);
         }
 
         public void ExposureTaken(IExposure exposure) {

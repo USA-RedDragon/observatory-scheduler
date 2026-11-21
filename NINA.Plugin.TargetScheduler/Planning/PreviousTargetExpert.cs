@@ -111,6 +111,11 @@ namespace NINA.Plugin.TargetScheduler.Planning {
                 return false;
             }
 
+            if (!isPreview && SteeringExposureSelector.HeldOut(atTime, previousTarget.Project, previousTarget)) {
+                TSLogger.Info($"not continuing previous target at {atTime}, {previousTarget.Name}: the poor-sky gate holds out every open filter");
+                return false;
+            }
+
             // Special case: if the previous target wouldn't be selected again because its remaining
             // visibility time wouldn't fit within the project minimum, then we allow the target to
             // continue up to the end of visibility.  Otherwise, that time would always be wasted.

@@ -25,11 +25,12 @@ namespace NINA.Plugin.TargetScheduler.Goals {
     }
 
     /// <summary>
-    /// Hysteresis for the poor-sky gate, per target and filter. A filter is held out when its moon-scaled expected
+    /// Hysteresis for the poor-sky gate, per target and filter. A filter is held out when the stacker's expected
     /// score is under the cut, and comes back only at <see cref="ReleaseMargin"/> or more over it. A decision stands
     /// for at least <see cref="MinHold"/> unless the margin is past the other side by <see cref="ReleaseMargin"/>
     /// (held out: twice the margin over the cut), and a held decision is kept for up to <see cref="MinHold"/> while
     /// the stacker's numbers are briefly unknown, as after a new night quality before the stacker rewrites the row.
+    /// It applies to every filter, narrowband too.
     /// </summary>
     public class ScoreGate {
         public const double ReleaseMargin = 0.03;
@@ -135,11 +136,11 @@ namespace NINA.Plugin.TargetScheduler.Goals {
         }
 
         /// <summary>
-        /// True when the stacker expects a sub of this broadband filter taken now to fail its low-score cut: the
-        /// score it expects at the current night quality is under the target's score cut. Always false for a
-        /// narrowband filter, which the steering already favors on a poor sky. False while the night quality is
-        /// unknown or stale, when the stacker has not published both numbers, or when its expected score was
-        /// estimated for another night quality than the current one (a row it has not rewritten since).
+        /// True when the stacker expects a sub of this filter taken now to fail its low-score cut: its expected score is
+        /// under the target's score cut. Narrowband filters are gated like broadband ones. False while the night quality
+        /// is unknown or stale, when the stacker has not published both numbers, or when it published them with another
+        /// night quality than the current one (a row it has not rewritten since). The night quality expires 3 hours after
+        /// the stacker's newest sub, so the gate opens again on its own when the stacker stops publishing.
         /// </summary>
         public static bool BelowCut(SteeringCandidate c, double? quality) {
             double? margin = CutMargin(c, quality);
@@ -147,19 +148,19 @@ namespace NINA.Plugin.TargetScheduler.Goals {
         }
 
         /// <summary>
-        /// The stacker's expected score for a broadband sub taken now, scaled by the filter's moon keep worth under the
-        /// current Moon (the expected score pools subs of every Moon at about this night quality), minus its score cut.
-        /// Null in every case <see cref="BelowCut"/> treats as unknown.
+        /// The stacker's expected score for a sub of this filter taken now minus its score cut. The stacker fits the
+        /// expected score per target under the current Moon and target altitude, or from tonight's own subs of the
+        /// filter, so it is not scaled by the moon keep worth again here. Null in every case <see cref="BelowCut"/>
+        /// treats as unknown.
         /// </summary>
         public static double? CutMargin(SteeringCandidate c, double? quality) {
-            if (!quality.HasValue || c?.Goal == null || c.Narrowband) { return null; }
+            if (!quality.HasValue || c?.Goal == null) { return null; }
             double? cut = c.Goal.ScoreCut;
             double? expected = c.Goal.ExpectedScore;
             double? at = c.Goal.ExpectedAtQuality;
             if (at.HasValue && !(Math.Abs(at.Value - quality.Value) <= ExpectedQualityTolerance)) { return null; }
             if (!cut.HasValue || !expected.HasValue || double.IsNaN(cut.Value) || double.IsNaN(expected.Value)) { return null; }
-            double moon = c.Worth.HasValue && !double.IsNaN(c.Worth.Value) ? GoalCompletion.Clamp01(c.Worth.Value) : 1;
-            return expected.Value * moon - cut.Value;
+            return expected.Value - cut.Value;
         }
 
         /// <summary>True when the poor-sky gate holds the candidate out: its <see cref="SteeringCandidate.Held"/> decision, else <see cref="BelowCut"/>.</summary>
@@ -168,10 +169,20 @@ namespace NINA.Plugin.TargetScheduler.Goals {
         }
 
         /// <summary>
+        /// True when Filter Steering applies and the poor-sky gate holds out every candidate whose goal is not done: none
+        /// of the target's open plans is expected to pass its cut now. A candidate without a goal is never held out.
+        /// </summary>
+        public static bool HoldsAll(IList<SteeringCandidate> candidates, double? quality) {
+            if (!Applies(candidates)) { return false; }
+            List<SteeringCandidate> open = candidates.Where(c => c != null && !(c.Goal?.Done ?? false)).ToList();
+            return open.Count > 0 && open.All(c => SitsOut(c, quality));
+        }
+
+        /// <summary>
         /// While any non-H-alpha filter is bootstrapping, every open non-H-alpha filter takes its turn in plan order,
         /// starting at the current one, whatever the deficits, Moon, sky or kept rates favor. Returns -1 when no
         /// filter is bootstrapping. Call after Evaluate: a filter whose conditions value it at 0 sits out, and so
-        /// does a filter whose subs the stacker expects to fail its score cut at this night quality. When every
+        /// does a filter whose subs the stacker expects to fail its score cut now. When every
         /// bootstrapping filter sits out, it returns -1 and the usual steering picks; the rotation resumes when
         /// the sky is good enough again.
         /// </summary>
@@ -185,7 +196,8 @@ namespace NINA.Plugin.TargetScheduler.Goals {
         /// <summary>
         /// The candidate index Filter Steering takes, or -1 to leave the pick to the default order. A filter the poor-sky
         /// gate holds out is never taken; when only such filters have any value, it returns -1 and the target's
-        /// Condition Match score is 0, so another target gets the time.
+        /// Condition Match score is 0, so another target gets the time. The planner leaves a target whose every open
+        /// plan is held out (<see cref="HoldsAll"/>) to the others, and waits when that is every ready target.
         /// </summary>
         public static int Choose(IList<SteeringCandidate> candidates, int currentIndex, double? quality = null) {
             if (!Applies(candidates)) { return -1; }

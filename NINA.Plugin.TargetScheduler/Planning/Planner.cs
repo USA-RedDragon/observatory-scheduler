@@ -126,6 +126,11 @@ namespace NINA.Plugin.TargetScheduler.Planning {
                         FilterForEventPriority(readyTargets, previousTarget);
                     }
 
+                    if (!isPreview && readyTargets.Count > 0 && FilterForPoorSky(readyTargets) is ITarget heldTarget) {
+                        TSLogger.Info($"the poor-sky gate holds out every open filter of every ready target, waiting {PoorSkyWaitSeconds / 60} minutes and trying again");
+                        return new SchedulerPlan(atTime, projects, heldTarget, PoorSkyWaitSeconds, !checkCondition);
+                    }
+
                     if (readyTargets.Count > 0) {
                         ITarget selectedTarget = readyTargets.Count == 1
                             ? readyTargets[0]
@@ -327,6 +332,30 @@ namespace NINA.Plugin.TargetScheduler.Planning {
             }
 
             return PropagateRejections(projects);
+        }
+
+        /// <summary>
+        /// How long the planner waits when the poor-sky gate holds out every ready target: the stacker publishes its
+        /// expected scores every 10 minutes.
+        /// </summary>
+        public const int PoorSkyWaitSeconds = 10 * 60;
+
+        /// <summary>
+        /// Leaves out of <paramref name="readyTargets"/> each target whose every open plan the poor-sky gate holds out
+        /// (Filter Steering on, see <see cref="SteeringExposureSelector.HeldOut"/>), so another target gets the time
+        /// whatever the scoring rule weights. When that is every ready target, the list is kept and the first of them is
+        /// returned for the planner to wait on; otherwise null.
+        /// </summary>
+        public ITarget FilterForPoorSky(List<ITarget> readyTargets) {
+            if (readyTargets == null || readyTargets.Count == 0) { return null; }
+            List<ITarget> held = readyTargets.Where(t => SteeringExposureSelector.HeldOut(atTime, t.Project, t)).ToList();
+            if (held.Count == 0) { return null; }
+            if (held.Count == readyTargets.Count) { return held[0]; }
+            foreach (ITarget t in held) {
+                TSLogger.Info($"poor-sky gate: every open filter of {t.Project.Name}/{t.Name} is expected to fail its score cut now, leaving the time to another target");
+                readyTargets.Remove(t);
+            }
+            return null;
         }
 
         /// <summary>
