@@ -20,6 +20,14 @@ namespace NINA.Plugin.TargetScheduler.Planning.Test {
             GoalCompletion.DelayPercent(Goal(GoalState.Collecting, stackSubs), 300, 119).Should().BeApproximately(expected, 1e-9);
         }
 
+        [TestCase(0, false)]
+        [TestCase(19, false)]
+        [TestCase(20, true)]
+        [TestCase(745, true)]
+        public void GradingStartsAtTheMinimumSubs(int subs, bool expected) {
+            GoalCompletion.GradingReady(subs).Should().Be(expected);
+        }
+
         [Test]
         public void PendingDelayCountsLocalSubs() {
             GoalCompletion.DelayPercent(Goal(GoalState.Pending, null), 300, 4).Should().BeApproximately(50, 1e-9);

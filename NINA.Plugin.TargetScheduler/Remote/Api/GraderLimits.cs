@@ -68,7 +68,7 @@ namespace NINA.Plugin.TargetScheduler.Remote.Api {
             var match = "exposure, gain, offset, binning and ROI the next sub will use";
             if (settings.Mode == "delayed" && goalDriven) {
                 return string.Create(CultureInfo.InvariantCulture,
-                    $"all {limit.Samples} subs of this exposure plan with the {match}, any grading status; grading waits until the goal has {settings.DelayThresholdPercent:0.#}% of the subs it needs (stack_subs against min_subs while collecting, sub_limit while unmeasurable, or the measured hours), and grades all pending subs once the goal is reached");
+                    $"all {limit.Samples} subs of this exposure plan with the {match}, any grading status; grading waits until the plan has {Goals.GoalCompletion.GradingMinSubs} subs, then grades all pending subs and each new sub as it arrives");
             }
             if (settings.Mode == "delayed") {
                 return string.Create(CultureInfo.InvariantCulture,

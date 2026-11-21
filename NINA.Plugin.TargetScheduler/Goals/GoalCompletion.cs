@@ -5,6 +5,14 @@ namespace NINA.Plugin.TargetScheduler.Goals {
     public static class GoalCompletion {
         public const double NotDoneCeiling = 99.9;
 
+        /// <summary>Subs a goal-driven exposure plan needs before delayed grading starts comparing against it.</summary>
+        public const int GradingMinSubs = 20;
+
+        /// <summary>True when a goal-driven plan has enough subs to grade; every pending sub then grades on arrival.</summary>
+        public static bool GradingReady(int localSubs) {
+            return localSubs >= GradingMinSubs;
+        }
+
         public static double PercentComplete(GoalProgress goal) {
             if (goal.Done) { return 100; }
             return Math.Min(Clamp01(goal.Progress) * 100, NotDoneCeiling);

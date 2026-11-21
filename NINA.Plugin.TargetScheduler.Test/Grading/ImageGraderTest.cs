@@ -1,6 +1,7 @@
 ﻿using FluentAssertions;
 using Moq;
 using NINA.Plugin.TargetScheduler.Database.Schema;
+using NINA.Plugin.TargetScheduler.Goals;
 using NINA.Plugin.TargetScheduler.Grading;
 using NINA.Plugin.TargetScheduler.Shared.Utility;
 using NINA.Profile.Interfaces;
@@ -163,6 +164,60 @@ namespace NINA.Plugin.TargetScheduler.Test.Grading {
             results.Count.Should().Be(10);
             results.Where(r => r == GradingResult.Accepted).ToList().Count.Should().Be(8);
             results.Where(r => r == GradingResult.Rejected_Stars).ToList().Count.Should().Be(2);
+        }
+
+        [Test]
+        public void testDelayedGoalBelowMinimumStaysPending() {
+            List<GradingResult> results = RunGoalGrading(GoalCompletion.GradingMinSubs - 1, false);
+            results.Count.Should().Be(0);
+        }
+
+        [Test]
+        public void testDelayedGoalAtMinimumGradesAllPending() {
+            List<GradingResult> results = RunGoalGrading(GoalCompletion.GradingMinSubs, false);
+            results.Count.Should().Be(GoalCompletion.GradingMinSubs);
+        }
+
+        [Test]
+        public void testDelayedGoalForceGradingBelowMinimum() {
+            List<GradingResult> results = RunGoalGrading(5, true);
+            results.Count.Should().Be(5);
+        }
+
+        [Test]
+        public void testDelayedNoGoalStillUsesDesiredPercent() {
+            List<GradingResult> below = RunGrading(null, 79, 100, false);
+            below.Count.Should().Be(0);
+            List<GradingResult> at = RunGrading(null, 80, 100, false);
+            at.Count.Should().Be(80);
+        }
+
+        private List<GradingResult> RunGoalGrading(int count, bool force) {
+            GoalProgress goal = new GoalProgress { TargetGuid = "g", Filter = "L", State = GoalState.Measured, HoursNeeded = 50, Progress = 0.1, StackSubs = count, MinSubs = 8, SubLimit = 32 };
+            return RunGrading(goal, count, 1000, force);
+        }
+
+        private List<GradingResult> RunGrading(GoalProgress goal, int count, int desired, bool force) {
+            IProfile profile = GraderExpertTest.GetMockProfile(3.8, 700);
+            ImageGraderPreferences prefs = GraderExpertTest.GetPreferences(profile, 80, 10, false, false, 0, false, 0, false, 0, false, 0, false, 0);
+            List<AcquiredImage> pop = GraderExpertTest.GetTestImages(count, 101, "L", 60, 10, 20, "1x1", 100, 0, GradingStatus.Pending);
+
+            Mock<ImageGrader> mock = new Mock<ImageGrader>() { CallBase = true };
+            ExposurePlan exposurePlan = GetExposurePlan(201, "L", desired, 0);
+            AcquiredImage ai = GetAcquiredImage(301, 101, "L");
+
+            mock.Setup(m => m.GetExposurePlan(201)).Returns(exposurePlan);
+            mock.Setup(m => m.GetTarget(101)).Returns(GetTarget(101, "T1", 100));
+            mock.Setup(m => m.GetAllAcquired(exposurePlan)).Returns(pop);
+            mock.Setup(m => m.GetCurrentAcquired(It.IsAny<int>())).Returns(ai);
+            mock.Setup(m => m.GetGoal(It.IsAny<Target>(), It.IsAny<ExposurePlan>())).Returns(goal);
+
+            List<GradingResult> results = new List<GradingResult>();
+            mock.Setup(m => m.UpdateDatabase(Capture.In(results), It.IsAny<ExposurePlan>(), It.IsAny<AcquiredImage>()));
+
+            GradingWorkData workData = new GradingWorkData(101, 201, 301, 1, prefs, force);
+            mock.Object.Grade(workData);
+            return results;
         }
 
         [Test]

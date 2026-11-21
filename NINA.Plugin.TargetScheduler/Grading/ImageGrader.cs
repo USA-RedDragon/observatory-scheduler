@@ -59,10 +59,14 @@ namespace NINA.Plugin.TargetScheduler.Grading {
                             ? GoalCompletion.DelayPercent(goal, ExposureSeconds(exposurePlan, currentAcquiredImage), population.Count)
                             : CurrentDelayThreshold(population.Count, exposurePlan.Desired);
                         string basis = goal != null
-                            ? $"goal {GoalCompletionLog.Decision(goal, population.Count)} at {delayPercent:0.#}% (stack_subs={(goal.StackSubs.HasValue ? goal.StackSubs.Value.ToString() : "none")}, remaining_subs={GoalCompletion.RemainingExposures(goal, ExposureSeconds(exposurePlan, currentAcquiredImage), population.Count)})"
-                            : $"desired={exposurePlan.Desired}";
+                            ? $"goal {GoalCompletionLog.Decision(goal, population.Count)} at {delayPercent:0.#}% (stack_subs={(goal.StackSubs.HasValue ? goal.StackSubs.Value.ToString() : "none")}, remaining_subs={GoalCompletion.RemainingExposures(goal, ExposureSeconds(exposurePlan, currentAcquiredImage), population.Count)}), rule=min_subs>={GoalCompletion.GradingMinSubs}"
+                            : $"desired={exposurePlan.Desired}, rule=desired_percent>={graderPreferences.DelayGradingThreshold:0.#}";
 
-                        if (workData.ForceGrading || delayPercent >= graderPreferences.DelayGradingThreshold) {
+                        bool triggered = goal != null
+                            ? workData.ForceGrading || GoalCompletion.GradingReady(population.Count)
+                            : workData.ForceGrading || delayPercent >= graderPreferences.DelayGradingThreshold;
+
+                        if (triggered) {
                             List<AcquiredImage> pending = population.Where(a => a.GradingStatus == GradingStatus.Pending).ToList();
                             TSLogger.Info($"delayed grading triggered for {tag}: acquired={population.Count}, {basis}, pending={pending.Count}");
 

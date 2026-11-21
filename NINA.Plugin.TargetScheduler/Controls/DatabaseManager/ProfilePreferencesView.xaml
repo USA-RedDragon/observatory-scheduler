@@ -343,7 +343,7 @@
                             <TextBlock VerticalAlignment="Center"
                                        FontWeight="Bold"
                                        Text="Delay Grading"
-                                       ToolTip="Delay grading until a percentage of exposures have been captured" />
+                                       ToolTip="Delay grading until a percentage of the desired exposures have been captured; goal-driven exposure plans start grading at 20 subs and then grade each new sub" />
                             <ComboBox MaxHeight="20"
                                       ItemsSource="{Binding DelayGradingChoices}"
                                       SelectedValue="{Binding ProfilePreferenceProxy.ProfilePreference.DelayGrading, Mode=TwoWay, Converter={StaticResource PercentWithOffDisplayConverter}}"
