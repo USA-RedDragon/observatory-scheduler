@@ -68,6 +68,10 @@
                         <TextBlock Width="420" VerticalAlignment="Center" Text="Do not move colder when the power there is predicted above this (%)" TextWrapping="Wrap" />
                         <TextBox Width="60" Text="{Binding MaxPredictedPower, UpdateSourceTrigger=LostFocus}" />
                     </StackPanel>
+                    <StackPanel Margin="0,0,0,6" Orientation="Horizontal">
+                        <TextBlock Width="420" VerticalAlignment="Center" Text="Coldest setpoint the plugin will choose (°C); colder frosts the sensor window, so setpoints and darks stop here" TextWrapping="Wrap" />
+                        <TextBox Width="60" Text="{Binding ColdestSetpoint, UpdateSourceTrigger=LostFocus}" />
+                    </StackPanel>
                     <TextBlock Margin="0,0,0,6" Foreground="OrangeRed" Text="{Binding Problem}" TextWrapping="Wrap" MaxWidth="700" HorizontalAlignment="Left" Visibility="{Binding HasProblem, Converter={StaticResource BooleanToVisibilityCollapsedConverter}}" />
                 </StackPanel>
             </Expander>

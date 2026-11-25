@@ -98,7 +98,7 @@ namespace NINA.Plugin.TargetScheduler.Sequencer {
                 }
                 TSLogger.Warning($"{Log}: the camera connected again while the plugin owns the cooler: {why}");
                 await CoolerRamp.Stop(Log);
-                _ = CoolerRamp.StartBackground(camera, target.Value, RestoreOwner, Log, null);
+                _ = CoolerRamp.StartBackground(camera, TargetSchedulerDarks.LimitToFloor(target.Value, $"{Log}: the restore setpoint"), RestoreOwner, Log, null);
             } catch (Exception ex) {
                 TSLogger.Error($"{Log}: restoring the setpoint after the camera connected failed: {ex.Message}");
             }

@@ -19,6 +19,9 @@ namespace NINA.Plugin.TargetScheduler.Darks {
         public DateTime? LearningUsedAt { get; set; }
         public CoolerFit Fit { get; set; }
 
+        /// <summary>The coldest allowed setpoint in °C: darks colder than it are skipped. Null for no floor.</summary>
+        public double? ColdestSetpoint { get; set; }
+
         /// <summary>Which air <see cref="Ambient"/> is: "inside", "outside", or null for plain "air".</summary>
         public string AirLabel { get; set; }
     }
@@ -129,8 +132,9 @@ namespace NINA.Plugin.TargetScheduler.Darks {
             string refused = null;
             CoolerCapacity capacity = DarkPlanner.Capacity(i.Holds, i.Limits);
             double? coldest = CoolerFit.ColdestSetpoint(ambient, i.Fit ?? CoolerFit.Prior());
-            foreach (DarkNeed n in DarkPlanner.ColdestFirst(fitting, coldest)) {
+            foreach (DarkNeed n in DarkPlanner.ColdestFirst(fitting, DarkPlanner.EffectiveColdest(coldest, i.ColdestSetpoint))) {
                 string limit = DarkPlanner.AboveAmbientReason(n.SetTemp, ambient)
+                    ?? DarkPlanner.FloorReason(n.SetTemp, i.ColdestSetpoint)
                     ?? DarkPlanner.CapacityReason(capacity, n.SetTemp, ambient)
                     ?? DarkPlanner.PowerLimitReason(n.SetTemp, ambient, coldest, i.AirLabel)
                     ?? DarkPlanner.LimitReason(i.Limits, n.SetTemp, ambient, double.NaN, null);

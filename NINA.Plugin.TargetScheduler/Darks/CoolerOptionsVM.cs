@@ -43,6 +43,11 @@ namespace NINA.Plugin.TargetScheduler.Darks {
             set => Update(d => d.MaxPredictedPower = value);
         }
 
+        public double ColdestSetpoint {
+            get => Data.ColdestSetpoint;
+            set => Update(d => d.ColdestSetpoint = value);
+        }
+
         public string Problem {
             get => problem;
             private set {
@@ -62,7 +67,7 @@ namespace NINA.Plugin.TargetScheduler.Darks {
 
         private void RaiseAll() {
             void Fire() {
-                foreach (var n in new[] { nameof(Enabled), nameof(TargetPower), nameof(LowPower), nameof(HighPower), nameof(MaxPredictedPower) }) {
+                foreach (var n in new[] { nameof(Enabled), nameof(TargetPower), nameof(LowPower), nameof(HighPower), nameof(MaxPredictedPower), nameof(ColdestSetpoint) }) {
                     Raise(n);
                 }
             }

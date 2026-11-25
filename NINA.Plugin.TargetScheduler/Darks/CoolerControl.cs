@@ -12,7 +12,17 @@ namespace NINA.Plugin.TargetScheduler.Darks {
         public double HighPower { get; set; } = 88;
         public double MaxPredictedPower { get; set; } = 85;
 
+        /// <summary>The coldest setpoint the plugin ever chooses, in °C: below it the sensor window frosts.</summary>
+        public double ColdestSetpoint { get; set; } = DefaultColdestSetpoint;
+
+        public const double DefaultColdestSetpoint = -18;
+        public const double MinColdestSetpoint = -40;
+        public const double MaxColdestSetpoint = 10;
+
         public string Problem() {
+            if (double.IsNaN(ColdestSetpoint) || ColdestSetpoint < MinColdestSetpoint || ColdestSetpoint > MaxColdestSetpoint) {
+                return string.Format(CultureInfo.InvariantCulture, "the coldest setpoint {0:0.#} °C must be between {1:0} and {2:0} °C", ColdestSetpoint, MinColdestSetpoint, MaxColdestSetpoint);
+            }
             if (!(LowPower > 0 && LowPower < TargetPower)) {
                 return string.Format(CultureInfo.InvariantCulture, "the colder threshold {0:0}% must be above 0% and below the target {1:0}%", LowPower, TargetPower);
             }
@@ -237,6 +247,15 @@ namespace NINA.Plugin.TargetScheduler.Darks {
             return Math.Abs(setpoint - Snap(setpoint)) < 0.05;
         }
 
+        /// <summary>The coldest grid setpoint that is not colder than the floor.</summary>
+        public static double FloorOnGrid(double floor) {
+            return Math.Ceiling(floor / StepC - 1e-9) * StepC;
+        }
+
+        public static bool ColderThan(double setpoint, double floor) {
+            return setpoint < floor - 0.05;
+        }
+
         public static double BelowAmbient(double setpoint, double ambient) {
             while (setpoint > ambient + 0.05) {
                 setpoint -= StepC;
@@ -392,6 +411,11 @@ namespace NINA.Plugin.TargetScheduler.Darks {
                 string.Format(CultureInfo.InvariantCulture, "{0:0}% power is {1:0.0} °C below the {2:0.0} °C ambient by {3}, nearest 2 °C grid setpoint {4} °C",
                     settings.TargetPower, drop, ambient, fit, setpoint)
             };
+            double floor = CoolerGrid.FloorOnGrid(settings.ColdestSetpoint);
+            if (setpoint < floor - 0.05) {
+                why.Add(string.Format(CultureInfo.InvariantCulture, "the coldest allowed setpoint is {0:0.#} °C, so {1} °C is limited to {2} °C", settings.ColdestSetpoint, setpoint, floor));
+                setpoint = floor;
+            }
 
             for (int i = 0; i < 40; i++) {
                 string limit = LearnedReason(setpoint, ambient, settings, holds, limits, now);
@@ -460,10 +484,16 @@ namespace NINA.Plugin.TargetScheduler.Darks {
                 return Make(CoolerAction.Hold, "the ambient temperature is not known", Setpoint);
             }
 
-            if (!Setpoint.HasValue || double.IsNaN(cameraSetpoint) || !DarkPlanner.SameSetpoint(cameraSetpoint, Setpoint.Value)) {
+            double coldest = settings.ColdestSetpoint;
+            bool cameraTooCold = !double.IsNaN(cameraSetpoint) && CoolerGrid.ColderThan(cameraSetpoint, coldest);
+            bool ownedTooCold = Setpoint.HasValue && CoolerGrid.ColderThan(Setpoint.Value, coldest);
+            if (!Setpoint.HasValue || double.IsNaN(cameraSetpoint) || !DarkPlanner.SameSetpoint(cameraSetpoint, Setpoint.Value) || ownedTooCold) {
                 CoolerDecision start = StartSetpoint(ambient.Value, fit, settings, holds, limits, now);
                 start.From = double.IsNaN(cameraSetpoint) ? (double?)null : cameraSetpoint;
-                if (Setpoint.HasValue) {
+                if (cameraTooCold || ownedTooCold) {
+                    start.Reason = string.Format(CultureInfo.InvariantCulture, "the setpoint {0} °C is colder than the coldest allowed {1:0.#} °C, so the camera is ramped warmer to {2} °C at 1 °C per minute: {3}",
+                        cameraTooCold ? cameraSetpoint : Setpoint.Value, coldest, start.Target, start.Reason);
+                } else if (Setpoint.HasValue) {
                     start.Reason = string.Format(CultureInfo.InvariantCulture, "the setpoint was changed to {0} °C outside the controller, which had {1} °C, so it is chosen again: {2}",
                         cameraSetpoint, Setpoint.Value, start.Reason);
                 }
@@ -503,6 +533,9 @@ namespace NINA.Plugin.TargetScheduler.Darks {
                 double colder = sp - CoolerGrid.StepC;
                 double predicted = fit.Power(ambient.Value, colder);
                 string lowText = string.Format(CultureInfo.InvariantCulture, "every 5-minute median over the last {0:0} min is below {1:0}% (highest {2:0.0}%)", LowWindow.TotalMinutes, settings.LowPower, low.Value);
+                if (CoolerGrid.ColderThan(colder, coldest)) {
+                    return Make(CoolerAction.Hold, verified + lowText + string.Format(CultureInfo.InvariantCulture, ", but the coldest allowed setpoint is {0:0.#} °C and {1} °C is colder, so it holds at {2} °C", coldest, colder, sp), sp, power5, predicted);
+                }
                 if (ColderBlocked != null) {
                     return Make(CoolerAction.Hold, verified + lowText + ", but colder steps are off tonight: " + ColderBlocked, sp, power5, predicted);
                 }

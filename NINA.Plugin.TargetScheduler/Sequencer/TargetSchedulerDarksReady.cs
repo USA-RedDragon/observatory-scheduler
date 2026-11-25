@@ -93,6 +93,7 @@ namespace NINA.Plugin.TargetScheduler.Sequencer {
                 Holds = DarkRuntime.State.Holds(),
                 Limits = DarkRuntime.State.Limits(),
                 Fit = CoolerRuntime.DarkFit(air),
+                ColdestSetpoint = CoolerRuntime.Settings.Snapshot().ColdestSetpoint,
                 SaveTime = DarkRuntime.State.SaveTime(),
                 CoolingSecondsPerC = state.CoolingSecondsPerC,
                 LearningUsedAt = DarkRuntime.State.LearningUsed(night)
@@ -127,12 +128,15 @@ namespace NINA.Plugin.TargetScheduler.Sequencer {
                     i.Exposure = null;
                 }
                 double? coldest = CoolerFit.ColdestSetpoint(input.Ambient, input.Fit ?? CoolerFit.Prior());
-                foreach (DarkNeed n in DarkPlanner.ColdestFirst(queue, coldest)) {
+                foreach (DarkNeed n in DarkPlanner.ColdestFirst(queue, DarkPlanner.EffectiveColdest(coldest, input.ColdestSetpoint))) {
                     StatusCalibrationQueueItem i = TargetSchedulerDarks.Item(n, taken, now);
                     string why;
                     if ((why = DarkPlanner.AboveAmbientReason(n.SetTemp, input.Ambient)) != null) {
                         i.Status = CalibrationActivity.Skipped;
                         i.ReasonCode = "above_ambient";
+                    } else if ((why = DarkPlanner.FloorReason(n.SetTemp, input.ColdestSetpoint)) != null) {
+                        i.Status = CalibrationActivity.Skipped;
+                        i.ReasonCode = "coldest_setpoint";
                     } else if ((why = DarkPlanner.CapacityReason(capacity, n.SetTemp, input.Ambient)) != null) {
                         i.Status = CalibrationActivity.Skipped;
                         i.ReasonCode = "cooler_capacity";

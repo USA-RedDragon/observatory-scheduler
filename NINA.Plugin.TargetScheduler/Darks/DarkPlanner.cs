@@ -226,6 +226,21 @@ namespace NINA.Plugin.TargetScheduler.Darks {
                 .ToList();
         }
 
+        /// <summary>The coldest of the cooler's power limit and the coldest allowed setpoint that a dark set may use.</summary>
+        public static double? EffectiveColdest(double? coldest, double? floor) {
+            if (!floor.HasValue) {
+                return coldest;
+            }
+            return coldest.HasValue ? Math.Max(coldest.Value, floor.Value) : floor;
+        }
+
+        /// <summary>Why a set is skipped when it is colder than the coldest allowed setpoint, or null.</summary>
+        public static string FloorReason(double setTemp, double? floor) {
+            return floor.HasValue && setTemp < floor.Value - 0.05
+                ? string.Format(CultureInfo.InvariantCulture, "{0} °C is colder than the coldest allowed setpoint {1:0.#} °C", setTemp, floor.Value)
+                : null;
+        }
+
         public static bool BelowPowerLimit(double setTemp, double? coldest) {
             return coldest.HasValue && setTemp < coldest.Value - 0.05;
         }

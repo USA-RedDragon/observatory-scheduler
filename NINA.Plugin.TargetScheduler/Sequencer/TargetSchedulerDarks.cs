@@ -250,7 +250,8 @@ namespace NINA.Plugin.TargetScheduler.Sequencer {
         private static (double? Coldest, string Reason) HoldLimit(double setTemp) {
             DarkAir air = CoolerRuntime.DarkAirNow();
             double? coldest = CoolerFit.ColdestSetpoint(air.Value, CoolerRuntime.DarkFit(air));
-            return (coldest, DarkPlanner.PowerLimitReason(setTemp, air.Value, coldest, air.Label));
+            double floor = CoolerRuntime.Settings.Snapshot().ColdestSetpoint;
+            return (DarkPlanner.EffectiveColdest(coldest, floor), DarkPlanner.FloorReason(setTemp, floor) ?? DarkPlanner.PowerLimitReason(setTemp, air.Value, coldest, air.Label));
         }
 
         private void OnSafeChanged(object sender, IsSafeEventArgs e) {
@@ -509,7 +510,7 @@ namespace NINA.Plugin.TargetScheduler.Sequencer {
                         } else if ((skip = DarkPlanner.CapacityReason(DarkPlanner.Capacity(DarkRuntime.State.Holds(), limits), need.SetTemp, ambient)) != null) {
                             skipCode = "cooler_capacity";
                         } else if ((skip = holdSkip) != null) {
-                            skipCode = "cooler_power";
+                            skipCode = need.SetTemp < CoolerRuntime.Settings.Snapshot().ColdestSetpoint - 0.05 ? "coldest_setpoint" : "cooler_power";
                         } else if (powerFloor.HasValue && need.SetTemp < powerFloor.Value - 0.05) {
                             skipCode = "cooler_power";
                             skip = floorTrip?.ReasonFor(need.SetTemp) ?? powerFloorReason;
@@ -875,10 +876,14 @@ namespace NINA.Plugin.TargetScheduler.Sequencer {
         private List<DarkNeed> Order(List<DarkNeed> queue) {
             DarkAir air = CoolerRuntime.DarkAirNow();
             CoolerFit fit = CoolerRuntime.DarkFit(air);
-            double? coldest = CoolerFit.ColdestSetpoint(air.Value, fit);
+            double? powerColdest = CoolerFit.ColdestSetpoint(air.Value, fit);
+            double floor = CoolerRuntime.Settings.Snapshot().ColdestSetpoint;
+            double? coldest = DarkPlanner.EffectiveColdest(powerColdest, floor);
             List<DarkNeed> ordered = DarkPlanner.ColdestFirst(queue, coldest);
-            TSLogger.Info(coldest.HasValue
-                ? $"TS Darks: coldest first from {coldest.Value:0.#} °C, the setpoint the cooler holds at {DarkPlanner.MaxDarkPowerPercent:0}% power with air {air.Note} ({fit}), then warmer; {ordered.Count(n => DarkPlanner.BelowPowerLimit(n.SetTemp, coldest))} colder sets are skipped"
+            int belowFloor = ordered.Count(n => DarkPlanner.FloorReason(n.SetTemp, floor) != null);
+            TSLogger.Info($"TS Darks: the coldest allowed setpoint is {floor:0.#} °C; {belowFloor} colder sets are skipped");
+            TSLogger.Info(powerColdest.HasValue
+                ? $"TS Darks: coldest first from {coldest.Value:0.#} °C, the setpoint the cooler holds at {DarkPlanner.MaxDarkPowerPercent:0}% power with air {air.Note} ({fit}) or the coldest allowed setpoint if warmer, then warmer; {ordered.Count(n => DarkPlanner.BelowPowerLimit(n.SetTemp, coldest))} colder sets are skipped in all"
                 : $"TS Darks: coldest first, the air temperature is {air.Note}, so no cooler power limit is applied");
             return ordered;
         }
@@ -976,6 +981,16 @@ namespace NINA.Plugin.TargetScheduler.Sequencer {
             return null;
         }
 
+        /// <summary>Raises a setpoint colder than the coldest allowed one to it, and logs that the floor limited it.</summary>
+        internal static double LimitToFloor(double target, string what) {
+            double floor = CoolerRuntime.Settings.Snapshot().ColdestSetpoint;
+            if (!(target < floor - 0.05)) {
+                return target;
+            }
+            TSLogger.Info($"{what} {target} °C is colder than the coldest allowed setpoint {floor:0.#} °C, so it is limited to {floor:0.#} °C");
+            return floor;
+        }
+
         internal static double? PendingRestore() {
             return CoolerRamp.Pending();
         }
@@ -985,6 +1000,7 @@ namespace NINA.Plugin.TargetScheduler.Sequencer {
         }
 
         private Task<bool> StartRestore(double target, IProgress<ApplicationStatus> progress) {
+            target = LimitToFloor(target, "TS Darks: the restore setpoint");
             return CoolerRamp.StartBackground(cameraMediator, target, "restore", "TS Darks", progress);
         }
 
