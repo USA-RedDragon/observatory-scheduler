@@ -1,6 +1,7 @@
-Observatory Scheduler 5.8.2.242: the poor-sky gate covers narrowband filters, and the rig waits when every target would score under its cut.
+Observatory Scheduler 5.8.2.243: a coldest setpoint (default -18 °C) that the cooler controller and the darks never go past.
 
-- **Gate**: H-a, O-III and S-II sit out like broadband when the stacker expects a sub taken now to fail its score cut. The stacker's expected score already accounts for the Moon, so it is no longer scaled by the moon keep worth.
-- **All held out**: targets whose every open filter is held out yield to others; when that is every ready target, the scheduler waits 10 minutes and plans again.
+- **Floor**: the start setpoint and the colder step stop at the floor, and the log says when it limited a choice. Set it in the Cooler options, -40 to +10 °C.
+- **Too cold now**: a camera colder than the floor is ramped warmer at 1 °C per minute to the allowed setpoint.
+- **Darks**: sets colder than the floor are skipped with a reason, and the restore after darks stays at or warmer than it.
 
-Includes everything in 5.8.2.241. No database changes. Requires NINA 3.1.2.9001 or later and an astro-stacker that publishes expected scores per target. Install with install-plugin.ps1 and warm-camera.ps1 from this folder.
+Includes everything in 5.8.2.242. No database changes. Requires NINA 3.1.2.9001 or later and an astro-stacker that publishes expected scores per target. Install with install-plugin.ps1 and warm-camera.ps1 from this folder.

@@ -1,5 +1,8 @@
 # Observatory Scheduler
 
+## 5.8.2.243 - 2026-11-25
+* The cooler has a coldest setpoint, default -18 °C and settable from -40 to +10 °C in the Cooler options, because the sensor window frosts at -22 °C and colder. The cooler controller never chooses a start or colder step past it: the start setpoint is held at the floor, and a colder step from the floor holds with the reason in the log. A camera already colder than the floor, set by the startup cool or by hand, is ramped warmer to the allowed setpoint at 1 °C per minute, never jumped. Dark sets colder than the floor are skipped with a plain reason in the Darks, Darks Ready and calibration status, and the darks restore never ramps colder than it. Every limit is logged.
+
 ## 5.8.2.242 - 2026-11-21
 * The Filter Steering poor-sky gate covers narrowband filters too. A filter of any kind sits out when the stacker's expected score for a sub taken now is under its score cut, with the same hysteresis (held at least 20 minutes, released 0.03 over the cut). The stacker now fits that expected score per target and filter under the current Moon (lit fraction and altitude) and target altitude, or takes it from the filter's own subs of the last hour, so the plugin no longer multiplies it by the moon keep worth. The gate stays open while the night quality is unknown or stale, so it opens on its own if the stacker stops publishing.
 * A target whose every open filter is held out is left out of target selection and is not continued as the previous target, so another target gets the time. When that is every ready target, the planner waits 10 minutes and plans again, logging why.
